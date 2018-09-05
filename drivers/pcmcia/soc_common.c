@@ -360,7 +360,7 @@ static int soc_common_pcmcia_config_skt(
 		}
 
 		if (n)
-			gpiod_set_array_value_cansleep(n, descs, values);
+			gpiod_set_array_value_cansleep(n, descs, NULL, values);
 
 		/*
 		 * This really needs a better solution.  The IRQ

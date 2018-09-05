@@ -73,7 +73,7 @@ static void hd44780_write_gpio8(struct hd44780 *hd, u8 val, unsigned int rs)
 	n = hd->pins[PIN_CTRL_RW] ? 10 : 9;
 
 	/* Present the data to the port */
-	gpiod_set_array_value_cansleep(n, &hd->pins[PIN_DATA0], values);
+	gpiod_set_array_value_cansleep(n, &hd->pins[PIN_DATA0], NULL, values);
 
 	hd44780_strobe_gpio(hd);
 }
@@ -90,7 +90,7 @@ static void hd44780_write_gpio4(struct hd44780 *hd, u8 val, unsigned int rs)
 	n = hd->pins[PIN_CTRL_RW] ? 6 : 5;
 
 	/* Present the data to the port */
-	gpiod_set_array_value_cansleep(n, &hd->pins[PIN_DATA4], values);
+	gpiod_set_array_value_cansleep(n, &hd->pins[PIN_DATA4], NULL, values);
 
 	hd44780_strobe_gpio(hd);
 
@@ -99,7 +99,7 @@ static void hd44780_write_gpio4(struct hd44780 *hd, u8 val, unsigned int rs)
 	values[0] |= val & 0x0f;
 
 	/* Present the data to the port */
-	gpiod_set_array_value_cansleep(n, &hd->pins[PIN_DATA4], values);
+	gpiod_set_array_value_cansleep(n, &hd->pins[PIN_DATA4], NULL, values);
 
 	hd44780_strobe_gpio(hd);
 }
@@ -155,7 +155,7 @@ static void hd44780_write_cmd_raw_gpio4(struct charlcd *lcd, int cmd)
 	n = hd->pins[PIN_CTRL_RW] ? 6 : 5;
 
 	/* Present the data to the port */
-	gpiod_set_array_value_cansleep(n, &hd->pins[PIN_DATA4], values);
+	gpiod_set_array_value_cansleep(n, &hd->pins[PIN_DATA4], NULL, values);
 
 	hd44780_strobe_gpio(hd);
 }
