@@ -57,4 +57,8 @@ int __clk_get(struct clk *clk);
 void __clk_put(struct clk *clk);
 #endif
 
+int devm_clk_hw_register_clkdev(struct device *dev, struct clk_hw *hw,
+				const char *con_id, const char *dev_id);
+void devm_clk_release_clkdev(struct device *dev, const char *con_id,
+			     const char *dev_id);
 #endif
