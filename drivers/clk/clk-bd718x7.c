@@ -8,6 +8,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/mfd/rohm-bd718x7.h>
+#include <linux/mfd/rohm-bd71828.h>
 #include <linux/mfd/rohm-bd70528.h>
 #include <linux/clk-provider.h>
 #include <linux/clkdev.h>
@@ -93,6 +94,9 @@ static int bd71837_clk_probe(struct platform_device *pdev)
 		c->reg = BD718XX_REG_OUT32K;
 		c->mask = BD718XX_OUT32K_EN;
 		break;
+	case ROHM_CHIP_TYPE_BD71828:
+		c->reg = BD71828_REG_OUT32K;
+		c->mask = BD71828_OUT32K_EN;
 	case ROHM_CHIP_TYPE_BD70528:
 		c->reg = BD70528_REG_CLK_OUT;
 		c->mask = BD70528_CLK_OUT_EN_MASK;
