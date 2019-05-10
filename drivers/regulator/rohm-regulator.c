@@ -3,6 +3,7 @@
 
 #include <linux/errno.h>
 #include <linux/mfd/rohm-generic.h>
+#include <linux/module.h>
 #include <linux/of.h>
 #include <linux/regmap.h>
 #include <linux/regulator/driver.h>
@@ -89,6 +90,6 @@ int rohm_regulator_set_dvs_levels(const struct rohm_dvs_config *dvs,
 }
 EXPORT_SYMBOL(rohm_regulator_set_dvs_levels);
 
+MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Matti Vaittinen <matti.vaittinen@fi.rohmeurope.com>");
-MODULE_DESCRIPTION("Common ROHM PMIC regulator functions");
-MODULE_LICENSE("GPL");
+MODULE_DESCRIPTION("Generic helpers for ROHM PMIC regulator drivers");
