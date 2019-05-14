@@ -6,6 +6,7 @@
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/gpio.h>
+#include <linux/gpio/consumer.h>
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/mfd/rohm-bd71828.h>
@@ -17,16 +18,28 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
 
+#define MAX_GPIO_DVS_BUCKS 4
+#define DVS_RUN_LEVELS 4
+
 struct reg_init {
 	unsigned int reg;
 	unsigned int mask;
 	unsigned int val;
 };
+
+struct run_lvl_ctrl {
+	unsigned int voltage;
+	bool enabled;
+};
+
 struct bd71828_regulator_data {
 	struct regulator_desc desc;
-	const struct rohm_dvs_config dvs;
+	struct rohm_dvs_config dvs;
 	const struct reg_init *reg_inits;
 	int reg_init_amnt;
+	struct run_lvl_ctrl run_lvl[DVS_RUN_LEVELS];
+	struct gpio_desc *gpio1;
+	struct gpio_desc *gpio2;
 };
 
 static const struct reg_init buck1_inits[] = {
@@ -35,33 +48,65 @@ static const struct reg_init buck1_inits[] = {
 	 * Use register accesses by default.
 	 */
 	{
-		.reg = BD71828_REG_BUCK1_CTRL,
-		.mask = BD71828_MASK_DVS_BUCK_CTRL,
-		.val = BD71828_DVS_BUCK_CTRL_I2C,
+		.reg = BD71828_REG_PS_CTRL_1,
+		.mask = BD71828_MASK_DVS_BUCK1_CTRL,
+		.val = BD71828_DVS_BUCK1_CTRL_I2C,
+	},
+};
+
+static const struct reg_init buck1_gpio_inits[] = {
+	{
+		.reg = BD71828_REG_PS_CTRL_1,
+		.mask = BD71828_MASK_DVS_BUCK1_CTRL,
+		.val = BD71828_DVS_BUCK1_CTRL_GPIO,
 	},
 };
 
 static const struct reg_init buck2_inits[] = {
 	{
-		.reg = BD71828_REG_BUCK2_CTRL,
-		.mask = BD71828_MASK_DVS_BUCK_CTRL,
-		.val = BD71828_DVS_BUCK_CTRL_I2C,
+		.reg = BD71828_REG_PS_CTRL_1,
+		.mask = BD71828_MASK_DVS_BUCK2_CTRL,
+		.val = BD71828_DVS_BUCK2_CTRL_I2C,
+	},
+};
+
+static const struct reg_init buck2_gpio_inits[] = {
+	{
+		.reg = BD71828_REG_PS_CTRL_1,
+		.mask = BD71828_MASK_DVS_BUCK2_CTRL,
+		.val = BD71828_DVS_BUCK2_CTRL_GPIO,
 	},
 };
 
 static const struct reg_init buck6_inits[] = {
 	{
-		.reg = BD71828_REG_BUCK6_CTRL,
-		.mask = BD71828_MASK_DVS_BUCK_CTRL,
-		.val = BD71828_DVS_BUCK_CTRL_I2C,
+		.reg = BD71828_REG_PS_CTRL_1,
+		.mask = BD71828_MASK_DVS_BUCK6_CTRL,
+		.val = BD71828_DVS_BUCK6_CTRL_I2C,
+	},
+};
+
+static const struct reg_init buck6_gpio_inits[] = {
+	{
+		.reg = BD71828_REG_PS_CTRL_1,
+		.mask = BD71828_MASK_DVS_BUCK6_CTRL,
+		.val = BD71828_DVS_BUCK6_CTRL_GPIO,
 	},
 };
 
 static const struct reg_init buck7_inits[] = {
 	{
-		.reg = BD71828_REG_BUCK7_CTRL,
-		.mask = BD71828_MASK_DVS_BUCK_CTRL,
-		.val = BD71828_DVS_BUCK_CTRL_I2C,
+		.reg = BD71828_REG_PS_CTRL_1,
+		.mask = BD71828_MASK_DVS_BUCK7_CTRL,
+		.val = BD71828_DVS_BUCK7_CTRL_I2C,
+	},
+};
+
+static const struct reg_init buck7_gpio_inits[] = {
+	{
+		.reg = BD71828_REG_PS_CTRL_1,
+		.mask = BD71828_MASK_DVS_BUCK7_CTRL,
+		.val = BD71828_DVS_BUCK7_CTRL_GPIO,
 	},
 };
 
@@ -107,6 +152,80 @@ static int buck_set_hw_dvs_levels(struct device_node *np,
 	return rohm_regulator_set_dvs_levels(&data->dvs, np, desc, cfg->regmap);
 }
 
+static int set_runlevel_voltage(struct regmap *regmap,
+				const struct regulator_desc *desc,
+				unsigned int uv, unsigned int level)
+{
+	int i, ret = -EINVAL;
+	/*
+	 * RUN level registers are next to vsel_reg. RUN0 reg is next, then
+	 * is the RUN 1 reg and so on...
+	 */
+	u8 reg = desc->vsel_reg + level + 1;
+	u8 mask = BD71828_MASK_BUCK1267_VOLT;
+
+	for (i = 0; i < desc->n_voltages; i++) {
+		ret = regulator_desc_list_voltage_linear_range(desc, i);
+		if (ret < 0)
+			continue;
+		if (ret == uv) {
+			i <<= ffs(desc->vsel_mask) - 1;
+			ret = regmap_update_bits(regmap, reg, mask, i);
+			break;
+		}
+	}
+	return ret;
+}
+
+static int buck_set_gpio_hw_dvs_levels(struct device_node *np,
+				       const struct regulator_desc *desc,
+				       struct regulator_config *cfg)
+{
+	struct bd71828_regulator_data *data;
+	uint32_t uv;
+	int i, ret;
+	/* On BD71828 the RUN level control reg is next to enable reg */
+	u8 en_reg = desc->enable_reg + 1;
+	const char *props[DVS_RUN_LEVELS] = { "rohm,dvs-runlevel0-voltage",
+					      "rohm,dvs-runlevel1-voltage",
+					      "rohm,dvs-runlevel2-voltage",
+					      "rohm,dvs-runlevel3-voltage" };
+	u8 en_masks[DVS_RUN_LEVELS] = { BD71828_MASK_RUN0_EN,
+					BD71828_MASK_RUN1_EN,
+					BD71828_MASK_RUN2_EN,
+					BD71828_MASK_RUN3_EN };
+
+	data = container_of(desc, struct bd71828_regulator_data, desc);
+
+	for (i = 0; i < DVS_RUN_LEVELS; i++) {
+		ret = of_property_read_u32(np, props[i], &uv);
+		if (ret) {
+			if (ret != -EINVAL)
+				return ret;
+			uv = 0;
+		}
+		if (uv) {
+			data->run_lvl[i].voltage = uv;
+			data->run_lvl[i].enabled = true;
+
+			ret = set_runlevel_voltage(cfg->regmap, desc, uv, i);
+
+			if (ret)
+				return ret;
+
+			ret = regmap_update_bits(cfg->regmap, en_reg,
+						 en_masks[i], en_masks[i]);
+		} else {
+			ret = regmap_update_bits(cfg->regmap, en_reg,
+						 en_masks[i], 0);
+		}
+		if (ret)
+			return ret;
+	}
+
+	return rohm_regulator_set_dvs_levels(&data->dvs, np, desc, cfg->regmap);
+}
+
 static int ldo6_parse_dt(struct device_node *np,
 			 const struct regulator_desc *desc,
 			 struct regulator_config *cfg)
@@ -132,13 +251,74 @@ static int ldo6_parse_dt(struct device_node *np,
 			en = 0xffffffff;
 		else
 			en = 0;
-		
+
 		ret = regmap_update_bits(regmap, desc->enable_reg, mask[i], en);
 		if (ret)
 			return ret;
 	}
 	return 0;
 }
+
+static int bd71828_dvs_gpio_get_run_level(struct bd71828_regulator_data *data)
+{
+	int run_level;
+	int tmp;
+
+	tmp = gpiod_get_value_cansleep(data->gpio1);
+	if (tmp < 0)
+		return tmp;
+
+	run_level = tmp;
+
+	tmp = gpiod_get_value_cansleep(data->gpio2);
+	if (tmp < 0)
+		return tmp;
+
+	run_level |= (tmp << 1);
+
+	return run_level;
+}
+
+static int bd71828_dvs_gpio_is_enabled(struct regulator_dev *rdev)
+{
+	struct bd71828_regulator_data *data = rdev_get_drvdata(rdev);
+	int ret;
+
+	// TODO: lock GPIO state (Is this needed)
+	ret = bd71828_dvs_gpio_get_run_level(data);
+	if (ret < 0)
+		goto unlock_out;
+
+	ret = data->run_lvl[ret].enabled;
+
+unlock_out:
+	//TODO: unlock
+
+	return ret;
+}
+
+static int bd71828_dvs_gpio_get_voltage(struct regulator_dev *rdev)
+{
+	int ret;
+	struct bd71828_regulator_data *data = rdev_get_drvdata(rdev);
+
+	// TODO: lock GPIO state (Is this needed)
+	ret = bd71828_dvs_gpio_get_run_level(data);
+	if (ret < 0)
+		goto unlock_out;
+
+	ret = data->run_lvl[ret].voltage;
+
+unlock_out:
+	//TODO: unlock
+
+	return ret;
+}
+
+static const struct regulator_ops dvs_buck_gpio_ops = {
+	.is_enabled = bd71828_dvs_gpio_is_enabled,
+	.get_voltage = bd71828_dvs_gpio_get_voltage,
+};
 
 static const struct regulator_ops bd71828_buck_ops = {
 	.enable = regulator_enable_regmap,
@@ -181,7 +361,6 @@ static const struct regulator_ops bd71828_ldo6_ops = {
 	.is_enabled = regulator_is_enabled_regmap,
 };
 
-//static const struct regulator_desc bd71828_desc[] = {
 static const struct bd71828_regulator_data bd71828_rdata[] = {
 	{
 		.desc = {
@@ -193,8 +372,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 			.type = REGULATOR_VOLTAGE,
 			.linear_ranges = bd71828_buck1267_volts,
 			.n_linear_ranges = ARRAY_SIZE(bd71828_buck1267_volts),
-// 		Why this would be needed when linear ranges are in use??
-//		.n_voltages = BD71828_BUCK1267_VOLTS,
+			.n_voltages = BD71828_BUCK1267_VOLTS,
 			.enable_reg = BD71828_REG_BUCK1_EN,
 			.enable_mask = BD71828_MASK_RUN_EN,
 			.vsel_reg = BD71828_REG_BUCK1_VOLT,
@@ -669,7 +847,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 			.id = BD71828_LDO6,
 			.ops = &bd71828_ldo6_ops,
 			.type = REGULATOR_VOLTAGE,
-			//.n_voltages = 1,
+			.n_voltages = 1,
 			.enable_reg = BD71828_REG_LDO6_EN,
 			.enable_mask = BD71828_MASK_RUN_EN,
 			.owner = THIS_MODULE,
@@ -724,6 +902,79 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 	},
 };
 
+struct bd71828_gpio_cfg {
+	unsigned int gpiobucks;
+	struct gpio_desc *gpio1;
+	struct gpio_desc *gpio2;
+};
+
+static int check_dt_for_gpio_controls(struct device *d,
+				      struct bd71828_gpio_cfg *g)
+{
+	int ret, i;
+	struct gpio_desc *tmp;
+	struct device_node *np = d->of_node;
+	const char *prop = "rohm,dvs_gpio_bucks";
+	uint32_t bucks[MAX_GPIO_DVS_BUCKS];
+
+	tmp = gpiod_get_index(d, "rohm,dvs-vsel", 0, GPIOD_OUT_LOW);
+	if (IS_ERR(tmp)) {
+		ret = PTR_ERR(tmp);
+		if (ret == -ENOENT)
+			return 0;
+		return ret;
+	}
+	g->gpio1 = tmp;
+
+	tmp = gpiod_get_index(d, "rohm,dvs-vsel", 1, GPIOD_OUT_LOW);
+	if (IS_ERR(tmp))
+		return PTR_ERR(tmp);
+
+	g->gpio2 = tmp;
+
+	ret = of_property_read_variable_u32_array(np, prop, bucks, 0,
+						  ARRAY_SIZE(bucks));
+
+	if (ret < 0) {
+		if (ret == -EOVERFLOW)
+			return -EINVAL;
+	}
+	for (i = 0; i < ret; i++)
+		g->gpiobucks |= 1 << bucks[i];
+
+	return 0;
+}
+
+static void set_buck_gpio_controlled(struct rohm_regmap_dev *bd71828,
+				     struct bd71828_regulator_data *rd,
+				     struct bd71828_gpio_cfg *g)
+{
+	switch (rd->desc.id) {
+	case BD71828_BUCK1:
+		rd->reg_inits = buck1_gpio_inits;
+		break;
+	case BD71828_BUCK2:
+		rd->reg_inits = buck2_gpio_inits;
+		break;
+	case BD71828_BUCK6:
+		rd->reg_inits = buck6_gpio_inits;
+		break;
+	case BD71828_BUCK7:
+		rd->reg_inits = buck7_gpio_inits;
+		break;
+	default:
+		return;
+	}
+	/*
+	 * Disallow setters. Get voltages/enable states based
+	 * on current RUN level
+	 */
+	rd->gpio1 = g->gpio1;
+	rd->gpio2 = g->gpio2;
+	rd->desc.ops = &dvs_buck_gpio_ops;
+	rd->desc.of_parse_cb = buck_set_gpio_hw_dvs_levels;
+}
+
 static int bd71828_probe(struct platform_device *pdev)
 {
 	struct rohm_regmap_dev *bd71828;
@@ -731,6 +982,8 @@ static int bd71828_probe(struct platform_device *pdev)
 	struct regulator_config config = {
 		.dev = pdev->dev.parent,
 	};
+	struct bd71828_gpio_cfg gcfg = {0};
+	struct bd71828_regulator_data *rd;
 
 	bd71828 = dev_get_drvdata(pdev->dev.parent);
 	if (!bd71828) {
@@ -738,30 +991,54 @@ static int bd71828_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	ret = check_dt_for_gpio_controls(pdev->dev.parent, &gcfg);
+	if (ret) {
+		dev_err(&pdev->dev, "Failed to get DVS gpio resources\n");
+		return ret;
+	}
+
+	/*
+	 * Allocate device data to allow controlling more than one PMICs
+	 */
+	rd = devm_kmalloc_array(&pdev->dev, ARRAY_SIZE(bd71828_rdata),
+				sizeof(*rd), GFP_KERNEL);
+	if (!rd)
+		return -ENOMEM;
+
+
+	for (i = 0; i < ARRAY_SIZE(bd71828_rdata); i++) {
+		/* Use bd71828_rdata as template */
+		rd[i] = bd71828_rdata[i];
+
+		if (gcfg.gpiobucks & (1 << i))
+			set_buck_gpio_controlled(bd71828, &rd[i], &gcfg);
+	}
+
 	config.regmap = bd71828->regmap;
+
 
 	for (i = 0; i < ARRAY_SIZE(bd71828_rdata); i++) {
 		struct regulator_dev *rdev;
-		const struct bd71828_regulator_data *rd;
 
-		rd = &bd71828_rdata[i];
+		config.driver_data = &rd[i];
+
 		rdev = devm_regulator_register(&pdev->dev,
-					       &rd->desc, &config);
+					       &rd[i].desc, &config);
 		if (IS_ERR(rdev)) {
 			dev_err(&pdev->dev,
 				"failed to register %s regulator\n",
-				rd->desc.name);
+				rd[i].desc.name);
 			return PTR_ERR(rdev);
 		}
-		for(j = 0; j < rd->reg_init_amnt; j++){
+		for(j = 0; j < rd[i].reg_init_amnt; j++){
 			ret = regmap_update_bits(bd71828->regmap,
-						 rd->reg_inits[j].reg,
-						 rd->reg_inits[j].mask,
-						 rd->reg_inits[j].val);
+						 rd[i].reg_inits[j].reg,
+						 rd[i].reg_inits[j].mask,
+						 rd[i].reg_inits[j].val);
 			if (ret) {
 				dev_err(&pdev->dev,
 					"regulator %s init failed\n",
-					rd->desc.name);
+					rd[i].desc.name);
 				return ret;
 			}
 		}
