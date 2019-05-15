@@ -4,6 +4,7 @@
 //
 
 #include <linux/delay.h>
+#include <linux/device.h>
 #include <linux/err.h>
 #include <linux/gpio.h>
 #include <linux/gpio/consumer.h>
@@ -259,6 +260,17 @@ static int ldo6_parse_dt(struct device_node *np,
 	return 0;
 }
 
+static int bd71828_dvs_gpio_set_run_level(struct bd71828_regulator_data *rd,
+					  int val)
+{
+	if (val < 0 || val > 3)
+		return -EINVAL;
+
+	gpiod_set_value_cansleep(rd->gpio1, val & 1);
+	gpiod_set_value_cansleep(rd->gpio2, val & 2);
+
+	return 0;
+}
 static int bd71828_dvs_gpio_get_run_level(struct bd71828_regulator_data *data)
 {
 	int run_level;
@@ -975,6 +987,65 @@ static void set_buck_gpio_controlled(struct rohm_regmap_dev *bd71828,
 	rd->desc.of_parse_cb = buck_set_gpio_hw_dvs_levels;
 }
 
+static ssize_t show_runlevel(struct device *dev,
+			   struct device_attribute *attr, char *buf)
+{
+	int runlevel;
+	struct bd71828_regulator_data *rd = dev_get_drvdata(dev);
+
+	if (!rd || !rd->gpio1)
+		return -ENOENT;
+
+	runlevel = bd71828_dvs_gpio_get_run_level(rd);
+	if (0 > runlevel)
+		return runlevel;
+
+	return sprintf(buf, "0x%x\n", runlevel);
+}
+
+static ssize_t set_runlevel(struct device *dev, struct device_attribute *attr,
+			  const char *buf, size_t count)
+{
+	struct bd71828_regulator_data *rd = dev_get_drvdata(dev);
+	long val;
+
+	if (kstrtol(buf, 0, &val) != 0)
+		return -EINVAL;
+
+	val = bd71828_dvs_gpio_set_run_level(rd, val);
+	if (val)
+		return val;
+
+	return count;
+}
+
+static DEVICE_ATTR(runlevel, 0664, show_runlevel, set_runlevel);
+
+static struct attribute *runlevel_attributes[] = {
+	&dev_attr_runlevel.attr,
+	NULL
+};
+
+static const struct attribute_group bd71828_attr_group = {
+	.attrs	= runlevel_attributes,
+};
+
+static int bd71828_create_sysfs(struct platform_device *pdev)
+{
+	return sysfs_create_group(&pdev->dev.kobj, &bd71828_attr_group);
+}
+
+static int bd71828_remove_sysfs(struct platform_device *pdev)
+{
+	sysfs_remove_group(&pdev->dev.kobj, &bd71828_attr_group);
+	return 0;
+}
+
+static int bd71828_remove(struct platform_device *pdev)
+{
+	return bd71828_remove_sysfs(pdev);
+}
+
 static int bd71828_probe(struct platform_device *pdev)
 {
 	struct rohm_regmap_dev *bd71828;
@@ -1005,6 +1076,7 @@ static int bd71828_probe(struct platform_device *pdev)
 	if (!rd)
 		return -ENOMEM;
 
+	dev_set_drvdata(&pdev->dev, rd);
 
 	for (i = 0; i < ARRAY_SIZE(bd71828_rdata); i++) {
 		/* Use bd71828_rdata as template */
@@ -1015,7 +1087,6 @@ static int bd71828_probe(struct platform_device *pdev)
 	}
 
 	config.regmap = bd71828->regmap;
-
 
 	for (i = 0; i < ARRAY_SIZE(bd71828_rdata); i++) {
 		struct regulator_dev *rdev;
@@ -1043,7 +1114,7 @@ static int bd71828_probe(struct platform_device *pdev)
 			}
 		}
 	}
-	return 0;
+	return bd71828_create_sysfs(pdev);
 }
 
 static struct platform_driver bd71828_regulator = {
@@ -1051,6 +1122,7 @@ static struct platform_driver bd71828_regulator = {
 		.name = "bd71828-pmic"
 	},
 	.probe = bd71828_probe,
+	.remove = bd71828_remove,
 };
 
 module_platform_driver(bd71828_regulator);
