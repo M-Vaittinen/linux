@@ -47,12 +47,14 @@ enum {
 #define BD71828_RUN3_GPIO2_FLAGS	HIGH
 
 
-/* Registers */
+/* Registers and masks*/
 
 /* MODE control */
 #define BD71828_REG_PS_CTRL_1		0x04
 #define BD71828_REG_PS_CTRL_2		0x05
 #define BD71828_REG_SWRESET		0x06
+
+/* Regulator control masks */
 
 #define BD71828_MASK_RUN_EN		0x08
 #define BD71828_MASK_SUSP_EN		0x04
@@ -142,6 +144,19 @@ enum {
 //#define BD71828_REG_LDO6_VOLT		0x4
 #define BD71828_REG_LDO7_EN		0x45
 #define BD71828_REG_LDO7_VOLT		0x46
+
+/* GPIO */
+
+#define BD71828_GPIO_DRIVE_MASK		0x2
+#define BD71828_GPIO_OPEN_DRAIN		0x0
+#define BD71828_GPIO_PUSH_PULL		0x2
+#define BD71828_GPIO_OUT_HI		0x1
+#define BD71828_GPIO_OUT_LO		0x0
+#define BD71828_GPIO_OUT_MASK		0x1
+
+#define BD71828_REG_GPIO_CTRL1		0x47
+#define BD71828_REG_GPIO_CTRL2		0x48
+#define BD71828_REG_GPIO_CTRL3		0x49
 
 /* RTC */
 #define BD71828_REG_RTC_SEC		0x4c
