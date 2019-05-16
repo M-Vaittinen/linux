@@ -39,8 +39,7 @@ struct bd71828_regulator_data {
 	const struct reg_init *reg_inits;
 	int reg_init_amnt;
 	struct run_lvl_ctrl run_lvl[DVS_RUN_LEVELS];
-	struct gpio_desc *gpio1;
-	struct gpio_desc *gpio2;
+	struct gpio_descs *gps;
 };
 
 static const struct reg_init buck1_inits[] = {
@@ -263,30 +262,35 @@ static int ldo6_parse_dt(struct device_node *np,
 static int bd71828_dvs_gpio_set_run_level(struct bd71828_regulator_data *rd,
 					  int val)
 {
+	DECLARE_BITMAP(values, 2);
+
+	if (rd->gps->ndescs != 2)
+		return -EINVAL;
+
 	if (val < 0 || val > 3)
 		return -EINVAL;
 
-	gpiod_set_value_cansleep(rd->gpio1, val & 1);
-	gpiod_set_value_cansleep(rd->gpio2, val & 2);
+	values[0] = val;
 
-	return 0;
+	return gpiod_set_array_value_cansleep(rd->gps->ndescs, rd->gps->desc,
+				     rd->gps->info, values);
 }
-static int bd71828_dvs_gpio_get_run_level(struct bd71828_regulator_data *data)
+static int bd71828_dvs_gpio_get_run_level(struct bd71828_regulator_data *rd)
 {
 	int run_level;
-	int tmp;
+	int ret;
 
-	tmp = gpiod_get_value_cansleep(data->gpio1);
-	if (tmp < 0)
-		return tmp;
+	DECLARE_BITMAP(values, 2);
 
-	run_level = tmp;
+	if (rd->gps->ndescs != 2)
+		return -EINVAL;
 
-	tmp = gpiod_get_value_cansleep(data->gpio2);
-	if (tmp < 0)
-		return tmp;
+	ret = gpiod_get_array_value_cansleep(rd->gps->ndescs, rd->gps->desc,
+				     rd->gps->info, values);
+	if (ret)
+		return ret;
 
-	run_level |= (tmp << 1);
+	run_level = values[0];
 
 	return run_level;
 }
@@ -916,33 +920,28 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 
 struct bd71828_gpio_cfg {
 	unsigned int gpiobucks;
-	struct gpio_desc *gpio1;
-	struct gpio_desc *gpio2;
+	struct gpio_descs *gps;
 };
 
 static int check_dt_for_gpio_controls(struct device *d,
 				      struct bd71828_gpio_cfg *g)
 {
 	int ret, i;
-	struct gpio_desc *tmp;
 	struct device_node *np = d->of_node;
 	const char *prop = "rohm,dvs_gpio_bucks";
 	uint32_t bucks[MAX_GPIO_DVS_BUCKS];
 
-	tmp = gpiod_get_index(d, "rohm,dvs-vsel", 0, GPIOD_OUT_LOW);
-	if (IS_ERR(tmp)) {
-		ret = PTR_ERR(tmp);
+	g->gps = devm_gpiod_get_array(d, "rohm,dvs-vsel", GPIOD_OUT_LOW);
+
+	if (IS_ERR(g->gps)) {
+		ret = PTR_ERR(g->gps);
 		if (ret == -ENOENT)
 			return 0;
 		return ret;
 	}
-	g->gpio1 = tmp;
 
-	tmp = gpiod_get_index(d, "rohm,dvs-vsel", 1, GPIOD_OUT_LOW);
-	if (IS_ERR(tmp))
-		return PTR_ERR(tmp);
-
-	g->gpio2 = tmp;
+	if (g->gps->ndescs != 2)
+		return -ENOENT;
 
 	ret = of_property_read_variable_u32_array(np, prop, bucks, 0,
 						  ARRAY_SIZE(bucks));
@@ -981,8 +980,7 @@ static void set_buck_gpio_controlled(struct rohm_regmap_dev *bd71828,
 	 * Disallow setters. Get voltages/enable states based
 	 * on current RUN level
 	 */
-	rd->gpio1 = g->gpio1;
-	rd->gpio2 = g->gpio2;
+	rd->gps = g->gps;
 	rd->desc.ops = &dvs_buck_gpio_ops;
 	rd->desc.of_parse_cb = buck_set_gpio_hw_dvs_levels;
 }
@@ -993,7 +991,7 @@ static ssize_t show_runlevel(struct device *dev,
 	int runlevel;
 	struct bd71828_regulator_data *rd = dev_get_drvdata(dev);
 
-	if (!rd || !rd->gpio1)
+	if (!rd || !rd->gps)
 		return -ENOENT;
 
 	runlevel = bd71828_dvs_gpio_get_run_level(rd);
