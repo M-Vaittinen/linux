@@ -9,7 +9,9 @@
 #include <linux/regmap.h>
 
 #define OUT 0
+#define IN 1
 #define GPIO_OUT_REG(off) (BD71828_REG_GPIO_CTRL1 + (off))
+#define HALL_GPIO_OFFSET 3
 
 struct bd71828_gpio {
 	struct rohm_regmap_dev chip;
@@ -23,6 +25,9 @@ static void bd71828_gpio_set(struct gpio_chip *chip, unsigned int offset,
 	struct bd71828_gpio *bdgpio = gpiochip_get_data(chip);
 	u8 val = (value) ? BD71828_GPIO_OUT_HI : BD71828_GPIO_OUT_LO;
 
+	if (offset == HALL_GPIO_OFFSET)
+		return;
+
 	ret = regmap_update_bits(bdgpio->chip.regmap, GPIO_OUT_REG(offset),
 				 BD71828_GPIO_OUT_MASK, val);
 	if (ret)
@@ -35,7 +40,13 @@ static int bd71828_gpio_get(struct gpio_chip *chip, unsigned int offset)
 	unsigned int val;
 	struct bd71828_gpio *bdgpio = gpiochip_get_data(chip);
 
-	ret = regmap_read(bdgpio->chip.regmap, GPIO_OUT_REG(offset), &val);
+	
+	if (offset == HALL_GPIO_OFFSET)
+		ret = regmap_read(bdgpio->chip.regmap, BD71828_REG_IO_STAT,
+				  &val);
+	else
+		ret = regmap_read(bdgpio->chip.regmap, GPIO_OUT_REG(offset),
+				  &val);
 	if (!ret)
 		ret = (val & BD71828_GPIO_OUT_MASK);
 
@@ -46,6 +57,9 @@ static int bd71828_gpio_set_config(struct gpio_chip *chip, unsigned int offset,
 				   unsigned long config)
 {
 	struct bd71828_gpio *bdgpio = gpiochip_get_data(chip);
+
+	if (offset == HALL_GPIO_OFFSET)
+		return -ENOTSUPP;
 
 	switch (pinconf_to_config_param(config)) {
 	case PIN_CONFIG_DRIVE_OPEN_DRAIN:
@@ -73,6 +87,9 @@ static int bd71828_get_direction(struct gpio_chip *chip, unsigned int offset)
 	 * be used for general purpose input - input states are used for
 	 * specific cases like regulator control or PMIC_ON_REQ.
 	 */
+	if (offset == HALL_GPIO_OFFSET)
+		return IN;
+
 	return OUT;
 }
 
@@ -116,7 +133,7 @@ static int bd71828_probe(struct platform_device *pdev)
 	bdgpio->gpio.get = bd71828_gpio_get;
 	bdgpio->gpio.set = bd71828_gpio_set;
 	bdgpio->gpio.base = -1;
-	bdgpio->gpio.ngpio = 3;
+	bdgpio->gpio.ngpio = 4;
 #ifdef CONFIG_OF_GPIO
 	bdgpio->gpio.of_node = pdev->dev.parent->of_node;
 #endif
