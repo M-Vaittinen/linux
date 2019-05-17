@@ -157,6 +157,7 @@ enum {
 #define BD71828_REG_GPIO_CTRL1		0x47
 #define BD71828_REG_GPIO_CTRL2		0x48
 #define BD71828_REG_GPIO_CTRL3		0x49
+#define BD71828_REG_IO_STAT		0xed
 
 /* RTC */
 #define BD71828_REG_RTC_SEC		0x4c
@@ -229,7 +230,7 @@ enum {
 /* WTF is this...? */
 #define BD71828_REG_INT_UPDATE		0xec
 
-#define BD71828_MAX_REGISTER BD71828_REG_INT_UPDATE
+#define BD71828_MAX_REGISTER BD71828_REG_IO_STAT
 
 /* Masks for main IRQ register bits */
 enum {
