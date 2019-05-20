@@ -199,6 +199,13 @@ enum {
 /* CLK */
 #define BD71828_REG_OUT32K		0x4B
 
+/* LEDs */
+#define BD71828_REG_LED_CTRL		0x4A
+#define BD71828_MASK_LED_AMBER		0x80
+#define BD71828_MASK_LED_GREEN		0x40
+#define BD71828_LED_ON			0xff
+#define BD71828_LED_OFF			0x0
+
 /* IRQ registers */
 #define BD71828_REG_INT_MASK_BUCK 	0xd3
 #define BD71828_REG_INT_MASK_DCIN1	0xd4
