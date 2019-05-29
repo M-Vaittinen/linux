@@ -20,6 +20,29 @@ static const struct resource rtc_irqs[] = {
 	DEFINE_RES_IRQ_NAMED(BD71828_INT_RTC1, "bd71828-rtc-alm-1"),
 	DEFINE_RES_IRQ_NAMED(BD71828_INT_RTC2, "bd71828-rtc-alm-2"),
 };
+
+static const struct resource charger_irqs[] = {
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_LONGPUSH, "bd71828-pwr-longpush"),
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_MIDPUSH, "bd71828-pwr-midpush"),
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_SHORTPUSH, "bd71828-pwr-shortpush"),
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_PUSH, "bd71828-pwr-push"),
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_DCIN_MON_RES, "bd71828-pwr-dcin-in" ),
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_DCIN_MON_DET, "bd71828-pwr-dcin-out"),
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_BAT_MON_RES, "bd71828-vbat-normal" ),
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_BAT_MON_DET, "bd71828-vbat-low"),
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_TEMP_BAT_HI_DET, "bd71828-btemp-hi"),
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_TEMP_BAT_HI_RES, "bd71828-btemp-cool"),
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_TEMP_BAT_LOW_DET, "bd71828-btemp-lo"),
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_TEMP_BAT_LOW_RES,
+			     "bd71828-btemp-warm"),
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_TEMP_CHIP_OVER_125_RES,
+			     "bd71828-temp-125-under"),
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_TEMP_CHIP_OVER_125_DET,
+			     "bd71828-temp-125-over"),
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_TEMP_CHIP_OVER_VF_DET, "bd71828-temp-hi"),
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_TEMP_CHIP_OVER_VF_RES, "bd71828-temp-norm"),
+	
+};
 /*
 static const struct resource charger_irqs[] = {
 	DEFINE_RES_IRQ_NAMED(BD70528_INT_BAT_OV_RES, "bd70528-bat-ov-res"),
@@ -51,8 +74,8 @@ static struct mfd_cell bd71828_mfd_cells[] = {
 	{ .name = "bd718xx-clk", },
 	{
 		.name = "bd71828-power",
-//		.resources = charger_irqs,
-//		.num_resources = ARRAY_SIZE(charger_irqs),
+		.resources = charger_irqs,
+		.num_resources = ARRAY_SIZE(charger_irqs),
 	}, {
 		.name = "bd71828-rtc",
 		.resources = rtc_irqs,
