@@ -464,29 +464,17 @@ enum {
 #define ALM0_EN					0x1
 
 /* BD71827_REG_CC_CTRL bits */
-#define CCNTRST					0x80
-#define CCNTENB					0x40
-#define CCCALIB					0x20
 
 /* BD71827_REG_CHG_SET1 bits */
 #define WDT_AUTO				0x40
 
-/* BD71827_REG_CC_CURCD */
-#define CURDIR_Discharging		0x8000
-
-/* BD71827_REG_VM_SA_IBAT */
-#define IBAT_SA_DIR_Discharging	0x8000
-
-/* BD71827_REG_VM_SA_MINMAX_CLR bits */
-#define VSYS_SA_MIN_CLR			0x10
-#define VBAT_SA_MIN_CLR			0x01
 
 /* BD71827_REG_REX_CTRL_1 bits */
-#define REX_CLR					0x10
+#define BD71827_REX_CLR_MASK		0x10
 #define REX_PMU_STATE_MASK		0x04
 
 /* BD71827_REG_FULL_CTRL bits */
-#define FULL_CLR				0x10
+//#define FULL_CLR				0x10
 
 /* BD71827_REG_LED_CTRL bits */
 #define CHGDONE_LED_EN			0x10

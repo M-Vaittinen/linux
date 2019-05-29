@@ -17,12 +17,30 @@
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
 #include <linux/power_supply.h>
-#include <linux/mfd/rohm-bd71827.h>
+#include <linux/mfd/bd71827.h>
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/proc_fs.h>
 #include <asm/uaccess.h>
+
+/* BD71828 and BD71827 common defines */
+#define BD7182x_MASK_VBAT_U     	0x1f
+#define BD7182x_MASK_IBAT_U		0x3f
+#define BD7182x_MASK_CURDIR_DISCHG	0x80
+#define BD7182x_MASK_CC_CCNTD_HI	0x0FFF
+#define BD7182x_MASK_CC_CCNTD		0x0FFFFFFF
+#define BD7182x_MASK_CHG_STATE		0x7f
+#define BD7182x_MASK_CC_FULL_CLR	0x10
+
+#define BD7182x_MASK_CCNTRST					0x80
+#define BD7182x_MASK_CCNTENB					0x40
+#define BD7182x_MASK_CCCALIB					0x20
+
+/* Measured min and max value clear bits */
+#define BD7182x_MASK_VSYS_MIN_AVG_CLR			0x10
+#define BD7182x_MASK_VBAT_MIN_AVG_CLR			0x01
+
 
 #define JITTER_DEFAULT			3000		/* hope 3s is enough */
 #define JITTER_REPORT_CAP		10000		/* 10 seconds */
@@ -69,6 +87,88 @@
 
 #define PWRCTRL_NORMAL				0x22
 #define PWRCTRL_RESET				0x23
+
+#define PWR_SET(member, val) {	\
+	member = (val);		\
+	smb_wmb();			\
+}
+#define PWR_GET(member) ({		\
+	smb_rmb();			\
+	member;				\
+})
+
+struct pwr_regs {
+	u8 vbat_init;
+	u8 vbat_init2;
+	u8 vbat_avg;
+	u8 ibat;
+	u8 ibat_avg;
+	u8 vsys_avg;
+	u8 vbat_min_avg;
+	u8 meas_clear;
+	u8 vsys_min_avg;
+	u8 btemp_vth;
+	u8 chg_state;
+	u8 coulomb3;
+	u8 coulomb2;
+	u8 coulomb1;
+	u8 coulomb0;
+	u8 coulomb_ctrl;
+	u8 vbat_rex_avg;
+	u8 rex_clear_reg;
+	u8 rex_clear_mask;
+};
+
+struct pwr_regs_bd71827 {
+	.vbat_init = BD71827_REG_VM_OCV_PRE_U;
+	.vbat_init2 = BD71827_REG_VM_OCV_PST_U;
+	.vbat_avg = BD71827_REG_VM_SA_VBAT_U;
+	.ibat = BD71827_REG_CC_CURCD_U;
+	.ibat_avg = BD71827_REG_CC_SA_CURCD_U;
+	.vsys_avg = BD71827_REG_VM_SA_VSYS_U;
+	.vbat_min_avg = BD71827_REG_VM_SA_VBAT_MIN_U;
+	.meas_clear = BD71827_REG_VM_SA_MINMAX_CLR;
+	.vsys_min_avg = BD71827_REG_VM_SA_VSYS_MIN_U;
+	.btemp_vth = BD71827_REG_VM_BTMP;
+	.chg_state = BD71827_REG_CHG_STATE;
+	.coulomb3 = BD71827_REG_CC_CCNTD_3;
+	.coulomb2 = BD71827_REG_CC_CCNTD_2;
+	.coulomb1 = BD71827_REG_CC_CCNTD_1;
+	.coulomb0 = BD71827_REG_CC_CCNTD_0;
+	.coulomb_ctrl = BD71827_REG_CC_CTRL;
+	.vbat_rex_avg = BD71827_REG_REX_SA_VBAT_U;
+	.rex_clear_reg = BD71827_REG_REX_CTRL_1;
+	.rex_clear_mask = BD71827_REX_CLR_MASK;
+	.coulomb_full3 = BD71827_REG_FULL_CCNTD_3;
+	.cc_full_clr = BD71827_REG_FULL_CTRL;
+	.coulomb_chg3 = BD71827_REG_CCNTD_CHG_3;
+};
+
+struct pwr_regs_bd71828 {
+	.vbat_init = BD71828_REG_VBAT_INITIAL1_U;
+	.vbat_init2 = BD71828_REG_VBAT_INITIAL2_U;
+	.vbat_avg = BD71828_REG_VBAT_U;
+	.ibat = BD71828_REG_IBAT_U;
+	.ibat_avg = BD71828_REG_IBAT_AVG_U;
+	.vsys_avg = BD71828_REG_VSYS_AVG_U;
+	.vbat_min_avg = BD71828_REG_VBAT_MIN_AVG_U;
+	.meas_clear = BD71828_REG_MEAS_CLEAR;
+	.vsys_min_avg = BD71828_REG_VSYS_MIN_AVG_U;
+	.btemp_vth = BD71828_REG_VM_BTMP_U;
+	.chg_state = BD71828_REG_CHG_STATE;
+	.coulomb3 = BD71828_REG_CC_CNT3;
+	.coulomb2 = BD71828_REG_CC_CNT2;
+	.coulomb1 = BD71828_REG_CC_CNT1;
+	.coulomb0 = BD71828_REG_CC_CNT0;
+	.coulomb_ctrl = BD71828_REG_COULOMB_CTRL;
+	.vbat_rex_avg = ;
+	.rex_clear_reg = BD71828_REG_COULOMB_CTRL2;
+	.rex_clear_mask = BD71828_MASK_REX_CC_CLR;
+	.coulomb_full3 = BD71828_REG_CC_CNT_FULL3;
+	.cc_full_clr = BD71828_REG_COULOMB_CTRL2;
+	.coulomb_chg3 = BD71828_REG_CC_CNT_CHG3;
+};
+
 
 static int ocv_table_default[23] = {
 	4200000,
@@ -265,7 +365,7 @@ int vdr_table_vl[23];
 /** @brief power deivce */
 struct bd71827_power {
 	struct device *dev;
-	struct bd71827 *mfd;			/**< parent for access register */
+	struct rohm_regmap_dev *mfd;			/**< parent for access register */
 	struct power_supply *ac;			/**< alternating current power */
 	struct power_supply *bat;		/**< battery power */
 	struct delayed_work bd_work;		/**< delayed work for timed work */
@@ -305,6 +405,8 @@ struct bd71827_power {
 
 	u32	cycle;				/**< Charging and Discharging cycle number */
 	volatile int calib_current;		/**< calibration current */
+	struct pwr_regs *regs;
+	int (*get_temp) (struct bd71827_power *pwr, int *temp);
 };
 
 struct bd71827 *pmic_data;
@@ -325,7 +427,7 @@ static int bd71827_calc_soc_org(struct bd71827_power* pwr);
  *  @param reg	 register address of lower register
  *  @return register value
  */
-
+/*
 u8 ext_bd71827_reg_read8(u8 reg)
 {
 	struct bd71827* mfd = pmic_data;
@@ -340,13 +442,14 @@ int ext_bd71827_reg_write8(int reg, u8 val)
 	struct bd71827* mfd = pmic_data;
 	return bd71827_reg_write(mfd, reg, val);
 }
-
+*/
 /** @brief read a register group once
  *  @param mfd bd71827 device
  *  @param reg	 register address of lower register
  *  @return register value
  */
-#ifdef __BD71827_REGMAP_H__
+//#ifdef __BD71827_REGMAP_H__
+/*
 u16 ext_bd71827_reg_read16(int reg)
 {
 	struct bd71827* mfd = pmic_data;
@@ -355,8 +458,9 @@ u16 ext_bd71827_reg_read16(int reg)
 	v = (u16)bd71827_reg_read(mfd, reg) << 8;
 	v |= (u16)bd71827_reg_read(mfd, reg + 1) << 0;
 	return v;
-}
-#else
+}*/
+//#else
+/*
 u16 ext_bd71827_reg_read16(int reg)
 {
 	struct bd71827* mfd = pmic_data;
@@ -371,8 +475,8 @@ u16 ext_bd71827_reg_read16(int reg)
 		return -1;
 	}
 	return be16_to_cpu(u.long_type);
-}
-#endif
+}*/
+//#endif
 
 /** @brief write a register group once
  * @param mfd bd71827 device
@@ -381,6 +485,7 @@ u16 ext_bd71827_reg_read16(int reg)
  * @retval 0 success
  * @retval -1 fail
  */
+/*
 int ext_bd71827_reg_write16(int reg, u16 val)
 {
 	struct bd71827* mfd = pmic_data;
@@ -402,12 +507,14 @@ int ext_bd71827_reg_write16(int reg, u16 val)
 	}
 	return 0;	
 }
+*/
 
 /** @brief read quad register once
  *  @param mfd bd71827 device
  *  @param reg	 register address of lower register
  *  @return register value
  */
+/*
 int ext_bd71827_reg_read32(int reg)
 {
 	struct bd71827* mfd = pmic_data;
@@ -453,7 +560,7 @@ static u16 bd71827_reg_read16(struct bd71827* mfd, int reg)
 	return be16_to_cpu(u.long_type);
 }
 #endif
-
+*/
 /** @brief write a register group once
  * @param mfd bd71827 device
  * @param reg register address of lower register
@@ -461,6 +568,7 @@ static u16 bd71827_reg_read16(struct bd71827* mfd, int reg)
  * @retval 0 success
  * @retval -1 fail
  */
+/*
 static int bd71827_reg_write16(struct bd71827 *mfd, int reg, u16 val)
 {
 	union {
@@ -481,12 +589,13 @@ static int bd71827_reg_write16(struct bd71827 *mfd, int reg, u16 val)
 	}
 	return 0;	
 }
-
+*/
 /** @brief read quad register once
  *  @param mfd bd71827 device
  *  @param reg	 register address of lower register
  *  @return register value
  */
+/*
 static int bd71827_reg_read32(struct bd71827 *mfd, int reg)
 {
 	union {
@@ -505,7 +614,7 @@ static int bd71827_reg_read32(struct bd71827 *mfd, int reg)
 	}
 	return be32_to_cpu(u.long_type);
 }
-
+*/
 #if 0
 /** @brief write quad register once
  * @param mfd bd71827 device
@@ -531,6 +640,20 @@ static int bd71827_reg_write32(struct bd71827 *mfd, int reg, unsigned val)
 }
 #endif
 
+static int bd7182x_read16_himask(struct bd71827_power *pwr, int reg, int himask,
+				 uint16_t *val)
+{
+	struct regmap *regmap = pwr->mfd->regmap;
+	u8 *tmp = (u8 *) val;
+
+	ret = regmap_bulk_read(regmap, sizeof(*val), reg, val);
+	if (!ret) {
+		*tmp &= himask;
+		*val = be16_to_cpu(*val);
+	}
+	return ret;
+}
+
 #if INIT_COULOMB == BY_VBATLOAD_REG
 /** @brief get initial battery voltage and current
  * @param pwr power device
@@ -538,40 +661,26 @@ static int bd71827_reg_write32(struct bd71827 *mfd, int reg, unsigned val)
  */
 static int bd71827_get_init_bat_stat(struct bd71827_power *pwr)
 {
-	struct bd71827 *mfd = pwr->mfd;
-	int vcell;
+	uint16_t vcell;
+	int ret;
+	int i;
+	u8 regs[] = { pwr->regs->vbat_init, pwr->regs->vbat_init2 };
+	int *vals[] = { &pwr->hw_ocv1, &pwr->hw_ocv2 };
 
-	vcell = bd71827_reg_read16(mfd, BD71827_REG_VM_OCV_PRE_U) * 1000;
-	dev_dbg(pwr->dev, "VM_OCV_PRE = %d\n", vcell);
-	pwr->hw_ocv1 = vcell;
+	for (i = 0; i < ARRAY_SIZE(regs); i++) {
 
-	vcell = bd71827_reg_read16(mfd, BD71827_REG_VM_OCV_PST_U) * 1000;
-	dev_dbg(pwr->dev, "VM_OCV_PST = %d\n", vcell);
-	pwr->hw_ocv2 = vcell;
+		ret = bd7182x_read16_himask(pwr, regs[i], BD7182x_MASK_VBAT_U,
+					    &vcell);
+		if (ret) {
+			dev_err(pwr->mfd->dev,
+				"Failed to read initial battery voltage\n");
+			return ret;
+		}
 
-	return 0;
-}
-#endif
+		dev_dbg(pwr->dev, "VM_OCV_%d = %d\n", i, vcell * 1000);
+		PWR_SET(*vals[i], ((int)vcell * 1000));
+	}
 
-#if INIT_COULOMB == BY_BAT_VOLT
-/** @brief get battery average voltage and current
- * @param pwr power device
- * @param vcell pointer to return back voltage in unit uV.
- * @param curr  pointer to return back current in unit uA.
- * @return 0
- */
-static int bd71827_get_vbat_curr(struct bd71827_power *pwr, int *vcell, int *curr)
-{
-	struct bd71827* mfd = pwr->mfd;
-	int tmp_vcell;
-
-	tmp_vcell = 0;
-
-	tmp_vcell = bd71827_reg_read16(mfd, BD71827_REG_VM_SA_VBAT_U);
-
-	*vcell = tmp_vcell * 1000;
-	*curr = 0;
-	
 	return 0;
 }
 #endif
@@ -583,16 +692,38 @@ static int bd71827_get_vbat_curr(struct bd71827_power *pwr, int *vcell, int *cur
  */
 static int bd71827_get_vbat(struct bd71827_power *pwr, int *vcell)
 {
-	struct bd71827* mfd = pwr->mfd;
-	int tmp_vcell;
+	uint16_t tmp_vcell;
+	char int ret;
 
-	tmp_vcell = 0;
-	tmp_vcell = bd71827_reg_read16(mfd, BD71827_REG_VM_SA_VBAT_U);
+	ret = bd7182x_read16_himask(pwr, pwr->regs->vbat_avg,
+				    BD7182x_MASK_VBAT_U, &tmp_vcell);
+	if(ret)
+		dev_err(pwr->mfd->dev,
+			"Failed to read battery average voltage\n");
+	else
+		*vcell = ((int)tmp_vcell) * 1000;
 
-	*vcell = tmp_vcell * 1000;
-
-	return 0;
+	return ret;
 }
+
+#if INIT_COULOMB == BY_BAT_VOLT
+/** @brief get battery average voltage and current
+ * @param pwr power device
+ * @param vcell pointer to return back voltage in unit uV.
+ * @param curr  pointer to return back current in unit uA.
+ * @return 0
+ */
+static int bd71827_get_vbat_curr(struct bd71827_power *pwr, int *vcell, int *curr)
+{
+	int ret;
+
+	ret = bd71827_get_vbat(pwr, vcell);
+	*curr = 0;
+	
+	return ret;
+}
+#endif
+
 
 /** @brief get battery current and battery average current from DS-ADC
  * @param pwr power device
@@ -602,23 +733,29 @@ static int bd71827_get_vbat(struct bd71827_power *pwr, int *vcell)
  */
 static int bd71827_get_current_ds_adc(struct bd71827_power *pwr, int *curr, int *curr_avg)
 {
-	int tmp_curr, tmp_curr_avg;
+	uint16_t tmp_curr;
+	char *tmp = (char *)&tmp_curr;
+	int dir = 1;
+	int regs[] = { pwr->regs->ibat, pwr->regs->ibat_avg };
+	int *vals[] = { curr, curr_avg };
+	int ret;
 
-	tmp_curr = 0;
-	tmp_curr_avg = 0;
-	tmp_curr = bd71827_reg_read16(pwr->mfd, BD71827_REG_CC_CURCD_U);
-	if (tmp_curr & CURDIR_Discharging) {
-		tmp_curr = -(tmp_curr & ~CURDIR_Discharging);
+	for (dir = 1, i = 0; i < ARRAY_SIZE(regs); i++) {
+		ret = regmap_bulk_read(pwr->mfd.regmap, sizeof(tmp_curr),
+				      regs[i], &tmp_curr);
+		if (ret)
+			break;
+
+		if (tmp & BD7182x_MASK_CURDIR_DISCHG)
+			dir = -1;
+
+		*tmp &= BD7182x_MASK_IBAT_U;
+		tmp_curr = be16_to_cpu(tmp_curr);
+
+		*vals[i] = dir * ((int)tmp_curr) * 1000;
 	}
-	*curr = tmp_curr * 1000;
 
-	tmp_curr_avg = bd71827_reg_read16(pwr->mfd, BD71827_REG_CC_SA_CURCD_U);
-	if (tmp_curr_avg & CURDIR_Discharging) {
-		tmp_curr_avg = -(tmp_curr_avg & ~CURDIR_Discharging);
-	}
-	*curr_avg = tmp_curr_avg * 1000;
-
-	return 0;
+	return ret;
 }
 
 /** @brief get system average voltage
@@ -628,16 +765,18 @@ static int bd71827_get_current_ds_adc(struct bd71827_power *pwr, int *curr, int 
  */
 static int bd71827_get_vsys(struct bd71827_power *pwr, int *vsys)
 {
-	struct bd71827* mfd = pwr->mfd;
-	int tmp_vsys;
+	uint16_t tmp_vsys;
+	char int ret;
 
-	tmp_vsys = 0;
+	ret = bd7182x_read16_himask(pwr, pwr->regs->vsys_avg,
+				    BD7182x_MASK_VBAT_U, &tmp_vsys);
+	if(ret)
+		dev_err(pwr->mfd->dev,
+			"Failed to read system average voltage\n");
+	else
+		*vsys = ((int)tmp_vsys) * 1000;
 
-	tmp_vsys = bd71827_reg_read16(mfd, BD71827_REG_VM_SA_VSYS_U);
-
-	*vsys = tmp_vsys * 1000;
-
-	return 0;
+	return ret;
 }
 
 /** @brief get battery minimum average voltage
@@ -647,17 +786,23 @@ static int bd71827_get_vsys(struct bd71827_power *pwr, int *vsys)
  */
 static int bd71827_get_vbat_min(struct bd71827_power *pwr, int *vcell)
 {
-	struct bd71827* mfd = pwr->mfd;
-	int tmp_vcell;
+	uint16_t tmp_vcell;
+	char int ret;
 
-	tmp_vcell = 0;
+	ret = bd7182x_read16_himask(pwr, pwr->regs->vbat_min_avg,
+				    BD7182x_MASK_VBAT_U, &tmp_vcell);
+	if(ret)
+		dev_err(pwr->mfd->dev,
+			"Failed to read battery min average voltage\n");
+	else
+		ret = regmap_update_bits(pwr->mfd->regmap,
+					 pwr->regs->meas_clear,
+					 BD7182x_MASK_VBAT_MIN_AVG_CLR, 
+					 BD7182x_MASK_VBAT_MIN_AVG_CLR);
 
-	tmp_vcell = bd71827_reg_read16(mfd, BD71827_REG_VM_SA_VBAT_MIN_U);
-	bd71827_set_bits(pwr->mfd, BD71827_REG_VM_SA_MINMAX_CLR, VBAT_SA_MIN_CLR);
+	*vcell = ((int)tmp_vcell) * 1000;
 
-	*vcell = tmp_vcell * 1000;
-
-	return 0;
+	return ret;
 }
 
 /** @brief get system minimum average voltage
@@ -667,17 +812,23 @@ static int bd71827_get_vbat_min(struct bd71827_power *pwr, int *vcell)
  */
 static int bd71827_get_vsys_min(struct bd71827_power *pwr, int *vcell)
 {
-	struct bd71827* mfd = pwr->mfd;
-	int tmp_vcell;
+	uint16_t tmp_vcell;
+	char int ret;
 
-	tmp_vcell = 0;
+	ret = bd7182x_read16_himask(pwr, pwr->regs->vsys_min_avg,
+				    BD7182x_MASK_VBAT_U, &tmp_vcell);
+	if(ret)
+		dev_err(pwr->mfd->dev,
+			"Failed to read system min average voltage\n");
+	else
+		ret = regmap_update_bits(pwr->mfd->regmap,
+					 pwr->regs->meas_clear,
+					 BD7182x_MASK_VSYS_MIN_AVG_CLR, 
+					 BD7182x_MASK_VSYS_MIN_AVG_CLR);
 
-	tmp_vcell = bd71827_reg_read16(mfd, BD71827_REG_VM_SA_VSYS_MIN_U);
-	bd71827_set_bits(pwr->mfd, BD71827_REG_VM_SA_MINMAX_CLR, VSYS_SA_MIN_CLR);
+	*vcell = ((int)tmp_vcell) * 1000;
 
-	*vcell = tmp_vcell * 1000;
-
-	return 0;
+	return ret;
 }
 
 /** @brief get battery capacity
@@ -711,17 +862,42 @@ static int bd71827_voltage_to_capacity(int ocv)
  * @param pwr power device
  * @return temperature in unit deg.Celsius
  */
-static int bd71827_get_temp(struct bd71827_power *pwr)
+static int bd71827_get_temp(struct bd71827_power *pwr, int *temp)
 {
-	struct bd71827* mfd = pwr->mfd;
+	struct regmap *regmap = pwr->mfd->regmap;
+	int ret;
 	int t;
 
-	t = 200 - (int)bd71827_reg_read(mfd, BD71827_REG_VM_BTMP);
+	ret = regmap_read(regmap, pwr->regs->btemp_vth, &t);
+	t = 200 - t;
 
-	// battery temperature error
-	t = (t > 200)? 200: t;
-	
-	return t;
+	if (ret || t > 200) {
+		dev_err(pwr->mfd->dev, "Failed to read battery temperature\n");
+		*temp = 200;
+	} else {
+		*temp = t;
+	}
+
+	return ret;
+}
+
+static int bd71828_get_temp(struct bd71827_power *pwr, int *temp)
+{
+	struct bd71827* mfd = pwr->mfd;
+	uint16_t t;
+	int ret;
+	unsigned long long int tmp = 200 * 10000;
+
+	ret = bd7182x_read16_himask(pwr, pwr->regs->btemp_vth,
+				    BD71828_MASK_VM_BTMP_U, &t);
+	if(ret || t > 3200)
+		dev_err(pwr->mfd->dev,
+			"Failed to read system min average voltage\n");
+
+	tmp -= 625ULL * (unsigned long long)t;
+	*temp = tmp / 10000;
+
+	return ret;
 }
 
 static int bd71827_reset_coulomb_count(struct bd71827_power* pwr);
@@ -737,7 +913,12 @@ static int bd71827_charge_status(struct bd71827_power *pwr)
 
 	pwr->prev_rpt_status = pwr->rpt_status;
 
-	state = bd71827_reg_read(pwr->mfd, BD71827_REG_CHG_STATE);
+	ret = regmap_read(pwr->mfd->regmap, pwr->regs->chg_state, &state);
+	if (ret)
+		dev_err(pwr->dev, "charger status reading failed (%d)\n", ret);
+
+	state &= BD7182x_MASK_CHG_STATE;
+
 	dev_dbg(pwr->dev, "%s(): CHG_STATE %d\n", __func__, state);
 
 	switch (state) {
@@ -796,12 +977,14 @@ static int bd71827_charge_status(struct bd71827_power *pwr)
 #if INIT_COULOMB == BY_BAT_VOLT
 static int bd71827_calib_voltage(struct bd71827_power* pwr, int* ocv)
 {
-	int r, curr, volt;
+	int r, curr, volt, ret;
 
 	bd71827_get_vbat_curr(pwr, &volt, &curr);
-
-	r = bd71827_reg_read(pwr->mfd, BD71827_REG_CHG_STATE);
-	if (r >= 0 && curr > 0) {
+	
+	ret = regmap_read(pwr->mfd->regmap, pwr->regs->chg_state, &r);
+	if (ret) {
+		dev_err(pwr->dev, "Charger state reading failed (%d)\n", ret);
+	} else if (curr > 0) {
 		// voltage increment caused by battery inner resistor
 		if (r == 3) volt -= 100 * 1000;
 		else if (r == 2) volt -= 50 * 1000;
@@ -811,6 +994,104 @@ static int bd71827_calib_voltage(struct bd71827_power* pwr, int* ocv)
 	return 0;
 }
 #endif
+static int __write_cc(struct bd71827_power* pwr, uint16_t bcap,
+		      unsigned int reg, uint32_t *new)
+{
+	int ret;
+	uint32_t tmp;
+	uint16_t *swap_hi = &tmp;
+	uint16_t *swap_lo = swap_hi + 1;
+
+	*swap_hi = cpu_to_be16(bcap & BD7182x_MASK_CC_CCNTD_HI);
+	*swap_lo = 0
+	
+	ret = regmap_bulk_write(regmap, reg, sizeof(tmp), &tmp);
+	if (ret) {
+		dev_err(pwr->mfd->dev, "Failed to write coulomb counter\n");
+		return ret;
+	}
+	if (new)
+		*new = cpu_to_be32(tmp);
+
+	return ret;
+}
+
+static int write_cc(struct bd71827_power* pwr, uint16_t bcap)
+{
+	int ret;
+	uint32_t new;
+
+	ret = __write_cc(pwr, bcap, pwr->regs->coulomb3, &new);
+	if (!ret)
+		SET_PWR(pwr->coulomb_cnt, new);
+}
+
+static int stop_cc(struct bd71827_power* pwr)
+{
+	struct regmap *r = pwr->mfd->regmap;
+
+	return regmap_update_bits(r, pwr->regs->coulomb_ctrl,
+				  BD7182x_MASK_CCNTENB, 0);
+}
+
+static int start_cc(struct bd71827_power* pwr)
+{
+	struct regmap *r = pwr->mfd->regmap;
+
+	return regmap_update_bits(r, pwr->regs->coulomb_ctrl,
+				  BD7182x_MASK_CCNTENB, BD7182x_MASK_CCNTENB);
+}
+
+static int update_cc(struct bd71827_power* pwr, uint16_t bcap)
+{
+	int ret;
+
+	ret = stop_cc(pwr);
+	if (ret)
+		goto err_out;
+
+	ret = write_cc(pwr, bcap);
+	if (ret)
+		goto enable_out;
+
+	ret = start_cc(pwr);
+	if (ret)
+		goto enable_out;
+
+	return 0;
+
+enable_out:
+	start_cc(pwr);
+err_out:
+	dev_err(pwr->mfd->dev, "Coulomb counter write failed  (%d)\n", ret);
+	return ret;
+}
+
+static int __read_cc(struct bd71827_power* pwr, u32 *cc, unsigned int reg)
+{
+	int ret;
+	u32 tmp_cc;
+
+	ret = regmap_bulk_read(pwr->mfd->regmap, sizeof(tmp_cc),
+			       reg, &tmp_cc);
+	if (ret) {
+		dev_err(pwr->mfd->dev, "Failed to read coulomb counter\n");
+		return ret;
+	}
+	*cc = be32_to_cpu(tmp_cc) & BD7182x_MASK_CC_CCNTD;
+
+	return 0;
+}
+
+static int read_cc_full(struct bd71827_power* pwr, u32 *cc)
+{
+	return __read_cc(pwr, cc, pwr->regs->coulomb_full3);
+}
+
+static int read_cc(struct bd71827_power* pwr, u32 *cc)
+{
+	return __read_cc(pwr, cc, pwr->regs->coulomb3);
+}
 
 /** @brief set initial coulomb counter value from battery voltage
  * @param pwr power device
@@ -818,8 +1099,9 @@ static int bd71827_calib_voltage(struct bd71827_power* pwr, int* ocv)
  */
 static int calibration_coulomb_counter(struct bd71827_power* pwr)
 {
+	struct regmap *regmap = pwr->mfd->regmap;
 	u32 bcap;
-	int soc, ocv;
+	int soc, ocv, ret = 0, tmpret = 0;
 
 #if INIT_COULOMB == BY_VBATLOAD_REG
 	/* Get init OCV by HW */
@@ -838,16 +1120,18 @@ static int calibration_coulomb_counter(struct bd71827_power* pwr)
 		soc = 0;
 	bcap = pwr->designed_cap * soc / 1000;
 
-	bd71827_reg_write16(pwr->mfd, BD71827_REG_CC_CCNTD_1, 0);
-	bd71827_reg_write16(pwr->mfd, BD71827_REG_CC_CCNTD_3, ((bcap + pwr->designed_cap / 200) & 0x0FFFUL));
+	tmpret = write_cc(pwr, (bcap + pwr->designed_cap / 200));
+	if (tmpret)
+		goto enable_cc_out;
 
-	pwr->coulomb_cnt = bd71827_reg_read32(pwr->mfd, BD71827_REG_CC_CCNTD_3) & 0x0FFFFFFFUL;
-	dev_dbg(pwr->dev, "%s() CC_CCNTD = %d\n", __func__, pwr->coulomb_cnt);
+	dev_dbg(pwr->dev, "%s() CC_CCNTD = %d\n", __func__, PWR_GET(pwr->coulomb_cnt));
 
+enable_cc_out:
 	/* Start canceling offset of the DS ADC. This needs 1 second at least */
-	bd71827_set_bits(pwr->mfd, BD71827_REG_CC_CTRL, CCCALIB);
+	ret = regmap_update_bits(regmap, pwr->regs->coulomb_ctrl, BD7182x_MASK_CCCALIB,
+				 BD7182x_MASK_CCCALIB);
 
-	return 0;
+	return (tmpret) ? tmpret : ret;
 }
 
 /** @brief adjust coulomb counter values at relaxed state
@@ -857,15 +1141,28 @@ static int calibration_coulomb_counter(struct bd71827_power* pwr)
 static int bd71827_adjust_coulomb_count(struct bd71827_power* pwr)
 {
 	int relax_ocv=0;
+	uint16_t tmp;
+	struct regmap *regmap = pwr->mfd->regmap;
+	int ret;
 
-	relax_ocv = bd71827_reg_read16(pwr->mfd, BD71827_REG_REX_SA_VBAT_U) * 1000;
+	ret = bd7182x_read16_himask(pwr, pwr->mfd, pwr->regs->vbat_rex_avg,
+                                    BD7182x_MASK_VBAT_U, &tmp);
+	if (ret)
+		return ret;
+
+	relax_ocv = ((int)tmp) * 1000;
+
 	dev_dbg(pwr->dev,  "%s(): relax_ocv = 0x%x\n", __func__, relax_ocv);
 	if (relax_ocv != 0) {
 		u32 bcap;
 		int soc;
 
 		/* Clear Relaxed Coulomb Counter */
-		bd71827_set_bits(pwr->mfd, BD71827_REG_REX_CTRL_1, REX_CLR);
+		ret = regmap_update_bits(regmap, pwr->regs->rex_clear_reg,
+					 pwr->regs->rex_clear_mask,
+					 pwr->regs->rex_clear_mask);
+		if (ret)
+			return ret;
 
 		/* Get soc at relaxed state from ocv/soc table */
 		soc = bd71827_voltage_to_capacity(relax_ocv);
@@ -874,21 +1171,16 @@ static int bd71827_adjust_coulomb_count(struct bd71827_power* pwr)
 			soc = 0;
 
 		bcap = pwr->designed_cap * soc / 1000;
-		bcap = (bcap + pwr->designed_cap / 200) & 0x0FFFUL;
+		bcap = (bcap + pwr->designed_cap / 200);
 
-		/* Stop Coulomb Counter */
-		bd71827_clear_bits(pwr->mfd, BD71827_REG_CC_CTRL, CCNTENB);
+		ret = update_cc(pwr, bcap);
+		if (ret)
+			return ret;
 
-		bd71827_reg_write16(pwr->mfd, BD71827_REG_CC_CCNTD_1, 0);
-		bd71827_reg_write16(pwr->mfd, BD71827_REG_CC_CCNTD_3, bcap);
-
-		pwr->coulomb_cnt = bd71827_reg_read32(pwr->mfd, BD71827_REG_CC_CCNTD_3) & 0x0FFFFFFFUL;
 		dev_dbg(pwr->dev,  "Adjust Coulomb Counter at Relaxed State\n");
 		dev_dbg(pwr->dev,  "CC_CCNTD = %d\n", pwr->coulomb_cnt);
 		dev_dbg(pwr->dev, "relaxed_ocv:%d, bcap:%d, soc:%d, coulomb_cnt:0x%d\n", relax_ocv, bcap, soc, pwr->coulomb_cnt);
 
-		/* Start Coulomb Counter */
-		bd71827_set_bits(pwr->mfd, BD71827_REG_CC_CTRL, CCNTENB);
 
 		/* If the following commented out code is enabled, the SOC is not clamped at the relax time. */
 		/* Reset SOCs */
@@ -898,7 +1190,7 @@ static int bd71827_adjust_coulomb_count(struct bd71827_power* pwr)
 		/* pwr->clamp_soc = pwr->soc; */
 	}
 
-	return 0;
+	return ret;
 }
 
 /** @brief reset coulomb counter values at full charged state
@@ -908,34 +1200,44 @@ static int bd71827_adjust_coulomb_count(struct bd71827_power* pwr)
 static int bd71827_reset_coulomb_count(struct bd71827_power* pwr)
 {
 	u32 full_charged_coulomb_cnt;
+	struct regmap *regmap = pwr->mfd->regmap;
+	int ret;
 
-	full_charged_coulomb_cnt = bd71827_reg_read32(pwr->mfd, BD71827_REG_FULL_CCNTD_3) & 0x0FFFFFFFUL;
+	ret = read_cc_full(pwr, &full_charged_coulomb_cnt);
+	if (ret) {
+		dev_err(pwr->dev, "failed to read full coulomb counter\n");
+		return ret;
+	}
+
 	dev_dbg(pwr->dev, "%s(): full_charged_coulomb_cnt=0x%x\n", __func__, full_charged_coulomb_cnt);
 	if (full_charged_coulomb_cnt != 0) {
 		int diff_coulomb_cnt;
+		u32 cc;
+		uint16_t bcap;
 
 		/* Clear Full Charged Coulomb Counter */
-		bd71827_set_bits(pwr->mfd, BD71827_REG_FULL_CTRL, FULL_CLR);
+		ret = regmap_update_bits(regmap, pwr->regs->cc_full_clr,
+					 BD7182x_MASK_CC_FULL_CLR,
+					 BD7182x_MASK_CC_FULL_CLR);
 
-		diff_coulomb_cnt = full_charged_coulomb_cnt - (bd71827_reg_read32(pwr->mfd, BD71827_REG_CC_CCNTD_3) & 0x0FFFFFFFUL);
+		ret = read_cc(pwr, &cc);
+		if (ret)
+			return ret;
+
+		diff_coulomb_cnt = full_charged_coulomb_cnt - cc;
+
 		diff_coulomb_cnt = diff_coulomb_cnt >> 16;
-		if (diff_coulomb_cnt > 0) {
+		if (diff_coulomb_cnt > 0)
 			diff_coulomb_cnt = 0;
-		}
+
 		dev_dbg(pwr->dev,  "diff_coulomb_cnt = %d\n", diff_coulomb_cnt);
 
-		/* Stop Coulomb Counter */
-		bd71827_clear_bits(pwr->mfd, BD71827_REG_CC_CTRL, CCNTENB);
-
-		bd71827_reg_write16(pwr->mfd, BD71827_REG_CC_CCNTD_1, 0);
-		bd71827_reg_write16(pwr->mfd, BD71827_REG_CC_CCNTD_3, ((pwr->designed_cap + pwr->designed_cap / 200) & 0x0FFFUL) + diff_coulomb_cnt);
-
-		pwr->coulomb_cnt = bd71827_reg_read32(pwr->mfd, BD71827_REG_CC_CCNTD_3) & 0x0FFFFFFFUL;
+		bcap = ((pwr->designed_cap + pwr->designed_cap / 200) & 0x0FFFUL) + diff_coulomb_cnt;
+		ret = update_cc(pwr, bcap);
+		if (ret)
+			return ret;
 		dev_dbg(pwr->dev,  "Reset Coulomb Counter at POWER_SUPPLY_STATUS_FULL\n");
 		dev_dbg(pwr->dev,  "CC_CCNTD = %d\n", pwr->coulomb_cnt);
-
-		/* Start Coulomb Counter */
-		bd71827_set_bits(pwr->mfd, BD71827_REG_CC_CTRL, CCNTENB);
 	}
 
 	return 0;
@@ -948,6 +1250,8 @@ static int bd71827_reset_coulomb_count(struct bd71827_power* pwr)
 static int bd71827_get_voltage_current(struct bd71827_power* pwr)
 {
 	int p_id;
+	int ret;
+	int temp;
 
 	p_id = bd71827_reg_read(pwr->mfd, BD71827_REG_PRODUCT) & PRODUCT_VERSION;
 
@@ -973,7 +1277,12 @@ static int bd71827_get_voltage_current(struct bd71827_power* pwr)
 	dev_dbg(pwr->dev,  "VM_VSYS_MIN = %d\n", pwr->vsys_min);
 
 	/* Get tempature */
-	pwr->temp = bd71827_get_temp(pwr);
+	ret = pwr->get_temp(pwr, &temp);
+
+	if (ret)
+		return ret;
+
+	PWR_SET(pwr->temp, temp);
 	// dev_dbg(pwr->dev,  "Temperature %d degrees C\n", pwr->temp);
 
 	return 0;
@@ -1012,18 +1321,12 @@ static int bd71827_adjust_coulomb_count_sw(struct bd71827_power* pwr)
 
 		bcap = pwr->designed_cap * soc / 1000;
 
-		/* Stop Coulomb Counter */
-		bd71827_clear_bits(pwr->mfd, BD71827_REG_CC_CTRL, CCNTENB);
+		ret = update_cc(pwr, bcap + pwr->designed_cap / 200);
+		if (ret)
+			return ret;
 
-		bd71827_reg_write16(pwr->mfd, BD71827_REG_CC_CCNTD_1, 0);
-		bd71827_reg_write16(pwr->mfd, BD71827_REG_CC_CCNTD_3, ((bcap + pwr->designed_cap / 200) & 0x0FFFUL));
-
-		pwr->coulomb_cnt = bd71827_reg_read32(pwr->mfd, BD71827_REG_CC_CCNTD_3) & 0x0FFFFFFFUL;
 		dev_dbg(pwr->dev,  "Adjust Coulomb Counter by SW at Relaxed State\n");
 		dev_dbg(pwr->dev,  "CC_CCNTD = %d\n", pwr->coulomb_cnt);
-
-		/* Start Coulomb Counter */
-		bd71827_set_bits(pwr->mfd, BD71827_REG_CC_CTRL, CCNTENB);
 
 		/* If the following commented out code is enabled, the SOC is not clamped at the relax time. */
 		/* Reset SOCs */
@@ -1046,9 +1349,9 @@ static int bd71827_coulomb_count(struct bd71827_power* pwr)
 	if (pwr->state_machine == STAT_POWER_ON) {
 		pwr->state_machine = STAT_INITIALIZED;
 		/* Start Coulomb Counter */
-		bd71827_set_bits(pwr->mfd, BD71827_REG_CC_CTRL, CCNTENB);
+		bd71827_set_bits(pwr->mfd, pwr->regs->coulomb_ctrl, BD7182x_MASK_CCNTENB);
 	} else if (pwr->state_machine == STAT_INITIALIZED) {
-		pwr->coulomb_cnt = bd71827_reg_read32(pwr->mfd, BD71827_REG_CC_CCNTD_3) & 0x0FFFFFFFUL;
+		pwr->coulomb_cnt = bd71827_reg_read32(pwr->mfd, pwr->regs->coulomb3) & 0x0FFFFFFFUL;
 		// dev_dbg(pwr->dev,  "CC_CCNTD = %d\n", pwr->coulomb_cnt);
 	}
 	return 0;
@@ -1060,9 +1363,21 @@ static int bd71827_coulomb_count(struct bd71827_power* pwr)
  */
 static int bd71827_update_cycle(struct bd71827_power* pwr)
 {
-	int charged_coulomb_cnt;
+	int charged_coulomb_cnt, ret;
+	struct regmap *r = pwr->mfd->regmap;
+	int tmpret, ret;
+	uint16_t val;
 
-	charged_coulomb_cnt = bd71827_reg_read16(pwr->mfd, BD71827_REG_CCNTD_CHG_3);
+//	charged_coulomb_cnt = bd71827_reg_read16(pwr->mfd, BD71827_REG_CCNTD_CHG_3);
+
+	ret = regmap_bulk_read(r, sizeof(val), pwr->regs->coulomb_chg3, val);
+	if (ret) {
+		dev_err(pwr->mfd->dev, "Failed to read charging CC (%d)\n",
+			ret);
+		return ret;
+	}
+	charged_coulomb_cnt = be16_to_cpu(val);
+
 	dev_dbg(pwr->dev, "%s(): charged_coulomb_cnt = 0x%x\n", __func__, charged_coulomb_cnt);
 	if (charged_coulomb_cnt >= pwr->designed_cap) {
 		pwr->cycle++;
@@ -1070,14 +1385,24 @@ static int bd71827_update_cycle(struct bd71827_power* pwr)
 		battery_cycle = pwr->cycle;
 		charged_coulomb_cnt -= pwr->designed_cap;
 		/* Stop Coulomb Counter */
-		bd71827_clear_bits(pwr->mfd, BD71827_REG_CC_CTRL, CCNTENB);
+//		bd71827_clear_bits(pwr->mfd, pwr->regs->coulomb_ctrl, BD7182x_MASK_CCNTENB);
+		ret = stop_cc(pwr);
+		if (ret)
+			return ret;
+		val = cpu_to_be16(charged_coulomb_cnt);
+		ret = regmap_bulk_write(r, sizeof(val),
+					pwr->regs->coulomb_chg3,
+					&val);
+		if (ret) {
+			dev_err(pwr->mfd->dev,
+				"Failed to update charging CC (%d)\n", ret);
+		}
 
-		bd71827_reg_write16(pwr->mfd, BD71827_REG_CCNTD_CHG_3, charged_coulomb_cnt);
-
-		/* Start Coulomb Counter */
-		bd71827_set_bits(pwr->mfd, BD71827_REG_CC_CTRL, CCNTENB);
+		tmpret = start_cc(pwr);
+		if (tmpret)
+			return tmpret;
 	}
-	return 0;
+	return ret;
 }
 
 /** @brief calc full capacity value by Cycle and Temperature
@@ -1127,21 +1452,19 @@ static int bd71827_calc_full_cap(struct bd71827_power* pwr)
  */
 static int bd71827_calc_soc_org(struct bd71827_power* pwr)
 {
+	uint16_t bcap;
 	pwr->soc_org = (pwr->coulomb_cnt >> 16) * 100 /  pwr->designed_cap;
 	if (pwr->soc_org > 100) {
 		pwr->soc_org = 100;
+
+		bcap = ((pwr->designed_cap + pwr->designed_cap / 200));
+		ret = update_cc(pwr, bcap);
+		if (ret)
+			return ret;
+
 		/* Stop Coulomb Counter */
-		bd71827_clear_bits(pwr->mfd, BD71827_REG_CC_CTRL, CCNTENB);
-
-		bd71827_reg_write16(pwr->mfd, BD71827_REG_CC_CCNTD_1, 0);
-		bd71827_reg_write16(pwr->mfd, BD71827_REG_CC_CCNTD_3, ((pwr->designed_cap + pwr->designed_cap / 200) & 0x0FFFUL));
-
-		pwr->coulomb_cnt = bd71827_reg_read32(pwr->mfd, BD71827_REG_CC_CCNTD_3) & 0x0FFFFFFFUL;
 		dev_dbg(pwr->dev,  "Limit Coulomb Counter\n");
 		dev_dbg(pwr->dev,  "CC_CCNTD = %d\n", pwr->coulomb_cnt);
-
-		/* Start Coulomb Counter */
-		bd71827_set_bits(pwr->mfd, BD71827_REG_CC_CTRL, CCNTENB);
 	}
 	dev_dbg(pwr->dev, "%s(): pwr->soc_org = %d\n", __func__, pwr->soc_org);
 	return 0;
@@ -1491,16 +1814,18 @@ static int bd71827_init_hardware(struct bd71827_power *pwr)
 #endif
 
 		/* Stop Coulomb Counter */
-		bd71827_clear_bits(mfd, BD71827_REG_CC_CTRL, CCNTENB);
+		bd71827_clear_bits(mfd, pwr->regs->coulomb_ctrl, BD7182x_MASK_CCNTENB);
 
 		/* Set Coulomb Counter Reset bit*/
-		bd71827_set_bits(mfd, BD71827_REG_CC_CTRL, CCNTRST);
+		bd71827_set_bits(mfd, pwr->regs->coulomb_ctrl,
+				 BD7182x_MASK_CCNTRST);
 
 		/* Clear Coulomb Counter Reset bit*/
-		bd71827_clear_bits(mfd, BD71827_REG_CC_CTRL, CCNTRST);
+		bd71827_clear_bits(mfd, pwr->regs->coulomb_ctrl,
+				   BD7182x_MASK_CCNTRST);
 
 		/* Clear Relaxed Coulomb Counter */
-		bd71827_set_bits(mfd, BD71827_REG_REX_CTRL_1, REX_CLR);
+		bd71827_set_bits(pwr->mfd, pwr->regs->rex_clear_reg, pwr->regs->rex_clear_mask);
 
 		/* Set default Battery Capacity */
 		pwr->designed_cap = battery_cap;
@@ -1533,7 +1858,7 @@ static int bd71827_init_hardware(struct bd71827_power *pwr)
 	dev_dbg(pwr->dev,  "Temperature = %d\n", pwr->temp);
 	bd71827_adjust_coulomb_count(pwr);
 	bd71827_reset_coulomb_count(pwr);
-	pwr->coulomb_cnt = bd71827_reg_read32(mfd, BD71827_REG_CC_CCNTD_3) & 0x0FFFFFFFUL;
+	pwr->coulomb_cnt = bd71827_reg_read32(mfd, pwr->regs->coulomb3) & 0x0FFFFFFFUL;
 	bd71827_calc_soc_org(pwr);
 	pwr->soc_norm = pwr->soc_org;
 	pwr->soc = pwr->soc_norm;
@@ -1626,7 +1951,7 @@ static void bd_work_callback(struct work_struct *work)
 		changed = 1;
 	}
 
-	status = bd71827_reg_read(pwr->mfd, BD71827_REG_CHG_STATE);
+	status = bd71827_reg_read(pwr->mfd, pwr->regs->chg_state);
 	if (status != pwr->charge_status) {
 		dev_dbg(pwr->dev, "CHG_STATE CHANGED from 0x%X to 0x%X\n", pwr->charge_status, status);
 		pwr->charge_status = status;
@@ -2451,6 +2776,24 @@ void bd71827_chip_hibernate(void)
 	
 }
 
+static int bd7182x_set_chip_specifics(struct bd71827_power *pwr)
+{
+	switch (pwr->mfd->chip_type) {
+		case ROHM_CHIP_TYPE_BD71828:
+			pwr->regs = pwr_regs_bd71828;
+			pwr->get_temp = bd71828_get_temp;
+			break;
+		case ROHM_CHIP_TYPE_BD71827:
+			pwr->regs = pwr_regs_bd71827;
+			pwr->get_temp = bd71827_get_temp;
+			dev_warn(pwr->mfd.dev, "BD71817 not tested\n");
+		default:
+			dev_err(pwr->mfd.dev, "Unknown PMIC\n");
+			return -EINVAL;
+	}
+	return 0;
+}
+
 /** @brief probe pwr device 
  * @param pdev platform deivce of bd71827_power
  * @retval 0 success
@@ -2458,18 +2801,27 @@ void bd71827_chip_hibernate(void)
  */
 static int __init bd71827_power_probe(struct platform_device *pdev)
 {
-	struct bd71827 *bd71827 = dev_get_drvdata(pdev->dev.parent);
+//	struct bd71827 *bd71827 = dev_get_drvdata(pdev->dev.parent);
+	struct rohm_regmap_dev *mfd;
 	struct bd71827_power *pwr;
 	struct power_supply_config ac_cfg = {};
 	struct power_supply_config bat_cfg = {};
 	int irq, ret;
 
-	pwr = kzalloc(sizeof(*pwr), GFP_KERNEL);
+	mfd = dev_get_drvdata(pdev->dev.parent);
+
+	pwr = devm_kzalloc(&pdev->dev, sizeof(*pwr), GFP_KERNEL);
 	if (pwr == NULL)
 		return -ENOMEM;
 
 	pwr->dev = &pdev->dev;
-	pwr->mfd = bd71827;
+//	pwr->mfd = bd71827;
+	pwr->mfd = mfd;
+
+	ret = bd7182x_set_chip_specifics(pwr);
+
+	if (ret)
+		return ret;
 
 	platform_set_drvdata(pdev, pwr);
 
@@ -2487,7 +2839,7 @@ static int __init bd71827_power_probe(struct platform_device *pdev)
 	/* (3) Kernel must call this routin at charging time. */
 	/* (4) Must use this code with "Stop Coulomb Counter" code in bd71827_power_remove() function */
 	/* Start Coulomb Counter */
-	/* bd71827_set_bits(pwr->mfd, BD71827_REG_CC_CTRL, CCNTENB); */
+	/* bd71827_set_bits(pwr->mfd, pwr->regs->coulomb_ctrl, BD7182x_MASK_CCNTENB); */
 
 	bd71827_set_battery_parameters(pwr);
 
@@ -2590,7 +2942,6 @@ fail_register_ac:
 	power_supply_unregister(pwr->bat);
 fail_register_bat:
 	platform_set_drvdata(pdev, NULL);
-	kfree(pwr);
 
 	return ret;
 }
@@ -2612,7 +2963,7 @@ static int __exit bd71827_power_remove(struct platform_device *pdev)
 	/* (2) Kernel must call this routin at power down time. */
 	/* (3) Must use this code with "Start Coulomb Counter" code in bd71827_power_probe() function */
 	/* Stop Coulomb Counter */
-	/* bd71827_clear_bits(pwr->mfd, BD71827_REG_CC_CTRL, CCNTENB); */
+	/* bd71827_clear_bits(pwr->mfd, pwr->regs->coulomb_ctrl, BD7182x_MASK_CCNTENB); */
 
 	sysfs_remove_group(&pwr->bat->dev.kobj, &bd71827_sysfs_attr_group);
 
@@ -2622,7 +2973,6 @@ static int __exit bd71827_power_remove(struct platform_device *pdev)
 	power_supply_unregister(pwr->bat);
 	power_supply_unregister(pwr->ac);
 	platform_set_drvdata(pdev, NULL);
-	kfree(pwr);
 
 	return 0;
 }
