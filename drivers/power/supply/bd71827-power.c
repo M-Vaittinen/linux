@@ -17,7 +17,8 @@
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
 #include <linux/power_supply.h>
-#include <linux/mfd/bd71827.h>
+#include <linux/mfd/rohm-bd71827.h>
+#include <linux/mfd/rohm-bd71828.h>
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -1368,8 +1369,6 @@ static int bd71827_update_cycle(struct bd71827_power* pwr)
 	int tmpret, ret;
 	uint16_t val;
 
-//	charged_coulomb_cnt = bd71827_reg_read16(pwr->mfd, BD71827_REG_CCNTD_CHG_3);
-
 	ret = regmap_bulk_read(r, sizeof(val), pwr->regs->coulomb_chg3, val);
 	if (ret) {
 		dev_err(pwr->mfd->dev, "Failed to read charging CC (%d)\n",
@@ -1384,11 +1383,11 @@ static int bd71827_update_cycle(struct bd71827_power* pwr)
 		dev_dbg(pwr->dev,  "Update cycle = %d\n", pwr->cycle);
 		battery_cycle = pwr->cycle;
 		charged_coulomb_cnt -= pwr->designed_cap;
-		/* Stop Coulomb Counter */
-//		bd71827_clear_bits(pwr->mfd, pwr->regs->coulomb_ctrl, BD7182x_MASK_CCNTENB);
+		
 		ret = stop_cc(pwr);
 		if (ret)
 			return ret;
+
 		val = cpu_to_be16(charged_coulomb_cnt);
 		ret = regmap_bulk_write(r, sizeof(val),
 					pwr->regs->coulomb_chg3,
