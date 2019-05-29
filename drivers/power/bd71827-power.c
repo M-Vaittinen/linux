@@ -17,7 +17,7 @@
 #include <linux/platform_device.h>
 #include <linux/interrupt.h>
 #include <linux/power_supply.h>
-#include <linux/mfd/bd71827.h>
+#include <linux/mfd/rohm-bd71827.h>
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
