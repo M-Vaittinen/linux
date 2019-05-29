@@ -33,14 +33,20 @@
 #define BD7182x_MASK_CC_CCNTD		0x0FFFFFFF
 #define BD7182x_MASK_CHG_STATE		0x7f
 #define BD7182x_MASK_CC_FULL_CLR	0x10
+#define BD7182x_MASK_BAT_TEMP		0x07
+#define BD7182x_MASK_DCIN_DET		0x1
 
-#define BD7182x_MASK_CCNTRST					0x80
-#define BD7182x_MASK_CCNTENB					0x40
-#define BD7182x_MASK_CCCALIB					0x20
+#define BD7182x_MASK_CCNTRST		0x80
+#define BD7182x_MASK_CCNTENB		0x40
+#define BD7182x_MASK_CCCALIB		0x20
+#define BD7182x_MASK_WDT_AUTO		0x40
+#define BD7182x_MASK_VBAT_ALM_LIMIT_U	0x01
+
+#define BD7182x_DCIN_COLLAPSE_DEFAULT	0x36
 
 /* Measured min and max value clear bits */
-#define BD7182x_MASK_VSYS_MIN_AVG_CLR			0x10
-#define BD7182x_MASK_VBAT_MIN_AVG_CLR			0x01
+#define BD7182x_MASK_VSYS_MIN_AVG_CLR	0x10
+#define BD7182x_MASK_VBAT_MIN_AVG_CLR	0x01
 
 
 #define JITTER_DEFAULT			3000		/* hope 3s is enough */
@@ -118,56 +124,77 @@ struct pwr_regs {
 	u8 vbat_rex_avg;
 	u8 rex_clear_reg;
 	u8 rex_clear_mask;
+	u8 coulomb_full3;
+	u8 cc_full_clr;
+	u8 coulomb_chg3;
+	u8 bat_temp;
+	u8 dcin_stat;
+	u8 dcin_collapse_limit;
+	u8 chg_set1;
+	u8 vbat_alm_limit_u;
+	u8 batcap_mon_limit_u;
 };
 
 struct pwr_regs_bd71827 {
-	.vbat_init = BD71827_REG_VM_OCV_PRE_U;
-	.vbat_init2 = BD71827_REG_VM_OCV_PST_U;
-	.vbat_avg = BD71827_REG_VM_SA_VBAT_U;
-	.ibat = BD71827_REG_CC_CURCD_U;
-	.ibat_avg = BD71827_REG_CC_SA_CURCD_U;
-	.vsys_avg = BD71827_REG_VM_SA_VSYS_U;
-	.vbat_min_avg = BD71827_REG_VM_SA_VBAT_MIN_U;
-	.meas_clear = BD71827_REG_VM_SA_MINMAX_CLR;
-	.vsys_min_avg = BD71827_REG_VM_SA_VSYS_MIN_U;
-	.btemp_vth = BD71827_REG_VM_BTMP;
-	.chg_state = BD71827_REG_CHG_STATE;
-	.coulomb3 = BD71827_REG_CC_CCNTD_3;
-	.coulomb2 = BD71827_REG_CC_CCNTD_2;
-	.coulomb1 = BD71827_REG_CC_CCNTD_1;
-	.coulomb0 = BD71827_REG_CC_CCNTD_0;
-	.coulomb_ctrl = BD71827_REG_CC_CTRL;
-	.vbat_rex_avg = BD71827_REG_REX_SA_VBAT_U;
-	.rex_clear_reg = BD71827_REG_REX_CTRL_1;
-	.rex_clear_mask = BD71827_REX_CLR_MASK;
-	.coulomb_full3 = BD71827_REG_FULL_CCNTD_3;
-	.cc_full_clr = BD71827_REG_FULL_CTRL;
-	.coulomb_chg3 = BD71827_REG_CCNTD_CHG_3;
+	.vbat_init = BD71827_REG_VM_OCV_PRE_U,
+	.vbat_init2 = BD71827_REG_VM_OCV_PST_U,
+	.vbat_avg = BD71827_REG_VM_SA_VBAT_U,
+	.ibat = BD71827_REG_CC_CURCD_U,
+	.ibat_avg = BD71827_REG_CC_SA_CURCD_U,
+	.vsys_avg = BD71827_REG_VM_SA_VSYS_U,
+	.vbat_min_avg = BD71827_REG_VM_SA_VBAT_MIN_U,
+	.meas_clear = BD71827_REG_VM_SA_MINMAX_CLR,
+	.vsys_min_avg = BD71827_REG_VM_SA_VSYS_MIN_U,
+	.btemp_vth = BD71827_REG_VM_BTMP,
+	.chg_state = BD71827_REG_CHG_STATE,
+	.coulomb3 = BD71827_REG_CC_CCNTD_3,
+	.coulomb2 = BD71827_REG_CC_CCNTD_2,
+	.coulomb1 = BD71827_REG_CC_CCNTD_1,
+	.coulomb0 = BD71827_REG_CC_CCNTD_0,
+	.coulomb_ctrl = BD71827_REG_CC_CTRL,
+	.vbat_rex_avg = BD71827_REG_REX_SA_VBAT_U,
+	.rex_clear_reg = BD71827_REG_REX_CTRL_1,
+	.rex_clear_mask = BD71827_REX_CLR_MASK,
+	.coulomb_full3 = BD71827_REG_FULL_CCNTD_3,
+	.cc_full_clr = BD71827_REG_FULL_CTRL,
+	.coulomb_chg3 = BD71827_REG_CCNTD_CHG_3,
+	.bat_temp = BD71827_REG_BAT_TEMP,
+	.dcin_stat = BD71827_REG_DCIN_STAT,
+	.dcin_collapse_limit = BD71827_REG_DCIN_CLPS,
+	.chg_set1 = BD71827_REG_CHG_SET1,
+	.vbat_alm_limit_u = BD71827_REG_ALM_VBAT_TH_U,
+	.batcap_mon_limit_u = BD71827_REG_CC_BATCAP1_TH_U,
 };
 
 struct pwr_regs_bd71828 {
-	.vbat_init = BD71828_REG_VBAT_INITIAL1_U;
-	.vbat_init2 = BD71828_REG_VBAT_INITIAL2_U;
-	.vbat_avg = BD71828_REG_VBAT_U;
-	.ibat = BD71828_REG_IBAT_U;
-	.ibat_avg = BD71828_REG_IBAT_AVG_U;
-	.vsys_avg = BD71828_REG_VSYS_AVG_U;
-	.vbat_min_avg = BD71828_REG_VBAT_MIN_AVG_U;
-	.meas_clear = BD71828_REG_MEAS_CLEAR;
-	.vsys_min_avg = BD71828_REG_VSYS_MIN_AVG_U;
-	.btemp_vth = BD71828_REG_VM_BTMP_U;
-	.chg_state = BD71828_REG_CHG_STATE;
-	.coulomb3 = BD71828_REG_CC_CNT3;
-	.coulomb2 = BD71828_REG_CC_CNT2;
-	.coulomb1 = BD71828_REG_CC_CNT1;
-	.coulomb0 = BD71828_REG_CC_CNT0;
-	.coulomb_ctrl = BD71828_REG_COULOMB_CTRL;
-	.vbat_rex_avg = ;
-	.rex_clear_reg = BD71828_REG_COULOMB_CTRL2;
-	.rex_clear_mask = BD71828_MASK_REX_CC_CLR;
-	.coulomb_full3 = BD71828_REG_CC_CNT_FULL3;
-	.cc_full_clr = BD71828_REG_COULOMB_CTRL2;
-	.coulomb_chg3 = BD71828_REG_CC_CNT_CHG3;
+	.vbat_init = BD71828_REG_VBAT_INITIAL1_U,
+	.vbat_init2 = BD71828_REG_VBAT_INITIAL2_U,
+	.vbat_avg = BD71828_REG_VBAT_U,
+	.ibat = BD71828_REG_IBAT_U,
+	.ibat_avg = BD71828_REG_IBAT_AVG_U,
+	.vsys_avg = BD71828_REG_VSYS_AVG_U,
+	.vbat_min_avg = BD71828_REG_VBAT_MIN_AVG_U,
+	.meas_clear = BD71828_REG_MEAS_CLEAR,
+	.vsys_min_avg = BD71828_REG_VSYS_MIN_AVG_U,
+	.btemp_vth = BD71828_REG_VM_BTMP_U,
+	.chg_state = BD71828_REG_CHG_STATE,
+	.coulomb3 = BD71828_REG_CC_CNT3,
+	.coulomb2 = BD71828_REG_CC_CNT2,
+	.coulomb1 = BD71828_REG_CC_CNT1,
+	.coulomb0 = BD71828_REG_CC_CNT0,
+	.coulomb_ctrl = BD71828_REG_COULOMB_CTRL,
+	.vbat_rex_avg = BD71828_REG_VBAT_REX_AVG_U,
+	.rex_clear_reg = BD71828_REG_COULOMB_CTRL2,
+	.rex_clear_mask = BD71828_MASK_REX_CC_CLR,
+	.coulomb_full3 = BD71828_REG_CC_CNT_FULL3,
+	.cc_full_clr = BD71828_REG_COULOMB_CTRL2,
+	.coulomb_chg3 = BD71828_REG_CC_CNT_CHG3,
+	.bat_temp = BD71828_REG_BAT_TEMP,
+	.dcin_stat = BD71828_REG_DCIN_STAT,
+	.dcin_collapse_limit = BD71828_REG_DCIN_CLPS,
+	.chg_set1 = BD71828_REG_CHG_SET1,
+	.vbat_alm_limit_u = BD71828_REG_ALM_VBAT_LIMIT_U,
+	.batcap_mon_limit_u = BD71828_REG_BATCAP_MON_LIMIT_U,
 };
 
 
@@ -1146,7 +1173,7 @@ static int bd71827_adjust_coulomb_count(struct bd71827_power* pwr)
 	struct regmap *regmap = pwr->mfd->regmap;
 	int ret;
 
-	ret = bd7182x_read16_himask(pwr, pwr->mfd, pwr->regs->vbat_rex_avg,
+	ret = bd7182x_read16_himask(pwr, pwr->regs->vbat_rex_avg,
                                     BD7182x_MASK_VBAT_U, &tmp);
 	if (ret)
 		return ret;
@@ -1253,18 +1280,26 @@ static int bd71827_get_voltage_current(struct bd71827_power* pwr)
 	int p_id;
 	int ret;
 	int temp;
-
+/*
+ 	MFD driver should know the product type and invoke us with
+	correct chip-type. Here we assume BD71827 or BD71828. If we later need
+	to support other chips we then add more chip types as well as
+	proper register descriptions / chip specific functions
 	p_id = bd71827_reg_read(pwr->mfd, BD71827_REG_PRODUCT) & PRODUCT_VERSION;
 
-	if (p_id == 0) { /* BD7181x */
-		/* Read detailed vcell and current */
+	if (p_id == 0) {  BD7181x 
+		 Read detailed vcell and current
 	}
-	else { /* BD7182x */
-		/* Read detailed vcell and current */
+	else { BD7182x 
+		Read detailed vcell and current
 		bd71827_get_vbat(pwr, &pwr->vcell);
 
 		bd71827_get_current_ds_adc(pwr, &pwr->curr_sar, &pwr->curr);
 	}
+*/
+	bd71827_get_vbat(pwr, &pwr->vcell);
+	bd71827_get_current_ds_adc(pwr, &pwr->curr_sar, &pwr->curr);
+
 	/* Read detailed vsys */
 	bd71827_get_vsys(pwr, &pwr->vsys);
 	dev_dbg(pwr->dev,  "VM_VSYS = %d\n", pwr->vsys);
@@ -1745,7 +1780,7 @@ static int bd71827_calc_soc_clamp(struct bd71827_power* pwr)
  */
 static int bd71827_get_online(struct bd71827_power* pwr)
 {
-	int r;
+	int r, ret;
 
 #if 0
 #define TS_THRESHOLD_VOLT	0xD9
@@ -1760,14 +1795,24 @@ static int bd71827_get_online(struct bd71827_power* pwr)
 #endif
 #if 1
 #define BAT_OPEN	0x7
-	r = bd71827_reg_read(pwr->mfd, BD71827_REG_BAT_TEMP);
-	pwr->bat_online = (r != BAT_OPEN);
-#endif	
-	r = bd71827_reg_read(pwr->mfd, BD71827_REG_DCIN_STAT);
-	if (r >= 0) {
-		pwr->charger_online = (r & DCIN_DET) != 0;
+	ret = regmap_read(pwr->mfd->regmap, pwr->regs->bat_temp, &r);
+	if (ret) {
+		dev_err(pwr->mfd->dev, "Failed to read battery temperature\n");
+		return ret;
 	}
-	dev_dbg(pwr->dev, "%s(): pwr->bat_online = %d, pwr->charger_online = %d\n", __func__, pwr->bat_online, pwr->charger_online);
+	PWR_SET(pwr->bat_online, (r & BD7182x_MASK_BAT_TEMP) != BAT_OPEN);
+#endif	
+	ret = regmap_read(pwr->mfd->regmap, pwr->regs->dcin_stat, &r);
+	if (ret) {
+		dev_err(pwr->mfd->dev, "Failed to read DCIN status\n");
+		return ret;
+	}
+	PWR_SET(pwr->charger_online, (r & BD7182x_MASK_DCIN_DET) != 0);
+
+	dev_dbg(pwr->dev,
+		"%s(): pwr->bat_online = %d, pwr->charger_online = %d\n",
+		__func__, pwr->bat_online, pwr->charger_online);
+
 	return 0;
 }
 
@@ -1778,9 +1823,15 @@ static int bd71827_get_online(struct bd71827_power* pwr)
 static int bd71827_init_hardware(struct bd71827_power *pwr)
 {
 	struct bd71827 *mfd = pwr->mfd;
-	int r;
+	int r, temp;
+	uint16_t tmp;
+	u32 cc;
 
-	r = bd71827_reg_write(mfd, BD71827_REG_DCIN_CLPS, 0x36);
+	ret = regmap_write(pwr->mfd->regmap, pwr->regs->dcin_collapse_limit,
+			   BD7182x_DCIN_COLLAPSE_DEFAULT);
+
+/* Why on earth is RTC control in power-supply driver??? If this is needed then
+ * it should be done in RTC driver.
 
 #define XSTB		0x02
 	r = bd71827_reg_read(mfd, BD71827_REG_CONF);
@@ -1796,10 +1847,10 @@ static int bd71827_init_hardware(struct bd71827_power *pwr)
 #endif
 	if ((r & XSTB) == 0x00) {
 	//if (r & BAT_DET) {
-		/* Init HW, when the battery is inserted. */
+		Init HW, when the battery is inserted.
 
 		bd71827_reg_write(mfd, BD71827_REG_CONF, r | XSTB);
-
+*/
 #define TEST_SEQ_00		0x00
 #define TEST_SEQ_01		0x76
 #define TEST_SEQ_02		0x66
@@ -1813,18 +1864,30 @@ static int bd71827_init_hardware(struct bd71827_power *pwr)
 #endif
 
 		/* Stop Coulomb Counter */
-		bd71827_clear_bits(mfd, pwr->regs->coulomb_ctrl, BD7182x_MASK_CCNTENB);
+		ret = stop_cc(pwr);
+		if (ret)
+			return ret;
 
 		/* Set Coulomb Counter Reset bit*/
-		bd71827_set_bits(mfd, pwr->regs->coulomb_ctrl,
-				 BD7182x_MASK_CCNTRST);
+		ret = regmap_update_bits(pwr->mfd->regmap,
+					 pwr->regs->coulomb_ctrl,
+					 BD7182x_MASK_CCNTRST,
+					 BD7182x_MASK_CCNTRST);
+		if (ret)
+			return ret;
 
 		/* Clear Coulomb Counter Reset bit*/
-		bd71827_clear_bits(mfd, pwr->regs->coulomb_ctrl,
-				   BD7182x_MASK_CCNTRST);
+		ret = regmap_update_bits(pwr->mfd->regmap,
+					 pwr->regs->coulomb_ctrl,
+					 BD7182x_MASK_CCNTRST, 0);
+		if (ret)
+			return ret;
 
 		/* Clear Relaxed Coulomb Counter */
-		bd71827_set_bits(pwr->mfd, pwr->regs->rex_clear_reg, pwr->regs->rex_clear_mask);
+		ret = regmap_update_bits(pwr->mfd->regmap,
+					 pwr->regs->rex_clear_reg,
+					 pwr->regs->rex_clear_mask,
+					 pwr->regs->rex_clear_mask);
 
 		/* Set default Battery Capacity */
 		pwr->designed_cap = battery_cap;
@@ -1834,18 +1897,37 @@ static int bd71827_init_hardware(struct bd71827_power *pwr)
 		calibration_coulomb_counter(pwr);
 
 		/* WDT_FST auto set */
-		bd71827_set_bits(mfd, BD71827_REG_CHG_SET1, WDT_AUTO);
+		ret = regmap_update_bits(pwr->mfd->regmap, pwr->regs->chg_set1,
+					 BD7182x_MASK_WDT_AUTO,
+					 BD7182x_MASK_WDT_AUTO);
+		if (ret)
+			return ret;
 
 		/* VBAT Low voltage detection Setting, added by John Zhang*/
-		bd71827_reg_write16(mfd, BD71827_REG_ALM_VBAT_TH_U, VBAT_LOW_TH);
+		//bd71827_reg_write16(mfd, BD71827_REG_ALM_VBAT_TH_U, VBAT_LOW_TH);
+
+		tmp = cpu_to_be16(VBAT_LOW_TH);
+		ret = regmap_bulk_write(pwr->mfd->regmap, sizeof(tmp),
+					pwr->regs->vbat_alm_limit_u, &tmp);
+		if (ret)
+			return ret;
+
+		tmp = cpu_to_be16(battery_cap * 9 / 10);
+
+		ret = regmap_bulk_write(pwr->mfd->regmap, sizeof(tmp),
+					pwr->regs->batcap_mon_limit_u, &tmp);
+
+		if (ret)
+			return ret;
 
 		/* Set Battery Capacity Monitor threshold1 as 90% */
-		bd71827_reg_write16(mfd, BD71827_REG_CC_BATCAP1_TH_U, (battery_cap * 9 / 10)); 
 		dev_dbg(pwr->dev, "BD71827_REG_CC_BATCAP1_TH = %d\n", (battery_cap * 9 / 10));
 
-		/* Enable LED ON when charging */
+		/* Enable LED ON when charging 
+ 		   Should we do this decision here? Should the enabling be
+		   in LED driver and come from DT?
 		bd71827_set_bits(pwr->mfd, BD71827_REG_LED_CTRL, CHGDONE_LED_EN);
-
+		*/
 		pwr->state_machine = STAT_POWER_ON;
 	} else {
 		pwr->designed_cap = battery_cap;
@@ -1853,11 +1935,17 @@ static int bd71827_init_hardware(struct bd71827_power *pwr)
 		pwr->state_machine = STAT_INITIALIZED;	// STAT_INITIALIZED
 	}
 
-	pwr->temp = bd71827_get_temp(pwr);
+	ret = pwr->get_temp(pwr, temp);
+	if (ret)
+		return ret;
+	PWR_SET(pwr->temp, temp);
 	dev_dbg(pwr->dev,  "Temperature = %d\n", pwr->temp);
 	bd71827_adjust_coulomb_count(pwr);
 	bd71827_reset_coulomb_count(pwr);
-	pwr->coulomb_cnt = bd71827_reg_read32(mfd, pwr->regs->coulomb3) & 0x0FFFFFFFUL;
+	ret = read_cc(pwr, &cc)
+	if (ret)
+		return ret;
+	PWR_SET(pwr->coulomb_cnt, cc);
 	bd71827_calc_soc_org(pwr);
 	pwr->soc_norm = pwr->soc_org;
 	pwr->soc = pwr->soc_norm;

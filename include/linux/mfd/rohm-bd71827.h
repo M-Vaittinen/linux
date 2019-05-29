@@ -381,9 +381,6 @@ enum {
 #define VBAT_OV					0x08
 #define DBAT_DET				0x01
 
-/* BD71827_REG_DCIN_STAT bits */
-#define DCIN_DET				0x01
-
 /* BD71827_REG_ALM0_MASK bits */
 #define A0_ONESEC				0x80
 
@@ -394,7 +391,6 @@ enum {
 #define POWERON_MID					0x08
 #define POWERON_SHORT				0x10
 #define POWERON_PRESS				0x20
-
 
 /* BD71805_REG_INT_STAT_08 bits */
 #define VBAT_MON_DET				0x02
@@ -464,10 +460,6 @@ enum {
 #define ALM0_EN					0x1
 
 /* BD71827_REG_CC_CTRL bits */
-
-/* BD71827_REG_CHG_SET1 bits */
-#define WDT_AUTO				0x40
-
 
 /* BD71827_REG_REX_CTRL_1 bits */
 #define BD71827_REX_CLR_MASK		0x10
