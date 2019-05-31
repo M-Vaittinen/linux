@@ -27,6 +27,7 @@
 
 /* BD71828 and BD71827 common defines */
 #define BD7182x_MASK_VBAT_U     	0x1f
+#define BD7182x_MASK_VDCIN_U     	0x0f
 #define BD7182x_MASK_IBAT_U		0x3f
 #define BD7182x_MASK_CURDIR_DISCHG	0x80
 #define BD7182x_MASK_CC_CCNTD_HI	0x0FFF
@@ -34,13 +35,17 @@
 #define BD7182x_MASK_CHG_STATE		0x7f
 #define BD7182x_MASK_CC_FULL_CLR	0x10
 #define BD7182x_MASK_BAT_TEMP		0x07
-#define BD7182x_MASK_DCIN_DET		0x1
+#define BD7182x_MASK_DCIN_DET		0x01
+#define BD7182x_MASK_CONF_PON		0x01
+#define BD7182x_MASK_BAT_STAT		0x3f
+#define BD7182x_MASK_DCIN_STAT		0x07
 
 #define BD7182x_MASK_CCNTRST		0x80
 #define BD7182x_MASK_CCNTENB		0x40
 #define BD7182x_MASK_CCCALIB		0x20
 #define BD7182x_MASK_WDT_AUTO		0x40
 #define BD7182x_MASK_VBAT_ALM_LIMIT_U	0x01
+#define BD7182x_MASK_CHG_EN		0x01
 
 #define BD7182x_DCIN_COLLAPSE_DEFAULT	0x36
 
@@ -133,6 +138,9 @@ struct pwr_regs {
 	u8 chg_set1;
 	u8 vbat_alm_limit_u;
 	u8 batcap_mon_limit_u;
+	u8 conf;
+	u8 bat_stat;
+	u8 vdcin;
 };
 
 struct pwr_regs_bd71827 {
@@ -164,6 +172,9 @@ struct pwr_regs_bd71827 {
 	.chg_set1 = BD71827_REG_CHG_SET1,
 	.vbat_alm_limit_u = BD71827_REG_ALM_VBAT_TH_U,
 	.batcap_mon_limit_u = BD71827_REG_CC_BATCAP1_TH_U,
+	.conf = BD71827_REG_CONF,
+	.bat_stat = BD71827_REG_BAT_STAT,
+	.vdcin = BD71827_REG_VM_DCIN_U,
 };
 
 struct pwr_regs_bd71828 {
@@ -195,6 +206,9 @@ struct pwr_regs_bd71828 {
 	.chg_set1 = BD71828_REG_CHG_SET1,
 	.vbat_alm_limit_u = BD71828_REG_ALM_VBAT_LIMIT_U,
 	.batcap_mon_limit_u = BD71828_REG_BATCAP_MON_LIMIT_U,
+	.conf = BD71828_REG_CONF,
+	.bat_stat = BD71828_REG_BAT_STAT,
+	.vdcin = BD71828_REG_VDCIN_U,
 };
 
 
@@ -588,6 +602,7 @@ static u16 bd71827_reg_read16(struct bd71827* mfd, int reg)
 	return be16_to_cpu(u.long_type);
 }
 #endif
+
 */
 /** @brief write a register group once
  * @param mfd bd71827 device
@@ -667,6 +682,14 @@ static int bd71827_reg_write32(struct bd71827 *mfd, int reg, unsigned val)
 	return 0;
 }
 #endif
+
+static int bd7182x_write16(struct bd71827_power *pwr, int reg, uint16_t val)
+{
+
+	val = cpu_to_be16(val);
+
+	return regmap_bulk_write(pwr->mfd->regmap, sizeof(val), reg, &val);
+}
 
 static int bd7182x_read16_himask(struct bd71827_power *pwr, int reg, int himask,
 				 uint16_t *val)
@@ -1823,19 +1846,22 @@ static int bd71827_get_online(struct bd71827_power* pwr)
 static int bd71827_init_hardware(struct bd71827_power *pwr)
 {
 	struct bd71827 *mfd = pwr->mfd;
-	int r, temp;
+	int r, temp, ret;
 	uint16_t tmp;
 	u32 cc;
 
 	ret = regmap_write(pwr->mfd->regmap, pwr->regs->dcin_collapse_limit,
 			   BD7182x_DCIN_COLLAPSE_DEFAULT);
+	if (ret) {
+		dev_err(pwr->mfd->dev, "Failed to write DCIN collapse limit\n");
+		return ret;
+	}
 
-/* Why on earth is RTC control in power-supply driver??? If this is needed then
- * it should be done in RTC driver.
-
-#define XSTB		0x02
-	r = bd71827_reg_read(mfd, BD71827_REG_CONF);
-
+	ret = regmap_read(pwr->mfd->regmap, pwr->regs->conf, &r);
+	if (ret) {
+		dev_err(pwr->mfd->dev, "Failed to read CONF register\n");
+		return ret;
+	}
 #if 0
 	for (i = 0; i < 300; i++) {
 		r = bd71827_reg_read(pwr->mfd, BD71827_REG_BAT_STAT);
@@ -1845,12 +1871,16 @@ static int bd71827_init_hardware(struct bd71827_power *pwr)
 		msleep(5);
 	}
 #endif
-	if ((r & XSTB) == 0x00) {
-	//if (r & BAT_DET) {
-		Init HW, when the battery is inserted.
-
-		bd71827_reg_write(mfd, BD71827_REG_CONF, r | XSTB);
 */
+	if (r & BD7182x_MASK_CONF_PON) {
+		/* Init HW, when the battery is inserted. */
+
+		ret = regmap_update_bits(pwr->mfd->regmap,
+					 BD7182x_MASK_CONF_PON, 0);
+		if (ret) {
+			dev_err(pwr->mfd->dev, "Failed to clear CONF register\n");
+			return ret;
+		}
 #define TEST_SEQ_00		0x00
 #define TEST_SEQ_01		0x76
 #define TEST_SEQ_02		0x66
@@ -2023,14 +2053,28 @@ static void bd_work_callback(struct work_struct *work)
 	pwr = container_of(delayed_work, struct bd71827_power, bd_work);
 
 	dev_dbg(pwr->dev, "%s(): in\n", __func__);
-	status = bd71827_reg_read(pwr->mfd, BD71827_REG_DCIN_STAT);
+//	status = bd71827_reg_read(pwr->mfd, pwr->regs->dcin_stat);
+	ret = regmap_read(pwr->mfd->regmap, pwr->regs->dcin_stat, &status);
+	if (ret) {
+    		dev_err(pwr->dev, "DCIN status reading failed\n");
+		return ret;
+	}
+	status &= BD7182x_MASK_DCIN_STAT;
 	if (status != pwr->vbus_status) {
-    	dev_dbg(pwr->dev,"DCIN_STAT CHANGED from 0x%X to 0x%X\n", pwr->vbus_status, status);
+    		dev_dbg(pwr->dev, "DCIN_STAT CHANGED from 0x%X to 0x%X\n",
+			pwr->vbus_status, status);
+
 		pwr->vbus_status = status;
 		changed = 1;
 	}
 
-	status = bd71827_reg_read(pwr->mfd, BD71827_REG_BAT_STAT);
+//	status = bd71827_reg_read(pwr->mfd, pwr->regs->bat_stat);
+	ret = regmap_read(pwr->mfd->regmap, pwr->regs->bat_stat, &status);
+	if (ret) {
+    		dev_err(pwr->dev, "battery status reading failed\n");
+		return ret;
+	}
+	status &= BD7182x_MASK_BAT_STAT;
 	status &= ~BAT_DET_DONE;
 	if (status != pwr->bat_status) {
 		dev_dbg(pwr->dev, "BAT_STAT CHANGED from 0x%X to 0x%X\n", pwr->bat_status, status);
@@ -2038,11 +2082,17 @@ static void bd_work_callback(struct work_struct *work)
 		changed = 1;
 	}
 
-	status = bd71827_reg_read(pwr->mfd, pwr->regs->chg_state);
+//	status = bd71827_reg_read(pwr->mfd, pwr->regs->chg_state);
+	ret = regmap_read(pwr->mfd->regmap, pwr->regs->chg_state, &status);
+	if (ret) {
+    		dev_err(pwr->dev, "Charger state reading failed\n");
+		return ret;
+	}
+	status &= BD7182x_MASK_CHG_STATE;
+
 	if (status != pwr->charge_status) {
 		dev_dbg(pwr->dev, "CHG_STATE CHANGED from 0x%X to 0x%X\n", pwr->charge_status, status);
 		pwr->charge_status = status;
-		//changed = 1;
 	}
 
 	bd71827_get_voltage_current(pwr);
@@ -2079,6 +2129,7 @@ static void bd_work_callback(struct work_struct *work)
  * @retval IRQ_HANDLED success
  * @retval IRQ_NONE error
  */
+/*
 static irqreturn_t bd71827_power_interrupt(int irq, void *pwrsys)
 {
 	struct device *dev = pwrsys;
@@ -2125,6 +2176,7 @@ static irqreturn_t bd71827_power_interrupt(int irq, void *pwrsys)
 
 	return IRQ_HANDLED;
 }
+*/
 
 /**@brief bd71827 vbat low voltage detection interrupt
  * @param irq system irq
@@ -2132,7 +2184,6 @@ static irqreturn_t bd71827_power_interrupt(int irq, void *pwrsys)
  * @retval IRQ_HANDLED success
  * @retval IRQ_NONE error
  * added by John Zhang at 2015-07-22
- */
 static irqreturn_t bd71827_vbat_interrupt(int irq, void *pwrsys)
 {
 	struct device *dev = pwrsys;
@@ -2162,6 +2213,7 @@ static irqreturn_t bd71827_vbat_interrupt(int irq, void *pwrsys)
 	return IRQ_HANDLED;
 	
 }
+*/
 
 /**@brief bd71827 int_stat_11 detection interrupt
  * @param irq system irq
@@ -2169,7 +2221,6 @@ static irqreturn_t bd71827_vbat_interrupt(int irq, void *pwrsys)
  * @retval IRQ_HANDLED success
  * @retval IRQ_NONE error
  * added 2015-12-26
- */
 static irqreturn_t bd71827_int_11_interrupt(int irq, void *pwrsys)
 {
 	struct device *dev = pwrsys;
@@ -2211,6 +2262,7 @@ static irqreturn_t bd71827_int_11_interrupt(int irq, void *pwrsys)
 	return IRQ_HANDLED;
 
 }
+ */
 
 /** @brief get property of power supply ac
  *  @param psy power supply deivce
@@ -2224,13 +2276,20 @@ static int bd71827_charger_get_property(struct power_supply *psy,
 {
 	struct bd71827_power *pwr = dev_get_drvdata(psy->dev.parent);
 	u32 vot;
+	uint16_t tmp;
+	int ret;
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_ONLINE:
 		val->intval = pwr->charger_online;
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_NOW:
-		vot = bd71827_reg_read16(pwr->mfd, BD71827_REG_VM_DCIN_U);
+		ret = bd7182x_read16_himask(pwr, pwr->regs->vdcin ,
+					    BD7182x_MASK_VDCIN_U, &tmp);
+		if (ret)
+			return ret;
+
+		vot = tmp;
 		val->intval = 5000 * vot;		// 5 milli volt steps
 		break;
 	default:
@@ -2347,6 +2406,8 @@ static enum power_supply_property bd71827_battery_props[] = {
 };
 
 /** @brief directly set raw value to chip register, format: 'register value' */
+/* We can use standard regmap facilities instead of cooking our own debug
+ * features
 static ssize_t bd71827_sysfs_set_registers(struct device *dev,
 					   struct device_attribute *attr,
 					   const char *buf,
@@ -2381,7 +2442,7 @@ static ssize_t bd71827_sysfs_set_registers(struct device *dev,
 	return count;
 }
 
-/** @brief print value of chip register, format: 'register=value' */
+ @brief print value of chip register, format: 'register=value'
 static ssize_t bd71827_sysfs_print_reg(struct bd71827_power *pwr,
 				       u8 reg,
 				       char *buf)
@@ -2393,7 +2454,7 @@ static ssize_t bd71827_sysfs_print_reg(struct bd71827_power *pwr,
 	return sprintf(buf, "[0x%.2X] = %.2X\n", reg, ret);
 }
 
-/** @brief show all raw values of chip register, format per line: 'register=value' */
+ @brief show all raw values of chip register, format per line: 'register=value' 
 static ssize_t bd71827_sysfs_show_registers(struct device *dev,
 					    struct device_attribute *attr,
 					    char *buf)
@@ -2416,6 +2477,7 @@ static ssize_t bd71827_sysfs_show_registers(struct device *dev,
 
 static DEVICE_ATTR(registers, S_IWUSR | S_IRUGO,
 		bd71827_sysfs_show_registers, bd71827_sysfs_set_registers);
+*/
 
 /** @brief directly set charging status, set 1 to enable charging, set 0 to disable charging */
 static ssize_t bd71827_sysfs_set_charging(struct device *dev,
@@ -2430,22 +2492,28 @@ static ssize_t bd71827_sysfs_set_charging(struct device *dev,
 	unsigned int val;
 
 	ret = sscanf(buf, "%x", &val);
-	printk(KERN_ERR "%s val=%x\n",__FUNCTION__, val);
+//	printk(KERN_ERR "%s val=%x\n",__FUNCTION__, val);
 	if (ret < 1) {
-		return count;
+		return ret;
 	}
 
 	if (ret == 1 && val >1) {
-		return count;
+		dev_warn(dev, "use 0/1 to disable/enable charging\n");
+		return -EINVAL;
 	}
 
 	if(val == 1)
-		bd71827_set_bits(pwr->mfd, BD71827_REG_CHG_SET1, CHG_EN);
+		ret = regmap_update_bits(pwr->mfd->regmap, pwr->regs->chg_set1,
+					 BD7182x_MASK_CHG_EN,
+					 BD7182x_MASK_CHG_EN );
 	else
-		bd71827_clear_bits(pwr->mfd, BD71827_REG_CHG_SET1, CHG_EN);
+		ret = regmap_update_bits(pwr->mfd->regmap, pwr->regs->chg_set1,
+					 BD7182x_MASK_CHG_EN,
+					 0);
+	if (ret)
+		return ret;
 
 	return count;
-
 }
 /** @brief show charging status' */
 static ssize_t bd71827_sysfs_show_charging(struct device *dev,
@@ -2454,18 +2522,20 @@ static ssize_t bd71827_sysfs_show_charging(struct device *dev,
 {
 	struct power_supply *psy = dev_get_drvdata(dev);
 	struct bd71827_power *pwr = power_supply_get_drvdata(psy);
-	int reg_value=0;
-	//ssize_t ret = 0;
-	//unsigned int reg;
+	int chg_en, ret;
 
-	reg_value = bd71827_reg_read(pwr->mfd, BD71827_REG_CHG_SET1);
+	ret = regmap_read(pwr->mfd->regmap, pwr->regs->chg_set1, &chg_en);
+	if (ret)
+		return ret;
 
-//	printk(KERN_ERR "%s charger_online:%x, reg_value:%x\n",__FUNCTION__, pwr->charger_online, reg_value);
-	return sprintf(buf, "%x\n", pwr->charger_online && reg_value & CHG_EN);
+	chg_en &= BD7182x_MASK_CHG_EN;
+	return sprintf(buf, "%x\n", PWR_GET(pwr->charger_online) && chg_en);
 }
 
 static DEVICE_ATTR(charging, S_IWUSR | S_IRUGO,
 		bd71827_sysfs_show_charging, bd71827_sysfs_set_charging);
+
+#ifdef BD71827_CALIBRATION
 
 static int first_offset(struct bd71827_power *pwr)
 {
@@ -2717,7 +2787,7 @@ static ssize_t bd71827_sysfs_set_calibrate(struct device *dev,
 	ret = sscanf(buf, "%d %d", &val, &mA);
 	if (ret < 1) {
 		dev_err(pwr->dev, "error: write a integer string");
-		return count;
+		return -EINVAL;
 	}
 
 	if (val == 1) {
@@ -2733,6 +2803,7 @@ static ssize_t bd71827_sysfs_set_calibrate(struct device *dev,
 	if (val == 3) {
 		if (ret <= 1) {
 			dev_err(pwr->dev, "error: Fine adjust need a mA argument!");
+			return -EINVAL;
 		} else {
 		unsigned int ra6_thr;
 
@@ -2770,7 +2841,7 @@ static ssize_t bd71827_sysfs_show_calibrate(struct device *dev,
 
 static DEVICE_ATTR(calibrate, S_IWUSR | S_IRUGO,
 		bd71827_sysfs_show_calibrate, bd71827_sysfs_set_calibrate);
-
+#endif //BD71827_CALIBRATION
 
 static ssize_t bd71827_sysfs_set_gauge(struct device *dev,
 					   struct device_attribute *attr,
@@ -2785,7 +2856,7 @@ static ssize_t bd71827_sysfs_set_gauge(struct device *dev,
 	ret = sscanf(buf, "%d", &delay);
 	if (ret < 1) {
 		dev_err(pwr->dev, "error: write a integer string");
-		return count;
+		return -EINVAL;
 	}
 
 	if (delay == -1) {
@@ -2795,7 +2866,7 @@ static ssize_t bd71827_sysfs_set_gauge(struct device *dev,
 	}
 
 	dev_info(pwr->dev, "Gauge schedule in %d\n", delay);
-	pwr->gauge_delay = delay;
+	PWR_SET(pwr->gauge_delay, delay);
 	schedule_delayed_work(&pwr->bd_work, msecs_to_jiffies(delay));
 
 	return count;
@@ -2810,7 +2881,8 @@ static ssize_t bd71827_sysfs_show_gauge(struct device *dev,
 	ssize_t ret = 0;
 
 	ret = 0;
-	ret += sprintf(buf + ret, "Gauge schedule in %d\n", pwr->gauge_delay);
+	ret += sprintf(buf + ret, "Gauge schedule in %d\n",
+		       PWR_GET(pwr->gauge_delay));
 	return ret;
 }
 
@@ -2823,7 +2895,9 @@ static struct attribute *bd71827_sysfs_attributes[] = {
 	 * use pwr supply class props.
 	 */
 	&dev_attr_registers.attr,
+#ifdef BD71827_CALIBRATION
 	&dev_attr_calibrate.attr,
+#endif
 	&dev_attr_charging.attr,
 	&dev_attr_gauge.attr,
 	NULL,
