@@ -2737,6 +2737,6 @@ MODULE_PARM_DESC(vdr_table_l, "vdr_table_l:Voltage Drop Ratio temperatyre low ar
 module_param_array(vdr_table_vl, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(vdr_table_vl, "vdr_table_vl:Voltage Drop Ratio temperatyre very low area table");
 
-MODULE_AUTHOR("Cong Pham <matti.vaittinen@fi.rohmeurope.com>");
+MODULE_AUTHOR("Cong Pham <cpham2403@gmail.com>");
 MODULE_DESCRIPTION("ROHM BD71827/BD71828 PMIC Battery Charger driver");
 MODULE_LICENSE("GPL");
