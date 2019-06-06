@@ -39,7 +39,10 @@ enum {
 /* MODE control */
 #define BD71828_REG_PS_CTRL_1		0x04
 #define BD71828_REG_PS_CTRL_2		0x05
-#define BD71828_REG_SWRESET		0x06
+#define BD71828_REG_PS_CTRL_3		0x06
+
+//#define BD71828_REG_SWRESET		0x06
+#define BD71828_MASK_RUN_LVL_CTRL	0x30
 
 /* Regulator control masks */
 
@@ -55,19 +58,19 @@ enum {
 
 #define BD71828_MASK_DVS_BUCK1_CTRL	0x10
 #define BD71828_DVS_BUCK1_CTRL_I2C	0
-#define BD71828_DVS_BUCK1_CTRL_GPIO	0x10
+#define BD71828_DVS_BUCK1_USE_RUNLVL	0x10
 
 #define BD71828_MASK_DVS_BUCK2_CTRL	0x20
 #define BD71828_DVS_BUCK2_CTRL_I2C	0
-#define BD71828_DVS_BUCK2_CTRL_GPIO	0x20
+#define BD71828_DVS_BUCK2_USE_RUNLVL	0x20
 
 #define BD71828_MASK_DVS_BUCK6_CTRL	0x40
 #define BD71828_DVS_BUCK6_CTRL_I2C	0
-#define BD71828_DVS_BUCK6_CTRL_GPIO	0x40
+#define BD71828_DVS_BUCK6_USE_RUNLVL	0x40
 
 #define BD71828_MASK_DVS_BUCK7_CTRL	0x80
 #define BD71828_DVS_BUCK7_CTRL_I2C	0
-#define BD71828_DVS_BUCK7_CTRL_GPIO	0x80
+#define BD71828_DVS_BUCK7_USE_RUNLVL	0x80
 
 #define BD71828_MASK_BUCK1267_VOLT	0xff
 #define BD71828_MASK_BUCK3_VOLT		0x1f
@@ -483,7 +486,7 @@ enum {
 #define BD71828_OUT_TYPE_OPEN_DRAIN			0x0
 #define BD71828_OUT_TYPE_CMOS				0x2
 
-
-
+int bd71828_set_runlevel_voltage(struct regulator *regulator, unsigned int uv,   
+                                 unsigned int level);
 
 #endif /* __LINUX_MFD_BD71828_H__ */
