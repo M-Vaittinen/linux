@@ -1,0 +1,41 @@
+* ROHM BD71828 Power Management Integrated Circuit bindings
+
+BD71828GW is a single-chip power management IC for battery-powered portable
+devices. The IC integrates 7 buck converters, 7 LDOs, and a 1500 mA single-cell
+linear charger. Also included is a Coulomb counter, a real-time clock (RTC),
+and a 32.768 kHz clock gate.
+
+Required properties:
+ - compatible			: Should be "rohm,bd71828".
+ - reg				: I2C slave address.
+ - interrupt-parent		: Phandle to the parent interrupt controller.
+ - interrupts			: The interrupt line the device is connected to.
+ - clocks			: The parent clock connected to PMIC.
+ - #clock-cells			: Should be 0.
+ - regulators			: List of child nodes that specify the
+				  regulators. Please see
+				  ../regulator/rohm,bd71828-regulator.txt
+
+The BD71828 RUN state is divided into 4 configurable run-levels named RUN0,
+RUN1, RUN2 and RUN3. Bucks 1, 2, 6 and 7 can be either controlled individually
+via I2C, or some/all of them can be bound to run-levels and controlled as a
+group. If bucks are controlled individually these run-levels are ignored. See
+../regulator/rohm,bd71828-regulator.txt for how to define regulator voltages
+for run-levels. Run-levels can be changed by I2C or GPIO depending on PMIC's OTP
+configuration.
+
+Optional properties:
+- clock-output-names		: Should contain name for output clock.
+- rohm,dvs-runlvl-bucks 	: array of 32bit values indicating bucks that
+				  are controlled by run-levels. <1> for buck1,
+				  <2> for buck2, ... Only bucks 1, 2, 6 and 7
+				  can be controlled by run-levels
+- rohm,dvs-vsel-gpios		: GPIOs used to control PMIC run-levels. Should
+				  describe two GPIOs. (See run-level control in
+				  data-sheet). If this property is omitted but
+				  some bucks are marked to be controlled by
+				  run-levels - then OTP option allowing
+				  run-level control via I2C is assumed.
+
+Example:
+TBD...
