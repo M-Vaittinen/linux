@@ -1,0 +1,126 @@
+ROHM BD71828 Power Management Integrated Circuit regulator bindings
+
+Required properties:
+ - regulator-name: should be "buck1", ..., "buck7", and "ldo1", ..., "ldo7"
+
+List of regulators provided by this controller. BD71837 regulators node
+should be sub node of the BD71828 MFD node. See BD71828 MFD bindings at
+Documentation/devicetree/bindings/mfd/rohm,bd71828-pmic.txt
+Regulator nodes should be named to BUCK_<number> and LDO_<number>. The
+definition for each of these nodes is defined using the standard
+binding for regulators at
+Documentation/devicetree/bindings/regulator/regulator.txt.
+
+The valid names for BD71828 regulator nodes are:
+BUCK1, BUCK2, BUCK3, BUCK4, BUCK5, BUCK6, BUCK7
+LDO1, LDO2, LDO3, LDO4, LDO5, LDO6, LDO7
+
+The valid names for BD71847 regulator nodes are:
+BUCK1, BUCK2, BUCK3, BUCK4, BUCK5, BUCK6
+LDO1, LDO2, LDO3, LDO4, LDO5, LDO6
+
+Optional properties:
+- rohm,dvs-run-voltage		: PMIC default "RUN" state voltage in uV.
+				  See below table for bucks which support this.
+- rohm,dvs-idle-voltage		: PMIC default "IDLE" state voltage in uV.
+				  See below table for bucks which support this.
+- rohm,dvs-suspend-voltage	: PMIC default "SUSPEND" state voltage in uV.
+				  See below table for bucks which support this.
+- rohm,dvs-lpsr-voltage		: PMIC default "LPSR" state voltage in uV.
+- rohm,dvs-runlvl-ctrl		: buck control is done based on run-level.
+				  Regulator is not individually controllable.
+				  See ../mfd/rohm,bd71828-pmic.txt for how to
+				  specify run-level control mechanism. Only
+				  bucks 1, 2, 6 and 7 support this.
+- rohm,dvs-runlevel0-voltage    : voltage for run-level 0. Microvolts.
+- rohm,dvs-runlevel1-voltage	: voltage for run-level 1. Microvolts.
+- rohm,dvs-runlevel2-voltage	: voltage for run-level 1. Microvolts.
+- rohm,dvs-runlevel3-voltage	: voltage for run-level 1. Microvolts.
+
+- Any optional property defined in bindings/regulator/regulator.txt
+
+Supported default DVS states:
+
+buck		| run		| idle		| suspend	| lpsr
+-----------------------------------------------------------------------------
+1, 2, 6, and 7	| supported	| supported	| 	supported (*)
+----------------------------------------------------------------------------
+3, 4, and 5	| 			supported (**)
+----------------------------------------------------------------------------
+(*)  LPSR and SUSPEND states use same voltage but both states have own enable /
+     disable settings. Voltage 0 can be specified for a state to make regulator
+     disabled on that state.
+(**) All states use same voltage but have own enable / disable settings. Voltage
+     0 can be specified for a state to make regulator disabled on that state.
+
+BD71847:
+buck	| dvs-run-voltage	| dvs-idle-voltage	| dvs-suspend-voltage
+-----------------------------------------------------------------------------
+1	| supported		| supported		| supported
+----------------------------------------------------------------------------
+2	| supported		| supported		| not supported
+----------------------------------------------------------------------------
+rest	| not supported		| not supported		| not supported
+
+Example:
+regulators {
+	buck1: BUCK1 {
+		regulator-name = "buck1";
+		... tbd
+	};
+	buck2: BUCK2 {
+		regulator-name = "buck2";
+		... tbd
+	};
+	buck3: BUCK3 {
+		regulator-name = "buck3";
+		... tbd
+	};
+	buck4: BUCK4 {
+		regulator-name = "buck4";
+		... tbd
+	};
+	buck5: BUCK5 {
+		regulator-name = "buck5";
+		... tbd
+	};
+	buck6: BUCK6 {
+		regulator-name = "buck6";
+		... tbd
+	};
+	buck7: BUCK7 {
+		regulator-name = "buck7";
+		... tbd
+	};
+
+	ldo1: LDO1 {
+		regulator-name = "ldo1";
+		... tbd
+	};
+	ldo2: LDO2 {
+		regulator-name = "ldo2";
+		... tbd
+	};
+	ldo3: LDO3 {
+		regulator-name = "ldo3";
+		... tbd
+	};
+	ldo4: LDO4 {
+		regulator-name = "ldo4";
+		... tbd
+	};
+	ldo5: LDO5 {
+		regulator-name = "ldo5";
+		... tbd
+	};
+	ldo6: LDO6 {
+		regulator-name = "ldo6";
+		... tbd
+	};
+	ldo7_reg: LDO7 {
+		regulator-name = "ldo7";
+		... tbd
+	};
+};
+
+
