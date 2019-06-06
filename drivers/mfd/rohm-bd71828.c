@@ -88,8 +88,8 @@ static const struct regmap_range volatile_ranges[] = {
 		.range_min = BD71828_REG_PS_CTRL_1,
 		.range_max = BD71828_REG_PS_CTRL_1,
 	}, {
-		.range_min = BD71828_REG_SWRESET,
-		.range_max = BD71828_REG_SWRESET,
+		.range_min = BD71828_REG_PS_CTRL_3,
+		.range_max = BD71828_REG_PS_CTRL_3,
 	}, {
 		.range_min = BD71828_REG_RTC_SEC,
 		.range_max = BD71828_REG_RTC_YEAR,
