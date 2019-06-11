@@ -4,7 +4,7 @@
 #ifndef __LINUX_MFD_BD70528_H__
 #define __LINUX_MFD_BD70528_H__
 
-#include <linux/bits.h>
+//#include <linux/bits.h>
 #include <linux/device.h>
 #include <linux/mfd/rohm-generic.h>
 #include <linux/regmap.h>
