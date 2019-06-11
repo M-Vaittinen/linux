@@ -233,7 +233,7 @@ config COMMON_CLK_BD718XX
 	  This driver supports ROHM BD71837 and ROHM BD71847
 	  PMICs clock gates.
 
-source "drivers/clk/actions/Kconfig"
+#source "drivers/clk/actions/Kconfig"
 source "drivers/clk/bcm/Kconfig"
 source "drivers/clk/hisilicon/Kconfig"
 source "drivers/clk/imgtec/Kconfig"
