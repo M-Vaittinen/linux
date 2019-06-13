@@ -24,6 +24,7 @@
 #include <linux/anon_inodes.h>
 #include <linux/file.h>
 #include <linux/kfifo.h>
+#include <linux/overflow.h>
 #include <linux/poll.h>
 #include <linux/timekeeping.h>
 #include <uapi/linux/gpio.h>
