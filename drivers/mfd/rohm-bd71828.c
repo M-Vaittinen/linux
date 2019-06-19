@@ -155,6 +155,10 @@ static const struct resource bd71828_power_irqs[] = {
 			     "bd71828-temp-125-under"),
 };
 
+static const struct resource bd71828_lid_irqs[] = {
+	DEFINE_RES_IRQ_NAMED(BD71828_INT_VSYS_HALL_TOGGLE, "bd71828-hall"),
+};
+
 static struct mfd_cell bd71828_mfd_cells[] = {
 	{ .name = "bd71828-pmic", },
 	{ .name = "bd71828-gpio", },
@@ -176,7 +180,11 @@ static struct mfd_cell bd71828_mfd_cells[] = {
 		.name = "gpio-keys",
 		.platform_data = &bd71828_powerkey_data,
 		.pdata_size = sizeof(bd71828_powerkey_data),
-	},
+	}, {
+		.name = "bd71828-lid",
+		.resources = bd71828_lid_irqs,
+		.num_resources = ARRAY_SIZE(bd71828_lid_irqs),
+	}
 };
 
 static const struct resource bd72720_power_irqs[] = {
