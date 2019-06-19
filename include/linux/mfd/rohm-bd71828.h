@@ -46,6 +46,8 @@ enum {
 
 /* Regulator control masks */
 
+#define BD71828_MASK_RAMP_DELAY         0x6
+
 #define BD71828_MASK_RUN_EN		0x08
 #define BD71828_MASK_SUSP_EN		0x04
 #define BD71828_MASK_IDLE_EN		0x02
