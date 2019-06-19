@@ -142,10 +142,57 @@ static const struct regulator_linear_range bd71828_ldo_volts[] = {
 	REGULATOR_LINEAR_RANGE(3300000, 0x32, 0x3f, 0),
 };
 
+static int ramp_delay_supported(struct regulator_dev *rdev)
+{
+	switch (rdev->desc->id) {
+	case BD71828_BUCK1:
+	case BD71828_BUCK2:
+	case BD71828_BUCK6:
+	case BD71828_BUCK7:
+		return 1;
+		break;
+	}
+	return 0;
+}
+
 static int bd71828_set_ramp_delay(struct regulator_dev *rdev, int ramp_delay)
 {
-	dev_err(&rdev->dev, "TODO: %s\n", __func__);
-	return -ENOSYS;
+	unsigned int val;
+
+	if (!ramp_delay_supported(rdev)) {
+		dev_err(&rdev->dev, "%s: can't set ramp-delay\n",
+			rdev->desc->name);
+		return -EINVAL;
+	}
+
+	switch (ramp_delay) {
+	case 1 ... 2500:
+		val = 0;
+		break;
+	case 2501 ... 5000:
+		val = 1;
+		break;
+	case 5001 ... 10000:
+		val = 2;
+		break;
+	case 10001 ... 20000:
+		val = 3;
+		break;
+	default:
+		val = 3;
+		dev_err(&rdev->dev,
+			"ramp_delay: %d not supported, setting 20mV/uS",
+			 ramp_delay);
+	}
+
+	/*
+	 * On BD71828 the ramp delay level control reg is at offset +2 to
+	 * enable reg
+	 */
+	return regmap_update_bits(rdev->regmap, rdev->desc->enable_reg + 2, 
+				  BD71828_MASK_RAMP_DELAY,
+				  val << (ffs(BD71828_MASK_RAMP_DELAY) - 1));
+
 }
 
 static int buck_set_hw_dvs_levels(struct device_node *np,
