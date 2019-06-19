@@ -59,6 +59,14 @@ config ATMEL_TCLIB
 	  blocks found on many Atmel processors.  This facilitates using
 	  these blocks by different drivers despite processor differences.
 
+config BD71828_HALL
+	tristate "ROHM BD71828 HALL sensor input"
+	depends on MFD_ROHM_BD70528
+	help
+	  This driver supports sending LID state event based on HALL sensor
+	  information provided by ROHM BD70528 PMIC. Say Y here if you have
+	  HALL detecting LID position sensor connected to PMIC.
+
 config DUMMY_IRQ
 	tristate "Dummy IRQ handler"
 	---help---

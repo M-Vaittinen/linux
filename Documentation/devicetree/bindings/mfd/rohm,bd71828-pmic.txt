@@ -36,6 +36,11 @@ Optional properties:
 				  some bucks are marked to be controlled by
 				  run-levels - then OTP option allowing
 				  run-level control via I2C is assumed.
+- rohm,lid-open-high		: HALL sensor used to detect the LID position
+				  can be connected to the PMIC HALL_INPUT pin.
+				  Default is that LID is open when HALL_INPUT
+				  is LOW. This property can be used to invert
+				  this logic.
 
 Example:
 TBD...
