@@ -15,6 +15,10 @@ Required properties:
  - regulators			: List of child nodes that specify the
 				  regulators. Please see
 				  ../regulator/rohm,bd71828-regulator.txt
+ - gpio-controller		: To indicate BD71828 acts as a GPIO controller.
+ - #gpio-cells			: Should be 2. The first cell is the pin number
+				  and the second cell is used to specify flags.
+				  See ../gpio/gpio.txt for more information.
 
 The BD71828 RUN state is divided into 4 configurable run-levels named RUN0,
 RUN1, RUN2 and RUN3. Bucks 1, 2, 6 and 7 can be either controlled individually
@@ -41,6 +45,11 @@ Optional properties:
 				  Default is that LID is open when HALL_INPUT
 				  is LOW. This property can be used to invert
 				  this logic.
+- gpio-reserved-ranges		: Usage of GPIO pins can be changed via OTP.
+				  This property can be used to mark the pins
+				  which should not be configured for GPIO.
+				  Please see the ../gpio/gpio.txt for more
+				  information.
 
 Example:
 TBD...
