@@ -9,11 +9,15 @@
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 
+#define MAGIC_GRACE_TIME 	3000000000ULL
+#define CLOSE_DELAY		250000000ULL
+
 struct bd71828_hall {
 	struct regmap *regmap;
 	struct device *dev;
 	unsigned int open_state;
 	bool enabled;
+	struct delayed_work delayed_event;
 };
 
 static void hall_send_open_event(struct device *dev)
@@ -50,6 +54,7 @@ static irqreturn_t hall_hndlr(int irq, void *data)
 {
 	struct bd71828_hall *hall = data;
 	int open;
+	static u64 open_time = 0;
 
 	/*
 	 * Do we need this state flag or can we simply disable irq if hall is
@@ -57,6 +62,8 @@ static irqreturn_t hall_hndlr(int irq, void *data)
 	 */
 	if (hall->enabled)
 		return IRQ_HANDLED;
+
+	cancel_delayed_work_sync(&hall->delayed_event);
 
 	/*
 	 * We return IRQ none if reading fails as this may be a sign
@@ -66,10 +73,29 @@ static irqreturn_t hall_hndlr(int irq, void *data)
 	if (open < 0)
 		return IRQ_NONE;
 
-	if (open)
+	if (open) {
 		hall_send_open_event(hall->dev);
-	else 
-		hall_send_close_event(hall->dev);
+		/*
+		 * We have IRQF_ONESHOT specified - it should be safe to omit
+		 * locking
+		 */
+		open_time = ktime_get_ns();
+	} else {
+		u64 now = ktime_get_ns();
+		unsigned int left;
+		now -= open_time;
+
+		/*
+		 * We have threaded handler so I guess it should be Ok to sleep
+		 * here.
+		 */
+		left = ((unsigned int)(MAGIC_GRACE_TIME - now)) / 1000000;
+		if (now < MAGIC_GRACE_TIME && left)
+			schedule_delayed_work(&hall->delayed_event,
+					      msecs_to_jiffies(left));
+		else
+			hall_send_close_event(hall->dev);
+	}
 
 	return IRQ_HANDLED;
 }
@@ -140,9 +166,19 @@ struct attribute_group bd71828_att_grp = {
 
 static int bd71828_remove(struct platform_device *pdev)
 {
+	struct bd71828_hall *hall = dev_get_drvdata(&pdev->dev);
 	sysfs_remove_group(&pdev->dev.kobj, &bd71828_att_grp);
+	cancel_delayed_work_sync(&hall->delayed_event);
 
 	return 0;
+}
+
+static void hall_close_work_fun(struct work_struct *work)
+{
+	struct bd71828_hall *hall = container_of(work, struct bd71828_hall,
+						 delayed_event.work);
+
+	hall_send_close_event(hall->dev);
 }
 
 static int bd71828_probe(struct platform_device *pdev)
@@ -169,6 +205,9 @@ static int bd71828_probe(struct platform_device *pdev)
 		hall->open_state = BD71828_HALL_STATE_MASK;
 
 	hall->enabled = true;
+
+	INIT_DELAYED_WORK(&hall->delayed_event, hall_close_work_fun); 
+
 	irq = platform_get_irq_byname(pdev, "bd71828-hall");
 	ret = devm_request_threaded_irq(&pdev->dev, irq, NULL, &hall_hndlr,
 					IRQF_ONESHOT, "bd70528-hall", hall);
