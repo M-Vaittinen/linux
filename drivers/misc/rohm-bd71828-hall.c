@@ -13,6 +13,7 @@ struct bd71828_hall {
 	struct regmap *regmap;
 	struct device *dev;
 	unsigned int open_state;
+	bool enabled;
 };
 
 static void hall_send_open_event(struct device *dev)
@@ -31,23 +32,117 @@ static void hall_send_close_event(struct device *dev)
 	kobject_uevent_env(&dev->kobj, KOBJ_OFFLINE, envp);
 }
 
-static irqreturn_t hall_hndlr(int irq, void *data)
+static int lid_is_open(struct bd71828_hall *hall)
 {
-	struct bd71828_hall *hall = data;
 	unsigned int reg;
 	int ret;
 
 	ret = regmap_read(hall->regmap, BD71828_REG_IO_STAT, &reg);
 	if (ret) {
 		dev_err(hall->dev, "getting HALL status failed\n");
-		return IRQ_NONE;
+		return ret;
 	}
-	if (hall->open_state == (reg & BD71828_HALL_STATE_MASK))
+
+	return (hall->open_state == (reg & BD71828_HALL_STATE_MASK));
+}
+
+static irqreturn_t hall_hndlr(int irq, void *data)
+{
+	struct bd71828_hall *hall = data;
+	int open;
+
+	/*
+	 * Do we need this state flag or can we simply disable irq if hall is
+	 * not enabled? Do we need to keep the IRQ enabled for wake to work?
+	 */
+	if (hall->enabled)
+		return IRQ_HANDLED;
+
+	/*
+	 * We return IRQ none if reading fails as this may be a sign
+	 * of broken HW and we want to avoid irq-storm which prevents debugging
+	 */
+	open = lid_is_open(hall);
+	if (open < 0)
+		return IRQ_NONE;
+
+	if (open)
 		hall_send_open_event(hall->dev);
 	else 
 		hall_send_close_event(hall->dev);
 
 	return IRQ_HANDLED;
+}
+
+static ssize_t hall_hw_state_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	int ret;
+	int open;
+	struct bd71828_hall *hall = dev_get_drvdata(dev);
+	
+	open = lid_is_open(hall);
+	if (open < 0)
+		return open;
+	
+	ret = sprintf(buf, "%d", open);
+
+	return ret;
+}
+
+static DEVICE_ATTR(hall_hw_state, 0444, hall_hw_state_show, NULL);
+
+static ssize_t hall_enable_store(struct device *dev,
+				 struct device_attribute *attr, const char *buf,
+				 size_t size)
+{
+	int ret;
+	unsigned long int val;
+	struct bd71828_hall *hall = dev_get_drvdata(dev);
+
+	/*
+	 *  Could we just enable/disable the IRQ here? Or do we need IRQ enabled
+	 * for wake?
+	 */
+	ret = kstrtoul(buf, 0, &val);
+
+	if (ret)
+		return ret;
+
+	hall->enabled = !!val;
+
+	return size;
+}
+
+static ssize_t hall_enable_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct bd71828_hall *hall = dev_get_drvdata(dev);
+	
+	/*
+	 *  Could we just use IRQ enable/disable state here? Or do we need IRQ
+	 *  enabled for wake?
+	 */
+	return sprintf(buf, "%d\n", hall->enabled);
+}
+
+static DEVICE_ATTR(hall_enable, 0644, hall_enable_show, hall_enable_store);
+
+struct attribute * bd71828_attrs[] = {
+	&dev_attr_hall_hw_state.attr,
+	&dev_attr_hall_enable.attr,
+	NULL,
+};
+
+struct attribute_group bd71828_att_grp = {
+	.attrs = bd71828_attrs,
+};
+
+static int bd71828_remove(struct platform_device *pdev)
+{
+	sysfs_remove_group(&pdev->dev.kobj, &bd71828_att_grp);
+
+	return 0;
 }
 
 static int bd71828_probe(struct platform_device *pdev)
@@ -67,15 +162,21 @@ static int bd71828_probe(struct platform_device *pdev)
 
 	hall->regmap = mfd->regmap;
 	hall->dev = &pdev->dev;
+	dev_set_drvdata(&pdev->dev, hall);
 
 	if (of_property_read_bool(pdev->dev.parent->of_node,
 				  "rohm,lid-open-high"))
 		hall->open_state = BD71828_HALL_STATE_MASK;
 
+	hall->enabled = true;
 	irq = platform_get_irq_byname(pdev, "bd71828-hall");
 	ret = devm_request_threaded_irq(&pdev->dev, irq, NULL, &hall_hndlr,
 					IRQF_ONESHOT, "bd70528-hall", hall);
-//	if (ret)
+	if (ret)
+		return ret;
+
+	ret = sysfs_create_group(&pdev->dev.kobj, &bd71828_att_grp);
+
 	return ret;
 }
 
@@ -84,6 +185,7 @@ static struct platform_driver bd71828_hall = {
 		.name = "bd71828-lid"
 	},
 	.probe = bd71828_probe,
+	.remove = bd71828_remove,
 };
 
 module_platform_driver(bd71828_hall);
