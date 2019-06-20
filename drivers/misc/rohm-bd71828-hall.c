@@ -85,10 +85,6 @@ static irqreturn_t hall_hndlr(int irq, void *data)
 		unsigned int left;
 		now -= open_time;
 
-		/*
-		 * We have threaded handler so I guess it should be Ok to sleep
-		 * here.
-		 */
 		left = ((unsigned int)(MAGIC_GRACE_TIME - now)) / 1000000;
 		if (now < MAGIC_GRACE_TIME && left)
 			schedule_delayed_work(&hall->delayed_event,
