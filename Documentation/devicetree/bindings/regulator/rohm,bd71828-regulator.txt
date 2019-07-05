@@ -3,7 +3,7 @@ ROHM BD71828 Power Management Integrated Circuit regulator bindings
 Required properties:
  - regulator-name: should be "buck1", ..., "buck7", and "ldo1", ..., "ldo7"
 
-List of regulators provided by this controller. BD71837 regulators node
+List of regulators provided by this controller. BD71828 regulators node
 should be sub node of the BD71828 MFD node. See BD71828 MFD bindings at
 Documentation/devicetree/bindings/mfd/rohm,bd71828-pmic.txt
 Regulator nodes should be named to BUCK_<number> and LDO_<number>. The
@@ -14,10 +14,6 @@ Documentation/devicetree/bindings/regulator/regulator.txt.
 The valid names for BD71828 regulator nodes are:
 BUCK1, BUCK2, BUCK3, BUCK4, BUCK5, BUCK6, BUCK7
 LDO1, LDO2, LDO3, LDO4, LDO5, LDO6, LDO7
-
-The valid names for BD71847 regulator nodes are:
-BUCK1, BUCK2, BUCK3, BUCK4, BUCK5, BUCK6
-LDO1, LDO2, LDO3, LDO4, LDO5, LDO6
 
 Optional properties:
 - rohm,dvs-run-voltage		: PMIC default "RUN" state voltage in uV.
