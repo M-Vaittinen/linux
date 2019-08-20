@@ -47,6 +47,7 @@ struct bd71828_regulator_data {
 	struct run_lvl_ctrl run_lvl[DVS_RUN_LEVELS];
 	struct mutex dvs_lock;
 	struct gpio_descs *gps;
+	struct regmap *regmap;
 };
 
 static const struct reg_init buck1_inits[] = {
@@ -324,6 +325,7 @@ static int bd71828_dvs_gpio_set_run_level(struct bd71828_regulator_data *rd,
 {
 	DECLARE_BITMAP(values, 2);
 
+	pr_debug("Setting runlevel (GPIO)\n");
 	if (rd->gps->ndescs != 2)
 		return -EINVAL;
 
@@ -337,11 +339,25 @@ static int bd71828_dvs_gpio_set_run_level(struct bd71828_regulator_data *rd,
 }
 
 /* Get current run level when RUN levels are controlled using I2C */
+static int bd71828_dvs_i2c_set_run_level(struct regmap *regmap,
+					 int lvl)
+{
+	unsigned int reg;
+
+	pr_debug("Setting runlevel (%d) (i2c)\n", lvl);
+	reg = lvl >> (ffs(BD71828_MASK_RUN_LVL_CTRL) - 1);
+	
+	return regmap_update_bits(regmap, BD71828_REG_PS_CTRL_3,
+				  BD71828_MASK_RUN_LVL_CTRL, reg);
+}
+/* Get current run level when RUN levels are controlled using I2C */
 static int bd71828_dvs_i2c_get_run_level(struct regmap *regmap,
 					 struct bd71828_regulator_data *rd)
 {
 	int ret;
 	unsigned int val;
+
+	pr_debug("Getting runlevel (i2c)\n");
 
 	ret = regmap_read(regmap, BD71828_REG_PS_CTRL_3, &val);
 	if (ret)
@@ -358,8 +374,9 @@ static int bd71828_dvs_gpio_get_run_level(struct bd71828_regulator_data *rd)
 {
 	int run_level;
 	int ret;
-
 	DECLARE_BITMAP(values, 2);
+
+	pr_debug("Getting runlevel (GPIO)\n");
 
 	if (rd->gps->ndescs != 2)
 		return -EINVAL;
@@ -1093,6 +1110,7 @@ static void mark_regulator_runlvl_controlled(struct device *dev,
 		case 6:
 		case 7:
 			g->runlvl |= 1 << (i - 1);
+			dev_dbg(dev, "buck %d runlevel controlled\n", i);
 			break;
 		default:
 			dev_err(dev,
@@ -1128,7 +1146,7 @@ static int check_dt_for_gpio_controls(struct device *d,
 				      struct bd71828_gpio_cfg *g)
 {
 	int ret;
-	struct device_node *np = d->of_node;
+//	struct device_node *np = d->of_node;
 
 	ret = get_runcontrolled_bucks_dt(d, g);
 	if (ret)
@@ -1196,10 +1214,14 @@ static ssize_t show_runlevel(struct device *dev,
 	int runlevel;
 	struct bd71828_regulator_data *rd = dev_get_drvdata(dev);
 
-	if (!rd || !rd->gps)
+	if (!rd)
 		return -ENOENT;
 
-	runlevel = bd71828_dvs_gpio_get_run_level(rd);
+ 	if (!rd->gps)
+		runlevel =  bd71828_dvs_i2c_get_run_level(rd->regmap, rd);
+	else
+		runlevel = bd71828_dvs_gpio_get_run_level(rd);
+
 	if (0 > runlevel)
 		return runlevel;
 
@@ -1215,7 +1237,10 @@ static ssize_t set_runlevel(struct device *dev, struct device_attribute *attr,
 	if (kstrtol(buf, 0, &val) != 0)
 		return -EINVAL;
 
-	val = bd71828_dvs_gpio_set_run_level(rd, val);
+	if (rd->gps)
+		val = bd71828_dvs_gpio_set_run_level(rd, val);
+	else
+		val = bd71828_dvs_i2c_set_run_level(rd->regmap, val);
 	if (val)
 		return val;
 
@@ -1290,6 +1315,7 @@ static int bd71828_probe(struct platform_device *pdev)
 	}
 
 	config.regmap = bd71828->regmap;
+	rd->regmap = bd71828->regmap;
 
 	for (i = 0; i < ARRAY_SIZE(bd71828_rdata); i++) {
 		struct regulator_dev *rdev;
