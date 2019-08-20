@@ -1129,11 +1129,7 @@ static int check_dt_for_gpio_controls(struct device *d,
 {
 	int ret;
 	struct device_node *np = d->of_node;
-	const char *prop = "rohm,dvs-runlvl-ctrl";
-	uint32_t bucks[MAX_GPIO_DVS_BUCKS];
 
-	ret = of_property_read_variable_u32_array(np, prop, bucks, 0,
-						  ARRAY_SIZE(bucks));
 	ret = get_runcontrolled_bucks_dt(d, g);
 	if (ret)
 		return ret;
