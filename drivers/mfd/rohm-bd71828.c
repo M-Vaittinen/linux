@@ -57,7 +57,7 @@ static struct mfd_cell bd71828_mfd_cells[] = {
 	 */
 	{ .name = "bd718xx-clk", },
 	{
-		.name = "bd71828-power",
+		.name = "bd71827-power",
 		.resources = charger_irqs,
 		.num_resources = ARRAY_SIZE(charger_irqs),
 	}, {
