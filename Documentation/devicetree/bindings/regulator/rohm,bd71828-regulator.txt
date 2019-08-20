@@ -30,8 +30,8 @@ Optional properties:
 				  bucks 1, 2, 6 and 7 support this.
 - rohm,dvs-runlevel0-voltage    : voltage for run-level 0. Microvolts.
 - rohm,dvs-runlevel1-voltage	: voltage for run-level 1. Microvolts.
-- rohm,dvs-runlevel2-voltage	: voltage for run-level 1. Microvolts.
-- rohm,dvs-runlevel3-voltage	: voltage for run-level 1. Microvolts.
+- rohm,dvs-runlevel2-voltage	: voltage for run-level 2. Microvolts.
+- rohm,dvs-runlevel3-voltage	: voltage for run-level 3. Microvolts.
 
 - Any optional property defined in bindings/regulator/regulator.txt
 
@@ -49,73 +49,115 @@ buck		| run		| idle		| suspend	| lpsr
 (**) All states use same voltage but have own enable / disable settings. Voltage
      0 can be specified for a state to make regulator disabled on that state.
 
-BD71847:
-buck	| dvs-run-voltage	| dvs-idle-voltage	| dvs-suspend-voltage
------------------------------------------------------------------------------
-1	| supported		| supported		| supported
-----------------------------------------------------------------------------
-2	| supported		| supported		| not supported
-----------------------------------------------------------------------------
-rest	| not supported		| not supported		| not supported
-
 Example:
 regulators {
 	buck1: BUCK1 {
 		regulator-name = "buck1";
-		... tbd
+		regulator-min-microvolt = <500000>;
+		regulator-max-microvolt = <2000000>;
+		regulator-ramp-delay = <2500>;
+		rohm,dvs-runlvl-ctrl;
+		rohm,dvs-runlevel0-voltage = <500000>;
+		rohm,dvs-runlevel1-voltage = <506250>;
+		rohm,dvs-runlevel2-voltage = <512500>;
+		rohm,dvs-runlevel3-voltage = <518750>;
+		regulator-boot-on;
 	};
 	buck2: BUCK2 {
 		regulator-name = "buck2";
-		... tbd
+		regulator-min-microvolt = <500000>;
+		regulator-max-microvolt = <2000000>;
+		regulator-ramp-delay = <2500>;
+		rohm,dvs-runlvl-ctrl;
+		rohm,dvs-runlevel0-voltage = <500000>;
+		rohm,dvs-runlevel1-voltage = <506250>;
+		rohm,dvs-runlevel2-voltage = <512500>;
+		rohm,dvs-runlevel3-voltage = <518750>;
+		regulator-boot-on;
 	};
 	buck3: BUCK3 {
 		regulator-name = "buck3";
-		... tbd
+		regulator-min-microvolt = <1200000>;
+		regulator-max-microvolt = <2000000>;
+		regulator-boot-on;
 	};
 	buck4: BUCK4 {
 		regulator-name = "buck4";
-		... tbd
+		regulator-min-microvolt = <1000000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-boot-on;
 	};
 	buck5: BUCK5 {
 		regulator-name = "buck5";
-		... tbd
+		regulator-min-microvolt = <2500000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-boot-on;
 	};
 	buck6: BUCK6 {
 		regulator-name = "buck6";
-		... tbd
+		regulator-min-microvolt = <500000>;
+		regulator-max-microvolt = <2000000>;
+		regulator-ramp-delay = <2500>;
+		rohm,dvs-runlvl-ctrl;
+		rohm,dvs-runlevel0-voltage = <500000>;
+		rohm,dvs-runlevel1-voltage = <506250>;
+		rohm,dvs-runlevel2-voltage = <512500>;
+		rohm,dvs-runlevel3-voltage = <518750>;
+		regulator-boot-on;
 	};
 	buck7: BUCK7 {
 		regulator-name = "buck7";
-		... tbd
+		regulator-min-microvolt = <500000>;
+		regulator-max-microvolt = <2000000>;
+		regulator-ramp-delay = <2500>;
+		rohm,dvs-runlvl-ctrl;
+		rohm,dvs-runlevel0-voltage = <500000>;
+		rohm,dvs-runlevel1-voltage = <506250>;
+		rohm,dvs-runlevel2-voltage = <512500>;
+		rohm,dvs-runlevel3-voltage = <518750>;
+		regulator-boot-on;
 	};
-
 	ldo1: LDO1 {
 		regulator-name = "ldo1";
-		... tbd
+		regulator-min-microvolt = <800000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-boot-on;
 	};
 	ldo2: LDO2 {
 		regulator-name = "ldo2";
-		... tbd
+		regulator-min-microvolt = <800000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-boot-on;
 	};
 	ldo3: LDO3 {
 		regulator-name = "ldo3";
-		... tbd
+		regulator-min-microvolt = <800000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-boot-on;
 	};
 	ldo4: LDO4 {
 		regulator-name = "ldo4";
-		... tbd
+		regulator-min-microvolt = <800000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-boot-on;
 	};
 	ldo5: LDO5 {
 		regulator-name = "ldo5";
-		... tbd
+		regulator-min-microvolt = <800000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-boot-on;
 	};
 	ldo6: LDO6 {
 		regulator-name = "ldo6";
-		... tbd
+		regulator-min-microvolt = <1800000>;
+		regulator-max-microvolt = <1800000>;
+		regulator-boot-on;
 	};
 	ldo7_reg: LDO7 {
 		regulator-name = "ldo7";
-		... tbd
+		regulator-min-microvolt = <800000>;
+		regulator-max-microvolt = <3300000>;
+		regulator-boot-on;
 	};
 };
 
