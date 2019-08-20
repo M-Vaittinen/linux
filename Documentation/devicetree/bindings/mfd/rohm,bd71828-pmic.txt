@@ -30,10 +30,6 @@ configuration.
 
 Optional properties:
 - clock-output-names		: Should contain name for output clock.
-- rohm,dvs-runlvl-bucks 	: array of 32bit values indicating bucks that
-				  are controlled by run-levels. <1> for buck1,
-				  <2> for buck2, ... Only bucks 1, 2, 6 and 7
-				  can be controlled by run-levels
 - rohm,dvs-vsel-gpios		: GPIOs used to control PMIC run-levels. Should
 				  describe two GPIOs. (See run-level control in
 				  data-sheet). If this property is omitted but
