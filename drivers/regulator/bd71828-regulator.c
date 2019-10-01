@@ -1029,7 +1029,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 	}, {
 		.desc = {
 			.name = "ldo6",
-			.of_match = of_match_ptr("LDO3"),
+			.of_match = of_match_ptr("LDO6"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = BD71828_LDO6,
 			.ops = &bd71828_ldo6_ops,
