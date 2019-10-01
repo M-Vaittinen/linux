@@ -51,6 +51,7 @@ static const struct resource lid_irqs[] = {
 static struct mfd_cell bd71828_mfd_cells[] = {
 	{ .name = "bd71828-pmic", },
 	{ .name = "bd71828-gpio", },
+	{ .name = "bd71828-led", },
 	/*
 	 * We use BD71837 driver to drive the clock block. Only differences to
 	 * BD70528 clock gate are the register address and mask.
