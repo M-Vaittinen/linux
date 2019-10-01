@@ -61,7 +61,7 @@ static struct mfd_cell bd71828_mfd_cells[] = {
 		.resources = charger_irqs,
 		.num_resources = ARRAY_SIZE(charger_irqs),
 	}, {
-		.name = "bd71828-rtc",
+		.name = "bd70528-rtc",
 		.resources = rtc_irqs,
 		.num_resources = ARRAY_SIZE(rtc_irqs),
 	}, {
