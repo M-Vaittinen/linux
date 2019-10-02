@@ -299,6 +299,7 @@ static struct regmap_irq_chip bd71828_irq_chip = {
 	.status_base = BD71828_REG_INT_BUCK,
 	.mask_base = BD71828_REG_INT_MASK_BUCK,
 	.ack_base = BD71828_REG_INT_BUCK,
+	.mask_invert = true,
 	.init_ack_masked = true,
 	.num_regs = 12,
 	.num_main_regs = 1,
