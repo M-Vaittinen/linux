@@ -55,9 +55,11 @@ static int bd71828_led_probe(struct platform_device *pdev)
 	struct bd71828_led *g, *a;
 	int ret;
 
+	pr_info("bd71828 LED driver probed\n");
+
 	bd71828 = dev_get_drvdata(pdev->dev.parent);
 	l = devm_kzalloc(&pdev->dev, sizeof(*l), GFP_KERNEL);
-	if (l)
+	if (!l)
 		return -ENOMEM;
 	a = &l->amber;
 	g = &l->green;
@@ -72,6 +74,8 @@ static int bd71828_led_probe(struct platform_device *pdev)
 	ret = devm_led_classdev_register(&pdev->dev, &g->l);
 	if (ret)
 		return ret;
+
+	pr_info("BD71828: Green led registered\n");
 
 	return devm_led_classdev_register(&pdev->dev, &a->l);
 }
