@@ -209,6 +209,7 @@ static inline void tm2rtc(struct rtc_time *t, struct bd7xx28_rtc_data *r)
 	r->week |= bin2bcd(t->tm_wday);
 	r->month |= bin2bcd(t->tm_mon + 1);
 	r->year = bin2bcd(t->tm_year - 100);
+
 }
 
 static inline void rtc2tm(struct bd7xx28_rtc_data *r, struct rtc_time *t)
@@ -229,6 +230,13 @@ static inline void rtc2tm(struct bd7xx28_rtc_data *r, struct rtc_time *t)
 	t->tm_mon = bcd2bin(r->month & ROHM_BD1_MASK_RTC_MONTH) - 1;
 	t->tm_year = 100 + bcd2bin(r->year & ROHM_BD1_MASK_RTC_YEAR);
 	t->tm_wday = bcd2bin(r->week & ROHM_BD1_MASK_RTC_WEEK);
+
+	pr_debug("%s: result: sec=%u, min=%u, hour=%u, day=%u, wday=%u, month=%u, year=%u\n",
+		__func__, (unsigned)t->tm_sec, (unsigned)t->tm_min,
+		(unsigned)t->tm_hour, (unsigned)t->tm_mday,
+		(unsigned)t->tm_wday, (unsigned)t->tm_mon,
+		(unsigned)t->tm_year);
+
 }
 
 static int bd71828_set_alarm(struct bd7xx28_rtc *r, struct rtc_wkalrm *a)
@@ -246,10 +254,23 @@ static int bd71828_set_alarm(struct bd7xx28_rtc *r, struct rtc_wkalrm *a)
 
 	tm2rtc(&a->time, &alm.alm0);
 
-	if (a->enabled)
+	{
+		/* This hack is here just to print the time */
+		struct rtc_time t;
+
+		pr_debug("%s: original ALM0 EN bits were 0x%x\n", __func__, alm.alm_mask);
+		pr_debug("%s: Setting new alm time\n", __func__);
+		rtc2tm(&alm.alm0, &t);
+	}
+#if 0
+#endif
+	if (!a->enabled) {
 		alm.alm_mask &= ~ROHM_BD1_MASK_ALM_EN;
+	}
 	else
 		alm.alm_mask |= ROHM_BD1_MASK_ALM_EN;
+	
+	pr_debug("%s: new ALM0 EN bits are 0x%x\n", __func__, alm.alm_mask);
 
 	ret = regmap_bulk_write(bd71828->regmap, BD71828_REG_RTC_ALM_START,
 				&alm, sizeof(alm));
@@ -344,8 +365,10 @@ static int bd71828_read_alarm(struct bd7xx28_rtc *r, struct rtc_wkalrm *a)
 	a->time.tm_mday = -1;
 	a->time.tm_mon = -1;
 	a->time.tm_year = -1;
-	a->enabled = !(alm.alm_mask & ROHM_BD1_MASK_ALM_EN);
+	a->enabled = !!(alm.alm_mask & ROHM_BD1_MASK_ALM_EN);
 	a->pending = 0;
+	pr_debug("%s: ALM0 EN bits are 0x%x, returniong enabled %d\n", __func__,
+		alm.alm_mask, a->enabled);
 
 	return 0;
 }
@@ -433,6 +456,7 @@ static int bd7xx28_set_time(struct device *dev, struct rtc_time *t)
 	int ret;
 	struct bd7xx28_rtc *r = dev_get_drvdata(dev);
 
+	pr_debug("%s called\n", __func__);
 	bd70528_wdt_lock(r->mfd);
 	ret = bd7xx28_set_time_locked(dev, t);
 	bd70528_wdt_unlock(r->mfd);
@@ -445,6 +469,8 @@ static int bd7xx28_get_time(struct device *dev, struct rtc_time *t)
 	struct rohm_regmap_dev *bd7xx28 = r->mfd;
 	struct bd7xx28_rtc_data rtc_data;
 	int ret;
+
+	pr_debug("%s called\n", __func__);
 
 	/* read the RTC date and time registers all at once */
 	ret = regmap_bulk_read(bd7xx28->regmap,
@@ -460,9 +486,13 @@ static int bd7xx28_get_time(struct device *dev, struct rtc_time *t)
 	return 0;
 }
 
-static int bd70528_alm_enable(struct bd7xx28_rtc *r, unsigned int enableval)
+static int bd70528_alm_enable(struct bd7xx28_rtc *r, unsigned int enabled)
 {
 	int ret;
+	unsigned int enableval = ROHM_BD1_MASK_ALM_EN;
+
+	if (enabled)
+		enableval = 0;
 
 	bd70528_wdt_lock(r->mfd);
 	ret = bd70528_set_wake(r->mfd, !enableval, NULL);
@@ -480,31 +510,35 @@ out_unlock:
 	return ret;
 }
 
-static int bd71828_alm_enable(struct bd7xx28_rtc *r, unsigned int enableval)
+static int bd71828_alm_enable(struct bd7xx28_rtc *r, unsigned int enabled)
 {
 	int ret;
+	unsigned int enableval = ROHM_BD1_MASK_ALM_EN;
 
+	if (!enabled)
+		enableval = 0;
+
+	pr_debug("%s called (enabled=0x%x)\n", __func__, enabled);
 	ret = regmap_update_bits(r->mfd->regmap, BD71828_REG_RTC_ALM0_MASK,
 				 ROHM_BD1_MASK_ALM_EN, enableval);
 	if (ret)
 		dev_err(r->dev, "Failed to change alarm state\n");
+
+	pr_debug("%s: Wrote alm mask reg addr 0x%x val 0x%x\n",
+		__func__, BD71828_REG_RTC_ALM0_MASK, enableval);
 
 	return ret;
 }
 
 static int bd7xx28_alm_enable(struct device *dev, unsigned int enabled)
 {
-	unsigned int enableval = ROHM_BD1_MASK_ALM_EN;
 	struct bd7xx28_rtc *r = dev_get_drvdata(dev);
-
-	if (enabled)
-		enableval = 0;
 
 	switch (r->mfd->chip_type) {
 	case ROHM_CHIP_TYPE_BD70528:
-		return bd70528_alm_enable(r, enableval);
+		return bd70528_alm_enable(r, enabled);
 	case ROHM_CHIP_TYPE_BD71828:
-		return bd71828_alm_enable(r, enableval);
+		return bd71828_alm_enable(r, enabled);
 	default:
 		dev_err(dev, "Unkown RTC chip\n");
 	}
@@ -524,6 +558,7 @@ static irqreturn_t alm_hndlr(int irq, void *data)
 {
 	struct rtc_device *rtc = data;
 
+	pr_debug("bd71828 RTC IRQ fired\n");
 	rtc_update_irq(rtc, 1, RTC_IRQF | RTC_AF | RTC_PF);
 	return IRQ_HANDLED;
 }
@@ -561,7 +596,7 @@ static int bd7xx28_probe(struct platform_device *pdev)
 		enable_main_irq = true;
 		break;
 	case ROHM_CHIP_TYPE_BD71828:
-		irq_name = "bd71828-rtc-alm";
+		irq_name = "bd71828-rtc-alm-0";
 		bd_rtc->reg_time_start = BD71828_REG_RTC_START;
 		hour_reg = BD71828_REG_RTC_HOUR;
 		break;
@@ -569,6 +604,18 @@ static int bd7xx28_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "Unknown chip\n");
 		return -ENOENT;
 	}
+
+	/* Test hack
+	{
+		irq = platform_get_irq_byname(pdev, "bd71828-rtc-alm-1");
+		ret = devm_request_threaded_irq(&pdev->dev, irq, NULL, &alm_hndlr,
+					IRQF_ONESHOT, "bd70528-rtc1", rtc);
+		irq = platform_get_irq_byname(pdev, "bd71828-rtc-alm-2");
+		ret = devm_request_threaded_irq(&pdev->dev, irq, NULL, &alm_hndlr,
+					IRQF_ONESHOT, "bd70528-rtc2", rtc);
+	}
+	*/
+
 	irq = platform_get_irq_byname(pdev, irq_name);
 
 	if (irq < 0) {
