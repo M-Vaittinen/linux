@@ -40,7 +40,7 @@ static int bd71828_led_brightness_set(struct led_classdev *led_cdev,
 	struct bd71828_leds *data;
 	unsigned val = BD71828_LED_OFF;
 
-	data = BD71828_LED_TO_DATA(l);	
+	data = BD71828_LED_TO_DATA(l);
 	if (value != LED_OFF)
 		val = BD71828_LED_ON;
 
@@ -53,6 +53,8 @@ static int bd71828_led_probe(struct platform_device *pdev)
 	struct rohm_regmap_dev *bd71828;
 	struct bd71828_leds *l;
 	struct bd71828_led *g, *a;
+	static const char *GNAME = "bd71828-green-led";
+	static const char *ANAME = "bd71828-amber-led";
 	int ret;
 
 	pr_info("bd71828 LED driver probed\n");
@@ -61,6 +63,7 @@ static int bd71828_led_probe(struct platform_device *pdev)
 	l = devm_kzalloc(&pdev->dev, sizeof(*l), GFP_KERNEL);
 	if (!l)
 		return -ENOMEM;
+	l->bd71828 = bd71828;
 	a = &l->amber;
 	g = &l->green;
 	a->id = ID_AMBER_LED;
@@ -68,14 +71,14 @@ static int bd71828_led_probe(struct platform_device *pdev)
 	a->force_mask = BD71828_MASK_LED_AMBER;
 	g->force_mask = BD71828_MASK_LED_GREEN;
 
+	a->l.name = ANAME;
+	g->l.name = GNAME;
 	a->l.brightness_set_blocking = bd71828_led_brightness_set;
 	g->l.brightness_set_blocking = bd71828_led_brightness_set;
 
 	ret = devm_led_classdev_register(&pdev->dev, &g->l);
 	if (ret)
 		return ret;
-
-	pr_info("BD71828: Green led registered\n");
 
 	return devm_led_classdev_register(&pdev->dev, &a->l);
 }
