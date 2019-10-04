@@ -376,6 +376,7 @@ static int bd71828_dvs_gpio_get_run_level(struct bd71828_regulator_data *rd)
 	int ret;
 	DECLARE_BITMAP(values, 2);
 
+	values[0] = 0;
 	pr_debug("Getting runlevel (GPIO)\n");
 
 	if (rd->gps->ndescs != 2)
