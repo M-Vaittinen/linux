@@ -345,7 +345,7 @@ static int bd71828_dvs_i2c_set_run_level(struct regmap *regmap,
 	unsigned int reg;
 
 	pr_debug("Setting runlevel (%d) (i2c)\n", lvl);
-	reg = lvl >> (ffs(BD71828_MASK_RUN_LVL_CTRL) - 1);
+	reg = lvl << (ffs(BD71828_MASK_RUN_LVL_CTRL) - 1);
 	
 	return regmap_update_bits(regmap, BD71828_REG_PS_CTRL_3,
 				  BD71828_MASK_RUN_LVL_CTRL, reg);
