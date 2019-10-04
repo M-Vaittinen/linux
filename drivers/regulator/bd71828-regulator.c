@@ -425,7 +425,7 @@ static int bd71828_dvs_gpio_is_enabled(struct regulator_dev *rdev)
 
 	mutex_lock(&data->dvs_lock);
 	ret = bd71828_dvs_gpio_get_run_level(data);
-	if (ret < 0)
+	if (ret < 0 || ret >= DVS_RUN_LEVELS)
 		goto unlock_out;
 
 	ret = data->run_lvl[ret].enabled;
@@ -469,7 +469,7 @@ static int bd71828_dvs_gpio_get_voltage(struct regulator_dev *rdev)
 
 	mutex_lock(&data->dvs_lock);
 	ret = bd71828_dvs_gpio_get_run_level(data);
-	if (ret < 0)
+	if (ret < 0 || DVS_RUN_LEVELS <= ret)
 		goto unlock_out;
 
 	ret = data->run_lvl[ret].voltage;
@@ -1103,7 +1103,7 @@ static void mark_regulator_runlvl_controlled(struct device *dev,
 	int i;
 
 	for (i = 1; i <= ARRAY_SIZE(bd71828_rdata); i++) {
-		if (!of_node_name_eq(np, bd71828_rdata[i-1].desc.name))
+		if (!of_node_name_eq(np, bd71828_rdata[i-1].desc.of_match))
 			continue;
 		switch (i) {
 		case 1:
