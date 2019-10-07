@@ -93,7 +93,7 @@ static const struct regmap_range volatile_ranges[] = {
 		.range_max = BD71828_REG_CHG_FULL,
 	}, {
 		.range_min = BD71828_REG_INT_MAIN,
-		.range_max = BD71828_REG_INT_UPDATE,
+		.range_max = BD71828_REG_IO_STAT,
 	},
 #if 0
 
