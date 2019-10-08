@@ -1,0 +1,285 @@
+This file is a really rough overview on how the linux device drivers for
+ROHM-BD71828 were initially tested. This is not intended to be a definitive
+guide for testing the drivers. Implementing and designing the test cases
+should be done by one who is using the PMIC - but these notes may give some
+ideas about tools or methods that might suit your environment.
+
+
+1. used test environment
+
+Initial tests were ran on BeagleBoneBlack running linux. BBD71828 break-out
+board was connected to BBB I2C bus 1. INTB irq was connected to BBB GPIO1_29.
+Manual connections from EPDEN GPIO to HALL GPIO were done during tests. A
+multimeter was used during testing and some buck/GPIO output voltages were
+measured.
+
+2. Test software
+
+Linux kernel codes and the tested drivers were temporarily patched to
+output some info prints. Two test drivers providing regulator/clk control to
+user-space were implemented for testing. A kernel module for adding device-tree
+overlay to running kernel was used. 
+
+Standard linux tools like i2cget / i2cset / i2cdump were used to do raw
+register access. Hwclock utility was used for RTC testing. GPIO export feature
+was used.
+
+
+3. (some of the used) Test commands:
+
+
+NOTE: The DT overlay module must be load after each of the reboots for
+all tests. This step is documented here only once.
+
+Load module to allow DT overlays:
+insmod mva_overlay.ko
+
+add test overlay for bd71828 break-out board:
+dd if=/bd71828_test.dtbo of=/sys/kernel/mva_overlay/overlay_add bs=4M
+
+NOTE2: The test environment may need to be rebooted when different test modules
+(/bd71828-test.ko for regulators, /bd71828-clktest.ko for clk) are load. These
+modules can't be load at the same time (due to sysfs folder conflict).
+
+
+LEDs:
+modprobe leds-bd71828
+cd /sys/class/leds/
+echo 1 > bd71828-green-led/brightness
+See LED is ON
+
+echo 0 > bd71828-green-led/brightness
+See LED is OFF
+
+echo 1 > bd71828-amber-led/brightness
+See LED is ON
+
+echo 0 > bd71828-amber-led/brightness
+See LED is OFF
+
+
+RTC:
+modprobe rtc-bd70528
+
+(see RTC interrupt counter)
+cat /proc/interrupts
+
+Read RTC clock (note, correct RTC device depends on your system)
+hwclock -r -f /dev/rtc1
+
+Get OS time
+date
+
+If RTC and OS time are same, change OS time
+date -s "new time string"
+
+Set RTC date using hwclock to same as OS time
+hwclock --systohc -f /dev/rtc1
+
+Read RTC clock to ensure setting succeeded.
+hwclock -r -f /dev/rtc1
+
+Check RTC interrupt count was increased (linux uses RTC alarm internally when
+setting/getting the RTC time)
+cat /proc/interrupts
+
+Additional prints can be added to RTC driver if more thorough tests are to be
+done.
+
+
+
+Regulators:
+
+Load regulator module:
+modprobe bd71828_regulator
+
+See regulator overview (constrains etc)
+cat /sys/kernel/debug/regulator/regulator_summary
+
+Add regulator test driver:
+insmod /bd71828-test.ko
+
+cd /sys/kernel/mva_test/regulators/
+(Test files are named buck1, buck2, ... - The LDOs are also named as bucks)
+
+See enable/disable status:
+cat buck3_en
+
+enable regulator:
+echo 1 > buck3_en
+
+cat buck3_en
+
+disable regulator:
+echo 0 > buck3_en
+
+cat buck3_en
+
+NOTE: Linux kernel SW want's enable/disable calls to be balanced. A driver
+must not call disable if it has not called enable first. Regulator is really
+disabled only after last user calls regulator_disable (or in emergency case if
+forced disable is explicitly requested via kernel API).
+
+I instrumented the regulator control code so that I saw actual I2C register
+writes were requested. I also used unbalanced calls to see regulators which
+were enabled by regulator-boot-on; DT property being disabled.
+
+Additional verification can be done using i2cget
+( for buck3 when BD71828 is connected to I2C1
+i2cget -f -y 1 0x4b 0x1C )
+
+
+I also instrumented BD71828 runlevel setting functions to emit prints when
+runlevel is changed. I also used both I2C and GPIO based run-level control.
+These need different test device-tree entries, GPIO based requires DT property
+rohm,dvs-vsel-gpios to be present with 2 valid GPIO references.
+
+echo 'func bd71828_dvs_i2c_set_run_level +pm' > /sys/kernel/debug/dynamic_debug/control
+cd /devices/platform/ocp/4802a000.i2c/i2c-1/1-004b/bd71828-pmic.1.auto/
+
+cat runlevel
+
+echo 1 > runlevel
+(dmesg to verify prints)
+
+cat runlevel
+(to verify level 1)
+
+echo 2 > runlevel
+(dmesg to verify prints)
+cat runlevel
+
+echo 3 > runlevel
+(dmesg to verify prints)
+cat runlevel 
+
+For GPIO control I used same runlevel set/read comments but also measured the
+GPIO output and ensured voltage changed as exected.
+
+
+Voltage get/set:
+see current voltage:
+cd /sys/kernel/mva_test/regulators/
+cat buck3_set
+
+set new voltage:
+echo 1950000 1950000 > buck3_set
+
+Verify voltage by using multimeter
+Verify SW sees changed voltage
+cat buck3_set 
+
+echo 1800000 1800000 > buck3_set
+Verify voltage by using multimeter
+Verify SW sees changed voltage
+cat buck3_set 
+
+(same can be applied to other bucks which are not controlled by run-levels)
+
+
+
+GPIO:
+modprobe gpio-bd71828
+
+cd /sys/class/gpio/
+ls
+
+
+(Go to BD71828 GPIO controller node - numbering depends on your HW environment)
+cd gpiochip508
+ls
+
+(Ensure this is BD71828 controller)
+cat label
+
+See the number of GPIOs on this controller is 4
+cat ngpio
+
+See number of first GPIO pin:
+cat base
+
+Export second GPIO (EPDEN which is 'base' + 1. This is 509 on my BBB):
+echo 509 > export
+
+cd gpio508
+cat value
+Measure EPDEN pin with multimeter to see value matches.
+
+echo 1 > value
+Measure EPDEN pin with multimeter to see value matches.
+
+echo 0 > value
+Measure EPDEN pin with multimeter to see value matches.
+
+cd ..
+
+Export GPIO 4 (HALL) and see status can be read:
+echo 511 > export
+
+Connect EPDEN to HALL pin and do:
+cat gpio511/value
+echo 1 > gpio509/value
+cat gpio511/value (should be 1 now)
+
+
+echo 0 > gpio509/value
+cat gpio511/value (should be 0 now)
+
+
+HALL:
+
+Enable HALL debug prints:
+modprobe rohm-bd71828-hall
+echo 'file rohm-bd71828-hall.c +pm' > /sys/kernel/debug/dynamic_debug/control
+check HALL interrupt counter
+cat /proc/interrupts
+
+echo 1 > hall_enable
+use same EPDEN / HALL connection as at abowe GPIO test. Do same GPIO toggling
+and see the HALL irq is printed and irq count increases.
+echo 1 > gpio509/value
+echo 0 > gpio509/value
+echo 1 > gpio509/value
+echo 0 > gpio509/value
+dmesg
+cat /proc/interrupts
+
+
+echo 0 > hall_enable
+use same EPDEN / HALL connection as at abowe GPIO test. Do same GPIO toggling
+and see the HALL irq event is NOT printed but the irq count increases.
+echo 1 > gpio509/value
+echo 0 > gpio509/value
+echo 1 > gpio509/value
+echo 0 > gpio509/value
+dmesg
+cat /proc/interrupts
+
+
+CLK gate:
+Load clk module:
+modprobe clk-bd718x7
+Look at the clk summary:
+cat /sys/kernel/debug/clk/clk_summary
+The bd71828 32k clk should be shown.
+
+Load test module
+insmod /bd71828-clktest.ko
+
+cd /sys/kernel/mva_test2/clk2
+
+cat clk_en
+This should display the clk rate.
+
+Enable the clock:
+ehco 1 > clk_en
+Verify clk_en register from PMIC
+i2cget -f -y 1 0x4b 0x4B. The CLK_EN bit (bit 0) should be 1
+
+Disable the clock:
+ehco 0 > clk_en
+Verify clk_en register from PMIC
+i2cget -f -y 1 0x4b 0x4B. The CLK_EN bit (bit 0) should be 0
+
+
+

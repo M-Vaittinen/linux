@@ -1,0 +1,17 @@
+Contents
+
+bd71828-clktest.c:
+Test module for testing BD71828 clk gate.
+
+bd71828-test.c:
+Test module for testing BD71828 regulators.
+
+bd71828_test.dts
+The device-tree which was used for testing
+
+bd71828-gpio-test.c
+Not used.
+
+Makefile
+Makefile for compiling the test modules.
+
