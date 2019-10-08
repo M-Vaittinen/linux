@@ -60,7 +60,7 @@ static irqreturn_t hall_hndlr(int irq, void *data)
 	 * Do we need this state flag or can we simply disable irq if hall is
 	 * not enabled? Do we need to keep the IRQ enabled for wake to work?
 	 */
-	if (hall->enabled)
+	if (!hall->enabled)
 		return IRQ_HANDLED;
 
 	cancel_delayed_work_sync(&hall->delayed_event);
