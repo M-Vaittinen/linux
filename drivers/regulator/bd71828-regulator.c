@@ -481,7 +481,13 @@ unlock_out:
 }
 
 /**
- * Change run-level voltage
+ * bd71828_set_runlevel_voltage - change run-level voltage
+ *
+ * @regulator:  pointer to regulator which run-level voltage is to be changed
+ * @uv:		New voltage for run-level in micro volts
+ * @level:	run-level for which the voltage is to be changed
+ *
+ * Changes the run-level voltage for given regulator
  */
 int bd71828_set_runlevel_voltage(struct regulator *regulator, unsigned int uv,
 				 unsigned int level)
@@ -497,6 +503,65 @@ int bd71828_set_runlevel_voltage(struct regulator *regulator, unsigned int uv,
 	return ret;
 }
 EXPORT_SYMBOL(bd71828_set_runlevel_voltage);
+
+/**
+ * bd71828_set_runlevel - change system run-level.
+ *
+ * @regulator:	pointer to one of the BD71828 regulators obtained by
+ *		call to regulator_get
+ * @level:	New run-level the system should enter
+ *
+ * Changes the system to run-level which was given as argument. This
+ * operation will change state of all regulators which are set to be
+ * controlled by run-levels
+ */
+int bd71828_set_runlevel(struct regulator *regulator, unsigned int level)
+{
+	struct regulator_dev *rdev = regulator->rdev;
+	struct bd71828_regulator_data *rd = rdev_get_drvdata(rdev);
+
+	if (!rd)
+		return -ENOENT;
+
+	if (rd->gps)
+		return bd71828_dvs_gpio_set_run_level(rd, level);
+
+	return bd71828_dvs_i2c_set_run_level(rd->regmap, level);
+}
+EXPORT_SYMBOL(bd71828_set_runlevel);
+
+/**
+ * bd71828_get_runlevel - get the current system run-level.
+ *
+ * @regulator:	pointer to one of the BD71828 regulators obtained by
+ *		call to regulator_get
+ * @level:	Pointer to value where current run-level is stored
+ *
+ * Returns the current system run-level.
+ */
+int bd71828_get_runlevel(struct regulator *regulator, unsigned int *level)
+{
+	struct regulator_dev *rdev = regulator->rdev;
+	struct bd71828_regulator_data *rd = rdev_get_drvdata(rdev);
+	int ret;
+
+	if (!rd)
+		return -ENOENT;
+
+	if (!rd->gps)
+		ret = bd71828_dvs_i2c_get_run_level(rd->regmap, rd);
+	else
+		ret = bd71828_dvs_gpio_get_run_level(rd);
+
+	if (0 > ret)
+		return ret;
+
+	*level = (unsigned) ret;
+
+	return 0;
+}
+EXPORT_SYMBOL(bd71828_get_runlevel);
+
 
 static const struct regulator_ops dvs_buck_gpio_ops = {
 	.is_enabled = bd71828_dvs_gpio_is_enabled,
@@ -1124,23 +1189,23 @@ static void mark_regulator_runlvl_controlled(struct device *dev,
 static int get_runcontrolled_bucks_dt(struct device *dev,
 				      struct bd71828_gpio_cfg *g)
 {
-        struct device_node *np;
+	struct device_node *np;
 	struct device_node *nproot = dev->of_node;
 	const char *prop = "rohm,dvs-runlvl-ctrl";
 
 	g->runlvl = 0;
 
-        nproot = of_get_child_by_name(nproot, "regulators");
-        if (!nproot) {
-                dev_err(dev, "failed to find regulators node\n");
-                return -ENODEV;
-        }
-        for_each_child_of_node(nproot, np)
+	nproot = of_get_child_by_name(nproot, "regulators");
+	if (!nproot) {
+		dev_err(dev, "failed to find regulators node\n");
+		return -ENODEV;
+	}
+	for_each_child_of_node(nproot, np)
 		if (of_property_read_bool(np, prop))
 			mark_regulator_runlvl_controlled(dev, np, g);
 
-        of_node_put(nproot);
-        return 0;
+	of_node_put(nproot);
+	return 0;
 }
 
 static int check_dt_for_gpio_controls(struct device *d,
