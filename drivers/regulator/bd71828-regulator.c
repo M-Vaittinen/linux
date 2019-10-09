@@ -48,6 +48,7 @@ struct bd71828_regulator_data {
 	struct mutex dvs_lock;
 	struct gpio_descs *gps;
 	struct regmap *regmap;
+	bool allow_runlvl;
 };
 
 static const struct reg_init buck1_inits[] = {
@@ -483,7 +484,7 @@ unlock_out:
 /**
  * bd71828_set_runlevel_voltage - change run-level voltage
  *
- * @regulator:  pointer to regulator which run-level voltage is to be changed
+ * @regulator:  pointer to regulator for which run-level voltage is to be changed
  * @uv:		New voltage for run-level in micro volts
  * @level:	run-level for which the voltage is to be changed
  *
@@ -495,6 +496,9 @@ int bd71828_set_runlevel_voltage(struct regulator *regulator, unsigned int uv,
 	struct regulator_dev *rdev = regulator->rdev;
 	struct bd71828_regulator_data *data = rdev_get_drvdata(rdev);
 	int ret;
+
+	if (!data || !data->allow_runlvl)
+		return -EINVAL; 
 
 	mutex_lock(&data->dvs_lock);
 	ret = set_runlevel_voltage(rdev->regmap, rdev->desc, uv, level);
@@ -1265,6 +1269,9 @@ static void set_buck_runlvl_controlled(struct rohm_regmap_dev *bd71828,
 	 * Disallow setters. Get voltages/enable states based
 	 * on current RUN level
 	 */
+
+	rd->allow_runlvl = true;
+
 	if (g->use_gpio) {
 		rd->gps = g->gps;
 		rd->desc.ops = &dvs_buck_gpio_ops;
@@ -1378,10 +1385,12 @@ static int bd71828_probe(struct platform_device *pdev)
 		mutex_init(&rd[i].dvs_lock);
 		if (gcfg.runlvl & (1 << i))
 			set_buck_runlvl_controlled(bd71828, &rd[i], &gcfg);
+	
+		rd[i].regmap = bd71828->regmap;
 	}
 
 	config.regmap = bd71828->regmap;
-	rd->regmap = bd71828->regmap;
+//	rd->regmap = bd71828->regmap;
 
 	for (i = 0; i < ARRAY_SIZE(bd71828_rdata); i++) {
 		struct regulator_dev *rdev;
