@@ -67,9 +67,11 @@ Example:
 		clock-output-names = "bd71828-32k-out";
 		gpio-controller;
 		#gpio-cells = <2>;
-		gpio-reserved-ranges = <3>;
-		interrupt-controller;
-		#interrupt-cells = <2>;
+		ngpios = <4>;
+		gpio-reserved-ranges = <0 1 2 1>;
+		gpio-line-names = "EPDEN";
+		rohm,dvs-vsel-gpios = <&gpio1 12 0>,
+				      <&gpio1 13 0>;
 		regulators {
 			buck1: BUCK1 {
 				regulator-name = "buck1";
