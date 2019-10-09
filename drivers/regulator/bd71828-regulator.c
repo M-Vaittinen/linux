@@ -517,7 +517,8 @@ EXPORT_SYMBOL(bd71828_set_runlevel_voltage);
  *
  * Changes the system to run-level which was given as argument. This
  * operation will change state of all regulators which are set to be
- * controlled by run-levels
+ * controlled by run-levels. Note that 'regulator' must point to a
+ * regulator which is controlled by run-levels.
  */
 int bd71828_set_runlevel(struct regulator *regulator, unsigned int level)
 {
@@ -526,6 +527,9 @@ int bd71828_set_runlevel(struct regulator *regulator, unsigned int level)
 
 	if (!rd)
 		return -ENOENT;
+
+	if (!data || !data->allow_runlvl)
+		return -EINVAL; 
 
 	if (rd->gps)
 		return bd71828_dvs_gpio_set_run_level(rd, level);
@@ -541,7 +545,8 @@ EXPORT_SYMBOL(bd71828_set_runlevel);
  *		call to regulator_get
  * @level:	Pointer to value where current run-level is stored
  *
- * Returns the current system run-level.
+ * Returns the current system run-level. Note that 'regulator' must
+ * point to a regulator which is controlled by run-levels.
  */
 int bd71828_get_runlevel(struct regulator *regulator, unsigned int *level)
 {
@@ -551,6 +556,9 @@ int bd71828_get_runlevel(struct regulator *regulator, unsigned int *level)
 
 	if (!rd)
 		return -ENOENT;
+
+	if (!data || !data->allow_runlvl)
+		return -EINVAL; 
 
 	if (!rd->gps)
 		ret = bd71828_dvs_i2c_get_run_level(rd->regmap, rd);
