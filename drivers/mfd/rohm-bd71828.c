@@ -38,7 +38,7 @@ static const struct resource rtc_irqs[] = {
 static const struct resource charger_irqs[] = {
 	DEFINE_RES_IRQ_NAMED(BD71828_INT_LONGPUSH, "bd71828-pwr-longpush"),
 	DEFINE_RES_IRQ_NAMED(BD71828_INT_MIDPUSH, "bd71828-pwr-midpush"),
-	DEFINE_RES_IRQ_NAMED(BD71828_INT_SHORTPUSH, "bd71828-pwr-shortpush"),
+/*	DEFINE_RES_IRQ_NAMED(BD71828_INT_SHORTPUSH, "bd71828-pwr-shortpush"), */
 	DEFINE_RES_IRQ_NAMED(BD71828_INT_PUSH, "bd71828-pwr-push"),
 	DEFINE_RES_IRQ_NAMED(BD71828_INT_DCIN_MON_RES, "bd71828-pwr-dcin-in" ),
 	DEFINE_RES_IRQ_NAMED(BD71828_INT_DCIN_MON_DET, "bd71828-pwr-dcin-out"),

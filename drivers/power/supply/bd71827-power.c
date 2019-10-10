@@ -139,6 +139,7 @@ struct pwr_regs {
 	u8 dcin_stat;
 	u8 dcin_collapse_limit;
 	u8 chg_set1;
+	u8 chg_en;
 	u8 vbat_alm_limit_u;
 	u8 batcap_mon_limit_u;
 	u8 conf;
@@ -177,6 +178,7 @@ struct pwr_regs pwr_regs_bd71827 = {
 	.dcin_stat = BD71827_REG_DCIN_STAT,
 	.dcin_collapse_limit = BD71827_REG_DCIN_CLPS,
 	.chg_set1 = BD71827_REG_CHG_SET1,
+	.chg_en = BD71827_REG_CHG_SET1,
 	.vbat_alm_limit_u = BD71827_REG_ALM_VBAT_TH_U,
 	.batcap_mon_limit_u = BD71827_REG_CC_BATCAP1_TH_U,
 	.conf = BD71827_REG_CONF,
@@ -215,6 +217,7 @@ struct pwr_regs pwr_regs_bd71828 = {
 	.dcin_stat = BD71828_REG_DCIN_STAT,
 	.dcin_collapse_limit = BD71828_REG_DCIN_CLPS,
 	.chg_set1 = BD71828_REG_CHG_SET1,
+	.chg_en   = BD71828_REG_CHG_EN,
 	.vbat_alm_limit_u = BD71828_REG_ALM_VBAT_LIMIT_U,
 	.batcap_mon_limit_u = BD71828_REG_BATCAP_MON_LIMIT_U,
 	.conf = BD71828_REG_CONF,
@@ -2195,11 +2198,11 @@ static ssize_t bd71827_sysfs_set_charging(struct device *dev,
 	}
 
 	if(val == 1)
-		ret = regmap_update_bits(pwr->mfd->regmap, pwr->regs->chg_set1,
+		ret = regmap_update_bits(pwr->mfd->regmap, pwr->regs->chg_en,
 					 BD7182x_MASK_CHG_EN,
 					 BD7182x_MASK_CHG_EN );
 	else
-		ret = regmap_update_bits(pwr->mfd->regmap, pwr->regs->chg_set1,
+		ret = regmap_update_bits(pwr->mfd->regmap, pwr->regs->chg_en,
 					 BD7182x_MASK_CHG_EN,
 					 0);
 	if (ret)
@@ -2216,7 +2219,7 @@ static ssize_t bd71827_sysfs_show_charging(struct device *dev,
 	struct bd71827_power *pwr = power_supply_get_drvdata(psy);
 	int chg_en, ret;
 
-	ret = regmap_read(pwr->mfd->regmap, pwr->regs->chg_set1, &chg_en);
+	ret = regmap_read(pwr->mfd->regmap, pwr->regs->chg_en, &chg_en);
 	if (ret)
 		return ret;
 
@@ -2380,7 +2383,7 @@ static int bd7182x_set_chip_specifics(struct bd71827_power *pwr)
 	}
 	return 0;
 }
-
+#if 0
 static irqreturn_t bd7182x_short_push(int irq, void *data)
 {
 	struct bd71827_power *pwr = (struct bd71827_power *)data;
@@ -2390,6 +2393,7 @@ static irqreturn_t bd7182x_short_push(int irq, void *data)
 
 	return IRQ_HANDLED;
 }
+#endif
 static irqreturn_t bd7182x_long_push(int irq, void *data)
 {
 	struct bd71827_power *pwr = (struct bd71827_power *)data;
@@ -2536,7 +2540,7 @@ int bd7182x_get_irqs(struct platform_device *pdev, struct bd71827_power *pwr)
 	static const struct bd7182x_irq_res irqs[] = {
 		BDIRQ("bd71828-pwr-longpush", bd7182x_long_push),
 		BDIRQ("bd71828-pwr-midpush", bd7182x_mid_push),
-		BDIRQ("bd71828-pwr-shortpush", bd7182x_short_push),
+/*		BDIRQ("bd71828-pwr-shortpush", bd7182x_short_push), */
 		BDIRQ("bd71828-pwr-push", bd7182x_push),
 		BDIRQ("bd71828-pwr-dcin-in", bd7182x_dcin_detected),
 		BDIRQ("bd71828-pwr-dcin-out", bd7182x_dcin_removed),
