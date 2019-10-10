@@ -113,25 +113,6 @@ static const struct regmap_range volatile_ranges[] = {
 		.range_min = BD71828_REG_INT_MAIN,
 		.range_max = BD71828_REG_IO_STAT,
 	},
-#if 0
-
-{
-		/*
-		 * WDT control reg is special. Magic values must be written to
-		 * it in order to change the control. Should not be cached.
-		 */
-		.range_min = BD70528_REG_WDT_CTRL,
-		.range_max = BD70528_REG_WDT_CTRL,
-	}, {
-		/*
-		 * BD70528 also contains a few other registers which require
-		 * magic sequences to be written in order to update the value.
-		 * At least SHIPMODE, HWRESET, WARMRESET,and STANDBY
-		 */
-		.range_min = BD70528_REG_SHIPMODE,
-		.range_max = BD70528_REG_STANDBY,
-	},
-#endif
 };
 
 static const struct regmap_access_table volatile_regs = {
