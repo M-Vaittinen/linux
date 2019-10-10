@@ -528,7 +528,7 @@ int bd71828_set_runlevel(struct regulator *regulator, unsigned int level)
 	if (!rd)
 		return -ENOENT;
 
-	if (!data || !data->allow_runlvl)
+	if (!rd || !rd->allow_runlvl)
 		return -EINVAL; 
 
 	if (rd->gps)
@@ -557,7 +557,7 @@ int bd71828_get_runlevel(struct regulator *regulator, unsigned int *level)
 	if (!rd)
 		return -ENOENT;
 
-	if (!data || !data->allow_runlvl)
+	if (!rd || !rd->allow_runlvl)
 		return -EINVAL; 
 
 	if (!rd->gps)
