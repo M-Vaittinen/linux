@@ -26,6 +26,8 @@
 #include <asm/uaccess.h>
 
 #define MAX(X, Y) ((X) >= (Y) ? (X) : (Y))
+#define uAMP_TO_mAMP(ma) ((ma) / 1000)
+#define mAMP_TO_uAMP(ma) ((ma) * 1000)
 
 /* BD71828 and BD71827 common defines */
 #define BD7182x_MASK_VBAT_U     	0x1f
@@ -118,6 +120,7 @@ struct pwr_regs {
 	u8 vbat_avg;
 	u8 ibat;
 	u8 ibat_avg;
+	int curr_factor;
 	u8 vsys_avg;
 	u8 vbat_min_avg;
 	u8 meas_clear;
@@ -157,6 +160,8 @@ struct pwr_regs pwr_regs_bd71827 = {
 	.vbat_avg = BD71827_REG_VM_SA_VBAT_U,
 	.ibat = BD71827_REG_CC_CURCD_U,
 	.ibat_avg = BD71827_REG_CC_SA_CURCD_U,
+	/* Reg val to uA */
+	.curr_factor = 1000,
 	.vsys_avg = BD71827_REG_VM_SA_VSYS_U,
 	.vbat_min_avg = BD71827_REG_VM_SA_VBAT_MIN_U,
 	.meas_clear = BD71827_REG_VM_SA_MINMAX_CLR,
@@ -196,6 +201,8 @@ struct pwr_regs pwr_regs_bd71828 = {
 	.vbat_avg = BD71828_REG_VBAT_U,
 	.ibat = BD71828_REG_IBAT_U,
 	.ibat_avg = BD71828_REG_IBAT_AVG_U,
+	/* Reg val to uA */
+	.curr_factor = 330,
 	.vsys_avg = BD71828_REG_VSYS_AVG_U,
 	.vbat_min_avg = BD71828_REG_VBAT_MIN_AVG_U,
 	.meas_clear = BD71828_REG_MEAS_CLEAR,
@@ -597,7 +604,7 @@ static int bd71827_get_current_ds_adc(struct bd71827_power *pwr, int *curr, int 
 		*tmp &= BD7182x_MASK_IBAT_U;
 		tmp_curr = be16_to_cpu(tmp_curr);
 
-		*vals[i] = dir * ((int)tmp_curr) * 1000;
+		*vals[i] = dir * ((int)tmp_curr) * pwr->regs->curr_factor;
 	}
 
 	return ret;
@@ -1184,12 +1191,14 @@ static int bd71827_get_voltage_current(struct bd71827_power* pwr,
  * @param pwr power device
  * @return 0
  */
+
+
 static int bd71827_adjust_coulomb_count_sw(struct bd71827_power* pwr,
 					   struct bd7182x_soc_data *wd)
 {
 	int tmp_curr_mA, ret;
 
-	tmp_curr_mA = wd->curr / 1000;
+	tmp_curr_mA = uAMP_TO_mAMP(wd->curr);
 	if ((tmp_curr_mA * tmp_curr_mA) <=
 	    (THR_RELAX_CURRENT_DEFAULT * THR_RELAX_CURRENT_DEFAULT))
 		 /* No load */
@@ -1315,7 +1324,7 @@ static int bd71827_calc_full_cap(struct bd71827_power* pwr,
 	/* Calculate full capacity by cycle */
 	designed_cap_uAh = A10s_mAh(wd->designed_cap) * 1000;
 	full_cap_uAh = designed_cap_uAh - dgrd_cyc_cap * wd->cycle;
-	wd->full_cap = mAh_A10s(full_cap_uAh / 1000);
+	wd->full_cap = mAh_A10s( uAMP_TO_mAMP(full_cap_uAh));
 	dev_dbg(pwr->mfd->dev,  "Calculate full capacity by cycle\n");
 	dev_dbg(pwr->mfd->dev,  "%s() pwr->full_cap = %d\n", __func__,
 		wd->full_cap);
@@ -1325,19 +1334,19 @@ static int bd71827_calc_full_cap(struct bd71827_power* pwr,
 	if (wd->temp >= DGRD_TEMP_M_DEFAULT) {
 		full_cap_uAh += (wd->temp - DGRD_TEMP_M_DEFAULT) *
 				dgrd_temp_cap_h;
-		wd->full_cap = mAh_A10s(full_cap_uAh / 1000);
+		wd->full_cap = mAh_A10s(uAMP_TO_mAMP(full_cap_uAh));
 	}
 	else if (wd->temp >= DGRD_TEMP_L_DEFAULT) {
 		full_cap_uAh += (wd->temp - DGRD_TEMP_M_DEFAULT) *
 				dgrd_temp_cap_m;
-		wd->full_cap = mAh_A10s(full_cap_uAh / 1000);
+		wd->full_cap = mAh_A10s(uAMP_TO_mAMP(full_cap_uAh));
 	}
 	else {
 		full_cap_uAh += (DGRD_TEMP_L_DEFAULT - DGRD_TEMP_M_DEFAULT) *
 				dgrd_temp_cap_m;
 		full_cap_uAh += (wd->temp - DGRD_TEMP_L_DEFAULT) *
 				dgrd_temp_cap_l;
-		wd->full_cap = mAh_A10s(full_cap_uAh / 1000);
+		wd->full_cap = mAh_A10s(uAMP_TO_mAMP(full_cap_uAh));
 	}
 	
 	if (wd->full_cap < 1)
