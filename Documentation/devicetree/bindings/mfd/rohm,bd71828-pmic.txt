@@ -46,6 +46,12 @@ Optional properties:
 				  which should not be configured for GPIO.
 				  Please see the ../gpio/gpio.txt for more
 				  information.
+- rohm,charger-sense-resistor	: BD71827 and BD71828 have SAR ADC for measuring
+				  charging currents. External sense resistor
+				  (RSENSE in data sheet) should be used. If some
+				  other but 30MOhm resistor is used the
+				  resistance value should be given here in
+				  Ohms.
 
 Example:
 
@@ -72,6 +78,9 @@ Example:
 		gpio-line-names = "EPDEN";
 		rohm,dvs-vsel-gpios = <&gpio1 12 0>,
 				      <&gpio1 13 0>;
+		/* 10M RSENS resistor */
+		rohm,charger-sense-resistor = <10000000>;
+
 		regulators {
 			buck1: BUCK1 {
 				regulator-name = "buck1";
