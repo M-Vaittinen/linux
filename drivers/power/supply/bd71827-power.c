@@ -22,6 +22,7 @@
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/of.h>
 #include <linux/proc_fs.h>
 #include <asm/uaccess.h>
 
@@ -120,7 +121,6 @@ struct pwr_regs {
 	u8 vbat_avg;
 	u8 ibat;
 	u8 ibat_avg;
-	int curr_factor;
 	u8 vsys_avg;
 	u8 vbat_min_avg;
 	u8 meas_clear;
@@ -160,8 +160,6 @@ struct pwr_regs pwr_regs_bd71827 = {
 	.vbat_avg = BD71827_REG_VM_SA_VBAT_U,
 	.ibat = BD71827_REG_CC_CURCD_U,
 	.ibat_avg = BD71827_REG_CC_SA_CURCD_U,
-	/* Reg val to uA */
-	.curr_factor = 1000,
 	.vsys_avg = BD71827_REG_VM_SA_VSYS_U,
 	.vbat_min_avg = BD71827_REG_VM_SA_VBAT_MIN_U,
 	.meas_clear = BD71827_REG_VM_SA_MINMAX_CLR,
@@ -201,8 +199,6 @@ struct pwr_regs pwr_regs_bd71828 = {
 	.vbat_avg = BD71828_REG_VBAT_U,
 	.ibat = BD71828_REG_IBAT_U,
 	.ibat_avg = BD71828_REG_IBAT_AVG_U,
-	/* Reg val to uA */
-	.curr_factor = 330,
 	.vsys_avg = BD71828_REG_VSYS_AVG_U,
 	.vbat_min_avg = BD71828_REG_VBAT_MIN_AVG_U,
 	.meas_clear = BD71828_REG_MEAS_CLEAR,
@@ -467,6 +463,8 @@ struct bd71827_power {
 	struct delayed_work bd_work;	/**< delayed work for timed work */
 
 	struct pwr_regs *regs;
+	/* Reg val to uA */
+	int curr_factor;
 	int (*get_temp) (struct bd71827_power *pwr, int *temp);
 };
 
@@ -604,7 +602,7 @@ static int bd71827_get_current_ds_adc(struct bd71827_power *pwr, int *curr, int 
 		*tmp &= BD7182x_MASK_IBAT_U;
 		tmp_curr = be16_to_cpu(tmp_curr);
 
-		*vals[i] = dir * ((int)tmp_curr) * pwr->regs->curr_factor;
+		*vals[i] = dir * ((int)tmp_curr) * pwr->curr_factor;
 	}
 
 	return ret;
@@ -2374,8 +2372,11 @@ void bd71827_chip_hibernate(void)
 }
 #endif // PWRCTRL_HACK
 
-static int bd7182x_set_chip_specifics(struct bd71827_power *pwr)
+#define RSENS_CURR 10000000000LLU
+
+static int bd7182x_set_chip_specifics(struct bd71827_power *pwr, int rsens_ohm)
 {
+	u64 tmp = RSENS_CURR;
 	switch (pwr->mfd->chip_type) {
 		case ROHM_CHIP_TYPE_BD71828:
 			pwr->regs = &pwr_regs_bd71828;
@@ -2390,6 +2391,11 @@ static int bd7182x_set_chip_specifics(struct bd71827_power *pwr)
 			dev_err(pwr->mfd->dev, "Unknown PMIC\n");
 			return -EINVAL;
 	}
+	/* Reg val to uA */
+	do_div(tmp, rsens_ohm);
+
+	pwr->curr_factor = tmp;
+	pr_info("Setting curr-factor to %u\n", pwr->curr_factor);
 	return 0;
 }
 #if 0
@@ -2578,6 +2584,30 @@ int bd7182x_get_irqs(struct platform_device *pdev, struct bd71827_power *pwr)
 	return ret;
 }
 
+#define RSENS_DEFAULT_30MOHM 30000000
+
+int dt_get_rsens(struct device *dev, int *rsens_ohm)
+{
+	if (dev->of_node) {
+		int ret;
+		uint32_t rs;
+
+		ret = of_property_read_u32(dev->of_node,
+					   "rohm,charger-sense-resistor"
+					   &rs);
+		if (ret) {
+			if (ret == -EINVAL)
+				return 0;
+
+			dev_err(dev, "Bad RSENS dt property\n");
+			return ret;
+		}
+
+		*rsens_ohm = (int)rs;
+	}
+	return 0;
+}
+
 /** @brief probe pwr device 
  * @param pdev platform deivce of bd71827_power
  * @retval 0 success
@@ -2591,6 +2621,7 @@ static int bd71827_power_probe(struct platform_device *pdev)
 	struct power_supply_config ac_cfg = {};
 	struct power_supply_config bat_cfg = {};
 	int ret;
+	int rsens_ohm = RSENS_DEFAULT_30MOHM;
 
 	mfd = dev_get_drvdata(pdev->dev.parent);
 
@@ -2602,8 +2633,13 @@ static int bd71827_power_probe(struct platform_device *pdev)
 	pwr->mfd->dev = &pdev->dev;
 	spin_lock_init(&pwr->dlock);
 
-	ret = bd7182x_set_chip_specifics(pwr);
+	ret = dt_get_rsens(pdev->dev.parent, &rsens_ohm);
+	if (ret)
+		return ret;
+	else
+		pr_info("RSENS prop found %u\n", rsens_ohm);
 
+	ret = bd7182x_set_chip_specifics(pwr, rsens_ohm);
 	if (ret)
 		return ret;
 
