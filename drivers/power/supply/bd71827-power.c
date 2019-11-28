@@ -2593,7 +2593,7 @@ int dt_get_rsens(struct device *dev, int *rsens_ohm)
 		uint32_t rs;
 
 		ret = of_property_read_u32(dev->of_node,
-					   "rohm,charger-sense-resistor"
+					   "rohm,charger-sense-resistor",
 					   &rs);
 		if (ret) {
 			if (ret == -EINVAL)
