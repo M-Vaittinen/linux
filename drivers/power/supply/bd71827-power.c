@@ -437,8 +437,6 @@ struct bd7182x_soc_data {
 	u32	coulomb_cnt;		/**< Coulomb Counter */
 	int	state_machine;		/**< initial-procedure state machine */
 
-	u32	soc_org;		/**< State Of Charge using designed
-					     capacity without by load */
 	u32	soc_norm;		/**< State Of Charge using full
 					     capacity without by load */
 	u32	soc;			/**< State Of Charge using full
@@ -478,8 +476,7 @@ enum {
 	STAT_INITIALIZED,
 };
 
-static int bd71827_calc_soc_org(struct bd71827_power* pwr,
-				struct bd7182x_soc_data *wd);
+u32 bd71827_calc_soc_org(u32 cc, int designed_cap);
 
 static int bd7182x_write16(struct bd71827_power *pwr, int reg, uint16_t val)
 {
@@ -956,6 +953,22 @@ static int read_cc(struct bd71827_power* pwr, u32 *cc)
 	return __read_cc(pwr, cc, pwr->regs->coulomb3);
 }
 
+static int limit_cc(struct bd71827_power* pwr, struct bd7182x_soc_data *wd,
+		    u32 *soc_org)
+{
+	uint16_t bcap;
+	int ret;
+
+	*soc_org = 100;
+	bcap = wd->designed_cap + wd->designed_cap / 200;
+	ret = update_cc(pwr, bcap);
+	
+	dev_dbg(pwr->mfd->dev,  "Limit Coulomb Counter\n");
+	dev_dbg(pwr->mfd->dev,  "CC_CCNTD = %d\n", wd->coulomb_cnt);
+
+	return ret;
+}
+
 /** @brief set initial coulomb counter value from battery voltage
  * @param pwr power device
  * @return 0
@@ -1369,29 +1382,10 @@ static int bd71827_calc_full_cap(struct bd71827_power* pwr,
  * @param pwr power device
  * @return 0
  */
-static int bd71827_calc_soc_org(struct bd71827_power* pwr,
-				struct bd7182x_soc_data *wd)
+
+u32 bd71827_calc_soc_org(u32 cc, int designed_cap)
 {
-	uint16_t bcap;
-	int ret;
-
-	wd->soc_org = ( wd->coulomb_cnt >> 16) * 100 / wd->designed_cap;
-	if (wd->soc_org > 100) {
-		wd->soc_org = 100;
-
-		bcap = wd->designed_cap + wd->designed_cap / 200;
-		ret = update_cc(pwr, bcap);
-		if (ret)
-			return ret;
-
-		dev_dbg(pwr->mfd->dev,  "Limit Coulomb Counter\n");
-		dev_dbg(pwr->mfd->dev,  "CC_CCNTD = %d\n",
-			wd->coulomb_cnt);
-	}
-	dev_dbg(pwr->mfd->dev, "%s(): pwr->soc_org = %d\n", __func__,
-		wd->soc_org);
-
-	return 0;
+	return ( cc >> 16) * 100 / designed_cap;
 }
 
 /** @brief calculate SOC values by full capacity
@@ -1731,7 +1725,7 @@ static int bd71827_init_hardware(struct bd71827_power *pwr,
 				 struct bd7182x_soc_data *wd)
 {
 	int r, temp, ret;
-	u32 cc;
+	u32 cc, sorg;
 
 	ret = regmap_write(pwr->mfd->regmap, pwr->regs->dcin_collapse_limit,
 			   BD7182x_DCIN_COLLAPSE_DEFAULT);
@@ -1839,8 +1833,18 @@ static int bd71827_init_hardware(struct bd71827_power *pwr,
 		return ret;
 
 	wd->coulomb_cnt = cc;
-	bd71827_calc_soc_org(pwr, wd);
-	wd->soc_norm = wd->soc_org;
+	/* If we boot up with CC stopped and both REX and FULL CC being 0
+	 * - then the bd71827_adjust_coulomb_count and
+	 * bd71827_reset_coulomb_count wont start CC. Just start CC here for
+	 * now to mimic old operation where bd71827_calc_soc_org did
+	 * always stop and start cc.
+	 */
+	start_cc(pwr);
+	sorg = bd71827_calc_soc_org(wd->coulomb_cnt, wd->designed_cap);
+	if (sorg > 100)
+		limit_cc(pwr, wd, &sorg);
+
+	wd->soc_norm = sorg;
 	wd->soc = wd->soc_norm;
 	wd->clamp_soc = wd->soc;
 	dev_dbg(pwr->mfd->dev,  "%s() CC_CCNTD = %d\n", __func__, wd->coulomb_cnt);
@@ -1907,6 +1911,7 @@ static void bd_work_callback(struct work_struct *work)
 	struct bd71827_power *pwr;
 	struct delayed_work *delayed_work;
 	int status, changed = 0, ret;
+	u32 sorg;
 	static int cap_counter = 0;
 	const char *errstr = "DCIN status reading failed";
 	struct bd7182x_soc_data *wd;
@@ -1992,8 +1997,10 @@ static void bd_work_callback(struct work_struct *work)
 		goto err_out;
 
 	errstr = "Failed to calculate org state of charge";
-	ret = bd71827_calc_soc_org(pwr, wd);
-	if (ret) 
+	sorg = bd71827_calc_soc_org(wd->coulomb_cnt, wd->designed_cap);
+	if (sorg > 100)
+		ret = limit_cc(pwr, wd, &sorg);
+	if (ret)
 		goto err_out;
 
 	errstr = "Failed to calculate norm state of charge";
