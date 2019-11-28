@@ -118,6 +118,7 @@
 struct pwr_regs {
 	u8 vbat_init;
 	u8 vbat_init2;
+	u8 vbat_init3;
 	u8 vbat_avg;
 	u8 ibat;
 	u8 ibat_avg;
@@ -157,6 +158,7 @@ struct pwr_regs {
 struct pwr_regs pwr_regs_bd71827 = {
 	.vbat_init = BD71827_REG_VM_OCV_PRE_U,
 	.vbat_init2 = BD71827_REG_VM_OCV_PST_U,
+	.vbat_init3 = BD71827_REG_VM_OCV_PWRON_U,
 	.vbat_avg = BD71827_REG_VM_SA_VBAT_U,
 	.ibat = BD71827_REG_CC_CURCD_U,
 	.ibat_avg = BD71827_REG_CC_SA_CURCD_U,
@@ -196,6 +198,7 @@ struct pwr_regs pwr_regs_bd71827 = {
 struct pwr_regs pwr_regs_bd71828 = {
 	.vbat_init = BD71828_REG_VBAT_INITIAL1_U,
 	.vbat_init2 = BD71828_REG_VBAT_INITIAL2_U,
+	.vbat_init3 = BD71828_REG_OCV_PWRON_U,
 	.vbat_avg = BD71828_REG_VBAT_U,
 	.ibat = BD71828_REG_IBAT_U,
 	.ibat_avg = BD71828_REG_IBAT_AVG_U,
@@ -417,8 +420,6 @@ struct bd7182x_soc_data {
 	int    charge_status;		/**< last charge status */
 	int    bat_status;		/**< last bat status */
 
-	int	hw_ocv1;		/**< HW ocv1 */
-	int	hw_ocv2;		/**< HW ocv2 */
 	int	bat_online;		/**< battery connect */
 	int	charger_online;		/**< charger connect */
 	int	vcell;			/**< battery voltage */
@@ -504,34 +505,43 @@ static int bd7182x_read16_himask(struct bd71827_power *pwr, int reg, int himask,
 }
 
 #if INIT_COULOMB == BY_VBATLOAD_REG
+#define INITIAL_OCV_REGS 3
 /** @brief get initial battery voltage and current
  * @param pwr power device
  * @return 0
  */
 static int bd71827_get_init_bat_stat(struct bd71827_power *pwr,
-				     struct bd7182x_soc_data *wd)
+				     int *ocv)
 {
-	uint16_t vcell;
 	int ret;
 	int i;
-	u8 regs[] = { pwr->regs->vbat_init, pwr->regs->vbat_init2 };
-	int *vals[] = { &wd->hw_ocv1, &wd->hw_ocv2 };
+	u8 regs[INITIAL_OCV_REGS] = {
+		pwr->regs->vbat_init,
+		pwr->regs->vbat_init2,
+		pwr->regs->vbat_init3
+	 };
+	uint16_t vals[INITIAL_OCV_REGS];
 
-	for (i = 0; i < ARRAY_SIZE(regs); i++) {
+	*ocv = 0;
+
+	for (i = 0; i < INITIAL_OCV_REGS; i++) {
 
 		ret = bd7182x_read16_himask(pwr, regs[i], BD7182x_MASK_VBAT_U,
-					    &vcell);
+					    &vals[i]);
 		if (ret) {
 			dev_err(pwr->mfd->dev,
 				"Failed to read initial battery voltage\n");
 			return ret;
 		}
+		*ocv = MAX(vals[i], *ocv);
 
-		dev_dbg(pwr->mfd->dev, "VM_OCV_%d = %d\n", i, vcell * 1000);
-		*vals[i] = (int)vcell * 1000;
+		dev_dbg(pwr->mfd->dev, "VM_OCV_%d = %d\n", i,
+			((int)vals[i]) * 1000);
 	}
 
-	return 0;
+	*ocv *= 1000;
+
+	return ret;
 }
 #endif
 
@@ -856,7 +866,7 @@ static int __write_cc(struct bd71827_power* pwr, uint16_t bcap,
 
 	*swap_hi = cpu_to_be16(bcap & BD7182x_MASK_CC_CCNTD_HI);
 	*swap_lo = 0;
-	
+
 	ret = regmap_bulk_write(pwr->mfd->regmap, reg, &tmp, sizeof(tmp));
 	if (ret) {
 		dev_err(pwr->mfd->dev, "Failed to write coulomb counter\n");
@@ -959,9 +969,7 @@ static int calibration_coulomb_counter(struct bd71827_power* pwr,
 
 #if INIT_COULOMB == BY_VBATLOAD_REG
 	/* Get init OCV by HW */
-	bd71827_get_init_bat_stat(pwr, wd);
-
-	ocv = MAX(wd->hw_ocv1, wd->hw_ocv2);
+	bd71827_get_init_bat_stat(pwr, &ocv);
 
 	dev_dbg(pwr->mfd->dev, "ocv %d\n", ocv);
 #elif INIT_COULOMB == BY_BAT_VOLT
