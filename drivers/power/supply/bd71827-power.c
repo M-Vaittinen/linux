@@ -761,19 +761,22 @@ static int bd71827_reset_coulomb_count(struct bd71827_power* pwr,
 
 /** @brief get battery charge status
  * @param pwr power device
- * @return temperature in unit deg.Celsius
+ * @return 0 at success or negative error code.
  */
 static int bd71827_charge_status(struct bd71827_power *pwr,
 				 struct bd7182x_soc_data *wd)
 {
 	unsigned int state;
-	int ret = 1;
+	int ret;
 
 	wd->prev_rpt_status = wd->rpt_status;
 
 	ret = regmap_read(pwr->mfd->regmap, pwr->regs->chg_state, &state);
-	if (ret)
-		dev_err(pwr->mfd->dev, "charger status reading failed (%d)\n", ret);
+	if (ret) {
+		dev_err(pwr->mfd->dev, "charger status reading failed (%d)\n",
+			ret);
+		return ret;
+	}
 
 	state &= BD7182x_MASK_CHG_STATE;
 
@@ -781,7 +784,6 @@ static int bd71827_charge_status(struct bd71827_power *pwr,
 
 	switch (state) {
 	case 0x00:
-		ret = 0;
 		wd->rpt_status = POWER_SUPPLY_STATUS_DISCHARGING;
 		wd->bat_health = POWER_SUPPLY_HEALTH_GOOD;
 		break;
@@ -793,7 +795,6 @@ static int bd71827_charge_status(struct bd71827_power *pwr,
 		wd->bat_health = POWER_SUPPLY_HEALTH_GOOD;
 		break;
 	case 0x0F:
-		ret = 0;
 		wd->rpt_status = POWER_SUPPLY_STATUS_FULL;
 		wd->bat_health = POWER_SUPPLY_HEALTH_GOOD;
 		break;
@@ -807,7 +808,6 @@ static int bd71827_charge_status(struct bd71827_power *pwr,
 	case 0x22:
 	case 0x23:
 	case 0x24:
-		ret = 0;
 		wd->rpt_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		wd->bat_health = POWER_SUPPLY_HEALTH_OVERHEAT;
 		break;
@@ -815,19 +815,17 @@ static int bd71827_charge_status(struct bd71827_power *pwr,
 	case 0x31:
 	case 0x32:
 	case 0x40:
-		ret = 0;
 		wd->rpt_status = POWER_SUPPLY_STATUS_DISCHARGING;
 		wd->bat_health = POWER_SUPPLY_HEALTH_GOOD;
 		break;
 	case 0x7f:
 	default:
-		ret = 0;
 		wd->rpt_status = POWER_SUPPLY_STATUS_NOT_CHARGING;
 		wd->bat_health = POWER_SUPPLY_HEALTH_DEAD;
 		break;	
 	}
 
-	bd71827_reset_coulomb_count(pwr, wd);
+	ret = bd71827_reset_coulomb_count(pwr, wd);
 
 	return ret;
 }
