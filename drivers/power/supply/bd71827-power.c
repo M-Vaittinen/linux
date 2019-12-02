@@ -431,8 +431,8 @@ struct bd7182x_soc_data {
 	int	bat_health;		/**< battery health */
 	int	designed_cap;		/**< battery designed capacity */
 	int	full_cap;		/**< battery capacity */
-	int	curr;			/**< battery current from DS-ADC */
-	int	curr_sar;		/**< battery current from VM_IBAT */
+	int	curr;			/**< battery current from ADC */
+	int	curr_avg;		/**< average battery current */
 	int	temp;			/**< battery tempature */
 	u32	coulomb_cnt;		/**< Coulomb Counter */
 	int	state_machine;		/**< initial-procedure state machine */
@@ -1136,26 +1136,9 @@ static int bd71827_reset_coulomb_count(struct bd71827_power* pwr,
 static int bd71827_get_voltage_current(struct bd71827_power* pwr,
 				       struct bd7182x_soc_data *wd)
 {
-//	int p_id;
 	int ret;
 	int temp, temp2;
-/*
- 	MFD driver should know the product type and invoke us with
-	correct chip-type. Here we assume BD71827 or BD71828. If we later need
-	to support other chips we then add more chip types as well as
-	proper register descriptions / chip specific functions
-	p_id = bd71827_reg_read(pwr->mfd, BD71827_REG_PRODUCT) & PRODUCT_VERSION;
 
-	if (p_id == 0) {  BD7181x 
-		 Read detailed vcell and current
-	}
-	else { BD7182x 
-		Read detailed vcell and current
-		bd71827_get_vbat(pwr, &pwr->vcell);
-
-		bd71827_get_current_ds_adc(pwr, &pwr->curr_sar, &pwr->curr);
-	}
-*/
 	if (pwr->mfd->chip_type != ROHM_CHIP_TYPE_BD71828 &&
 	    pwr->mfd->chip_type != ROHM_CHIP_TYPE_BD71827) {
 		return -EINVAL;
@@ -1169,8 +1152,8 @@ static int bd71827_get_voltage_current(struct bd71827_power* pwr,
 	ret = bd71827_get_current_ds_adc(pwr, &temp, &temp2);
 	if (ret)
 		return ret;
-	wd->curr_sar = temp;
-	wd->curr = temp2;
+	wd->curr_avg = temp2;
+	wd->curr = temp;
 
 	/* Read detailed vsys */
 	ret = bd71827_get_vsys(pwr, &temp);
@@ -2149,6 +2132,9 @@ static int bd71827_battery_get_property(struct power_supply *psy,
 			      A10s_mAh(wr->full_cap) * 10;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_AVG:
+		val->intval = wr->curr_avg;
+		break;
+	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = wr->curr;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
@@ -2193,6 +2179,7 @@ static enum power_supply_property bd71827_battery_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_CURRENT_AVG,
+	POWER_SUPPLY_PROP_CURRENT_NOW,
 	POWER_SUPPLY_PROP_TEMP,
 	POWER_SUPPLY_PROP_VOLTAGE_MAX,
 	POWER_SUPPLY_PROP_VOLTAGE_MIN,
