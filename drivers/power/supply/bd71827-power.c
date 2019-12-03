@@ -1323,6 +1323,13 @@ static int bd71827_calc_full_cap(struct bd71827_power* pwr,
 
 	/* Calculate full capacity by cycle */
 	designed_cap_uAh = A10s_mAh(wd->designed_cap) * 1000;
+
+	if (dgrd_cyc_cap * wd->cycle >= designed_cap_uAh) {
+		/* Battry end of life? */
+		wd->full_cap = 1;
+		return 0;
+	}
+
 	full_cap_uAh = designed_cap_uAh - dgrd_cyc_cap * wd->cycle;
 	wd->full_cap = mAh_A10s( uAMP_TO_mAMP(full_cap_uAh));
 	dev_dbg(pwr->mfd->dev,  "Calculate full capacity by cycle\n");
