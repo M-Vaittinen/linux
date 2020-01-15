@@ -61,10 +61,10 @@
 
 #define JITTER_DEFAULT			3000		/* hope 3s is enough */
 #define JITTER_REPORT_CAP		10000		/* 10 seconds */
-#define BATTERY_CAP_MAH_DEFAULT	910
+#define BATTERY_CAP_MAH_DEFAULT		1529
 #define MAX_VOLTAGE_DEFAULT		ocv_table_default[0]
 #define MIN_VOLTAGE_DEFAULT		3400000
-#define THR_VOLTAGE_DEFAULT		4100000
+#define THR_VOLTAGE_DEFAULT		4250000
 #define MAX_CURRENT_DEFAULT		890000		/* uA */
 #define AC_NAME					"bd71827_ac"
 #define BAT_NAME				"bd71827_bat"
@@ -93,17 +93,17 @@
 #define THR_RELAX_CURRENT_DEFAULT	5		/* mA */
 #define THR_RELAX_TIME_DEFAULT		(60 * 60)	/* sec. */
 
-#define DGRD_CYC_CAP_DEFAULT		26	/* 1 micro Ah unit */
+#define DGRD_CYC_CAP_DEFAULT		88	/* 1 micro Ah unit */
 
 #define DGRD_TEMP_H_DEFAULT			45	/* 1 degrees C unit */
 #define DGRD_TEMP_M_DEFAULT			25	/* 1 degrees C unit */
 #define DGRD_TEMP_L_DEFAULT			5	/* 1 degrees C unit */
 #define DGRD_TEMP_VL_DEFAULT		0	/* 1 degrees C unit */
 
-#define SOC_EST_MAX_NUM_DEFAULT 	1
+#define SOC_EST_MAX_NUM_DEFAULT 	5
 #define DGRD_TEMP_CAP_H_DEFAULT		(0)	/* 1 micro Ah unit */
-#define DGRD_TEMP_CAP_M_DEFAULT		(1187)	/* 1 micro Ah unit */
-#define DGRD_TEMP_CAP_L_DEFAULT		(5141)	/* 1 micro Ah unit */
+#define DGRD_TEMP_CAP_M_DEFAULT		(0)	/* 1 micro Ah unit */
+#define DGRD_TEMP_CAP_L_DEFAULT		(0)	/* 1 micro Ah unit */
 
 #define PWRCTRL_NORMAL				0x22
 #define PWRCTRL_RESET				0x23
@@ -237,29 +237,29 @@ struct pwr_regs pwr_regs_bd71828 = {
 
 
 static int ocv_table_default[23] = {
-	4200000,
-	4167456,
-	4109781,
-	4065242,
-	4025618,
-	3989877,
-	3958031,
-	3929302,
-	3900935,
-	3869637,
-	3838475,
-	3815196,
-	3799778,
-	3788385,
-	3779627,
-	3770675,
-	3755368,
-	3736049,
-	3713545,
-	3685118,
-	3645278,
-	3465599,
-	2830610
+	4350000,
+	4325945,
+	4255935,
+	4197476,
+	4142843,
+	4090615,
+	4047113,
+	3987352,
+	3957835,
+	3920815,
+	3879834,
+	3827010,
+	3807239,
+	3791379,
+	3779925,
+	3775038,
+	3773530,
+	3756695,
+	3734099,
+	3704867,
+	3635377,
+	3512942,
+	3019825
 };	/* unit 1 micro V */
 
 static int soc_table_default[23] = {
@@ -292,27 +292,27 @@ static int soc_table_default[23] = {
 static int vdr_table_h_default[23] = {
 	100,
 	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100
+	102,
+	104,
+	105,
+	108,
+	111,
+	115,
+	122,
+	138,
+	158,
+	96,
+	108,
+	112,
+	117,
+	123,
+	137,
+	109,
+	131,
+	150,
+	172,
+	136,
+	218
 };
 
 static int vdr_table_m_default[23] = {
@@ -320,77 +320,77 @@ static int vdr_table_m_default[23] = {
 	100,
 	100,
 	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100
+	102,
+	104,
+	114,
+	110,
+	127,
+	141,
+	139,
+	96,
+	102,
+	106,
+	109,
+	113,
+	130,
+	134,
+	149,
+	188,
+	204,
+	126,
+	271
 };
 
 static int vdr_table_l_default[23] = {
 	100,
 	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100
+	98,
+	96,
+	96,
+	96,
+	105,
+	94,
+	108,
+	105,
+	95,
+	89,
+	90,
+	92,
+	99,
+	112,
+	129,
+	143,
+	155,
+	162,
+	156,
+	119,
+	326
 };
 
 static int vdr_table_vl_default[23] = {
 	100,
 	100,
+	98,
+	96,
+	95,
+	97,
+	101,
+	92,
 	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100,
-	100
+	97,
+	91,
+	89,
+	90,
+	93,
+	103,
+	115,
+	128,
+	139,
+	148,
+	148,
+	156,
+	246,
+	336
 };
 
 int use_load_bat_params;
