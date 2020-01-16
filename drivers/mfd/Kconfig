@@ -1921,6 +1921,18 @@ config MFD_ROHM_BD71828
 	  converters, 7 LDOs, and a 1500 mA single-cell linear charger.
 	  Also included is a Coulomb counter, a real-time clock (RTC), and
 	  a 32.768 kHz clock gate.
+config MFD_ROHM_BD96801
+	tristate "ROHM BD96801 Power Management IC"
+	depends on I2C=y
+#	Should not depend on OF if Xeons are targeted
+	depends on OF
+	select REGMAP_I2C
+	select REGMAP_IRQ
+	select MFD_CORE
+	help
+	  Select this option to get support for the ROHM BD96801 Power
+	  Management IC. BD71837 is a scalable power management IC for
+	  industrial and automotive use.
 
 config MFD_STM32_LPTIMER
 	tristate "Support for STM32 Low-Power Timer"
