@@ -788,6 +788,43 @@ int power_supply_temp2resist_simple(struct power_supply_resistance_temp_table *t
 EXPORT_SYMBOL_GPL(power_supply_temp2resist_simple);
 
 /**
+ * power_supply_cap2ocv_simple() - find the battery OCV by capacity
+ * @table: Pointer to battery OCV/CAP lookup table
+ * @table_len: OCV/CAP table length
+ * @cap: Current cap value
+ *
+ * This helper function is used to look up battery OCV according to
+ * current capacity value from one OCV table, and the OCV table must be ordered
+ * descending.
+ *
+ * Return: the battery OCV.
+ */
+int power_supply_cap2ocv_simple(struct power_supply_battery_ocv_table *table,
+				int table_len, int cap)
+{
+	int i, ocv, tmp;
+
+	for (i = 0; i < table_len; i++)
+		if (cap > table[i].capacity)
+			break;
+
+	if (i > 0 && i < table_len) {
+		tmp = (table[i - 1].ocv - table[i].ocv) *
+		      (cap - table[i].capacity);
+
+		tmp /= table[i - 1].capacity - table[i].capacity;
+		ocv = tmp + table[i].ocv;
+	} else if (i == 0) {
+		ocv = table[0].ocv;
+	} else {
+		ocv = table[table_len - 1].ocv;
+	}
+
+	return ocv;
+}
+EXPORT_SYMBOL_GPL(power_supply_cap2ocv_simple);
+
+/**
  * power_supply_ocv2cap_simple() - find the battery capacity
  * @table: Pointer to battery OCV lookup table
  * @table_len: OCV table length
@@ -846,6 +883,20 @@ power_supply_find_ocv2cap_table(struct power_supply_battery_info *info,
 	return info->ocv_table[best_index];
 }
 EXPORT_SYMBOL_GPL(power_supply_find_ocv2cap_table);
+
+int power_supply_batinfo_cap2ocv(struct power_supply_battery_info *info,
+				 int cap, int temp)
+{
+	struct power_supply_battery_ocv_table *table;
+	int table_len;
+
+	table = power_supply_find_ocv2cap_table(info, temp, &table_len);
+	if (!table)
+		return -EINVAL;
+
+	return power_supply_cap2ocv_simple(table, table_len, cap);
+}
+EXPORT_SYMBOL_GPL(power_supply_batinfo_cap2ocv);
 
 int power_supply_batinfo_ocv2cap(struct power_supply_battery_info *info,
 				 int ocv, int temp)
