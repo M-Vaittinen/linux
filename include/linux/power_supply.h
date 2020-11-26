@@ -213,6 +213,9 @@ union power_supply_propval {
 
 struct device_node;
 struct power_supply;
+#ifdef CONFIG_SW_GAUGE
+	struct sw_gauge;
+#endif
 
 /* Run-time specific power supply configuration */
 struct power_supply_config {
@@ -308,6 +311,9 @@ struct power_supply {
 	char *online_trig_name;
 	struct led_trigger *charging_blink_full_solid_trig;
 	char *charging_blink_full_solid_trig_name;
+#endif
+#ifdef CONFIG_SW_GAUGE
+	struct sw_gauge *sw_gauge;
 #endif
 };
 
