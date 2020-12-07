@@ -1951,9 +1951,9 @@ static void fgauge_initial_values(struct bd71827_power *pwr)
 
 	/* Set temperature degradation by module parameters */
 	battery_temp_dgr_table[0].temp_degrade_1C = dgrd_temp_cap_vl;
-	battery_temp_dgr_table[0].temp_degrade_1C = dgrd_temp_cap_l;
-	battery_temp_dgr_table[0].temp_degrade_1C = dgrd_temp_cap_m;
-	battery_temp_dgr_table[0].temp_degrade_1C = dgrd_temp_cap_h;
+	battery_temp_dgr_table[1].temp_degrade_1C = dgrd_temp_cap_l;
+	battery_temp_dgr_table[2].temp_degrade_1C = dgrd_temp_cap_m;
+	battery_temp_dgr_table[3].temp_degrade_1C = dgrd_temp_cap_h;
 
 	/* TODO: See if these could be get from DT? */
 	d->poll_interval = JITTER_DEFAULT; /* 3 seconds */
