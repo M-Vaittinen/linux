@@ -97,7 +97,7 @@ static struct task_struct k;
 
 static int swgauge_set_cycle(struct sw_gauge *sw, int new_cycle)
 {
-	int ret, old_cycle = sw->cycle;
+	int ret = 0, old_cycle = sw->cycle;
 
 	if (!sw->desc->allow_set_cycle && !sw->ops.set_cycle)
 		return -EINVAL;
@@ -338,11 +338,15 @@ static int get_state(struct sw_gauge *sw, int *state, int *rex_volt)
 
 static int adjust_cc_full(struct sw_gauge *sw)
 {
-	int ret, from_full_uah = 0;
+	int ret = 0, from_full_uah = 0;
 	int full_uah = sw->designed_cap;
 
 	if (sw->ops.get_uah_from_full)
 		ret = sw->ops.get_uah_from_full(sw, &from_full_uah);
+
+	if (ret)
+		dev_warn(sw->dev,
+			 "Failed to get capacity lost after fully charged\n");
 
 	full_uah -= from_full_uah;
 
@@ -633,13 +637,14 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 	sw->temp = temp;
 	sw->capacity_uah = current_cap_uah;
 	new_soc = SOC_BY_CAP(cc_uah, sw->soc_rounding, current_cap_uah);
-	if (sw->soc != new_soc)
+	if (sw->soc != new_soc) {
 		/*
 		 * Should we ping user-space about the change?
 		 * Should we ping user-space when SOC changes more than N%?
 		 * Should the N be configurable by user-space?
 		 */
 		;
+	}
 
 	sw->soc = new_soc;
 	if (state & SW_GAUGE_CLAMP_SOC) {
@@ -815,6 +820,7 @@ static int start_gauge_thread(struct task_struct *k)
  *
  * Perhaps even always launch the thread if SW-gauge is configured in?
  */
+void stop_gauge_thread(struct task_struct *k);
 void stop_gauge_thread(struct task_struct *k)
 {
 	kthread_stop(k);
@@ -957,7 +963,8 @@ struct sw_gauge *__must_check psy_register_sw_gauge(struct device *parent,
 		goto info_out;
 	}
 	dev_dbg(new->dev, "YaY! SW-gauge registered\n");
-return new;
+
+	return new;
 
 info_out:
 	if (new->batinfo_got)
@@ -975,19 +982,17 @@ EXPORT_SYMBOL_GPL(psy_register_sw_gauge);
 
 void psy_remove_sw_gauge(struct sw_gauge *sw)
 {
-	struct power_supply *psy = sw->psy;
+	mutex_lock(&sw_gauge_lock);
+	list_del(&sw->node);
+	mutex_unlock(&sw_gauge_lock);
+
+	wait_event(sw->wq, !gauge_reserved(sw));
 
 	if (sw->batinfo_got)
 		power_supply_put_battery_info(sw->psy, &sw->info);
+
 	power_supply_unregister(sw->psy);
-	mutex_lock(&sw_gauge_lock);
-	if (sw)
-		list_del(&sw->node);
-	mutex_unlock(&sw_gauge_lock);
 
-	psy->sw_gauge = NULL;
-
-	wait_event(sw->wq, !gauge_reserved(sw));
 	kfree(sw);
 }
 EXPORT_SYMBOL_GPL(psy_remove_sw_gauge);
