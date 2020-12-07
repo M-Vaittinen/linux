@@ -993,7 +993,7 @@ static int init_cc(struct bd71827_power *pwr)
  * may not be sufficient for us. SWGAUGE provides soc in unts of 0.1% here
  * to allow more accurate computation.
  */
-int bd71827_get_ocv(struct sw_gauge *sw, int dsoc, int temp, int *ocv)
+static int bd71827_get_ocv(struct sw_gauge *sw, int dsoc, int temp, int *ocv)
 {
 	int i = 0;
 
@@ -1742,7 +1742,8 @@ struct bd7182x_irq_res {
 
 #define BDIRQ(na, hn) { .name = (na), .handler = (hn) }
 
-int bd7182x_get_irqs(struct platform_device *pdev, struct bd71827_power *pwr)
+static int bd7182x_get_irqs(struct platform_device *pdev,
+			    struct bd71827_power *pwr)
 {
 	int i, irq, ret;
 	static const struct bd7182x_irq_res irqs[] = {
@@ -1779,7 +1780,7 @@ int bd7182x_get_irqs(struct platform_device *pdev, struct bd71827_power *pwr)
 
 #define RSENS_DEFAULT_30MOHM 30000000
 
-int bd7182x_get_rsens(struct bd71827_power *pwr)
+static int bd7182x_get_rsens(struct bd71827_power *pwr)
 {
 	u64 tmp = RSENS_CURR;
 	int rsens_ohm = RSENS_DEFAULT_30MOHM;
