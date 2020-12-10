@@ -17,6 +17,13 @@ config SW_GAUGE
 	  can compensate battery aging and adjust coulomb counter on ICs
 	  based on some battery/charger specific data.
 
+config SW_GAUGE_TEST
+	tristate "KUnit test for SWGAUGE"
+	depends on KUNIT
+	select SW_GAUGE
+	help
+	  run SW-gauge test using sample battery data
+
 config POWER_SUPPLY_DEBUG
 	bool "Power supply debug"
 	help

@@ -20,6 +20,13 @@
 #include <linux/power/sw_gauge.h>
 #include <linux/wait.h>
 
+volatile int TEST_loop = 0;
+EXPORT_SYMBOL(TEST_loop);
+wait_queue_head_t _SWG_TESTwq;
+EXPORT_SYMBOL(_SWG_TESTwq);
+volatile int LOST_teep = 0;
+EXPORT_SYMBOL(LOST_teep);
+
 #define SWGAUGE_TIMEOUT_JITTER 100
 /* We add 0.5% of uAh to avoid rounding error */
 #define SOC_BY_CAP(uah, round, cap) ((uah + round) * 100 / (cap))
@@ -558,7 +565,8 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 	 */
 	if (cc_uah > sw->designed_cap) {
 		cc_uah = sw->designed_cap;
-		sw->ops.update_cc_uah(sw, sw->designed_cap);
+		if (sw->ops.update_cc_uah)
+			sw->ops.update_cc_uah(sw, sw->designed_cap);
 	}
 
 	current_cap_uah = sw->designed_cap;
@@ -568,6 +576,8 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 		dev_err(sw->dev, "Age correction of battery failed\n");
 		return ret;
 	}
+
+	pr_info("Age corrected cap %u\n", current_cap_uah);
 	if (current_cap_uah == 0) {
 		dev_warn(sw->dev, "Battery EOL\n");
 		spin_lock(&sw->lock);
@@ -595,6 +605,9 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 		dev_warn(sw->dev,
 			 "Couldn't do temperature correction to battery cap\n");
 
+	pr_info("Temp and age corrected cap %u\n", current_cap_uah);
+
+
 	/*
 	 * We keep HW CC counter aligned to ideal battery CAP - EG, when
 	 * battery is full, CC is set according to ideal battery capacity.
@@ -602,6 +615,7 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 	 * cancel this offset by decreasing the CC uah with the lost capacity
 	 */
 	cc_uah -= (sw->designed_cap - current_cap_uah);
+
 
 	/* Only need zero correction when discharging */
 	do_zero_correct = !!(state & SW_GAUGE_MAY_BE_LOW);
@@ -620,6 +634,8 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 			dev_err(sw->dev, "Failed to get vsys\n");
 			return ret;
 		}
+		pr_info("cap_adjust_volt_threshold %u, vsys %u\n",
+			sw->desc->cap_adjust_volt_threshold, vsys);
 
 		if (sw->desc->cap_adjust_volt_threshold >= vsys)
 			ret = sw_gauge_zero_cap_adjust(sw, &current_cap_uah,
@@ -630,6 +646,10 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 
 	if (cc_uah > sw->designed_cap)
 		cc_uah = sw->designed_cap;
+
+	pr_info("Lost cap %u\n",
+		sw->designed_cap - current_cap_uah);
+	pr_info("corrected cc_uah %u\n", cc_uah);
 
 	/* Store computed values */
 	spin_lock(&sw->lock);
@@ -653,6 +673,13 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 	}
 	sw->clamped_soc = sw->soc;
 	spin_unlock(&sw->lock);
+
+	TEST_loop = 1;
+	wake_up(&_SWG_TESTwq);
+	wait_event(_SWG_TESTwq, !TEST_loop);
+	wait_event(_SWG_TESTwq, LOST_teep);
+	LOST_teep = 0;
+
 	return ret;
 }
 
