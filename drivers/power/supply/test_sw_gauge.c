@@ -127,7 +127,6 @@ static struct sw_gauge_temp_degr battery_temp_dgr_table[] = {
 #define TEST_JITTER_DEFAULT 15
 //#define TEST_TEMP 250
 
-#define test_set_cycle NULL
 #define test_age_correct_cap NULL
 #define test_temp_correct_cap NULL
 #define test_calibrate NULL
@@ -388,12 +387,20 @@ static int test_update_cc_uah(struct sw_gauge *gauge, int bcap)
 	return -EINVAL;
 }
 
+static unsigned long int cycle_iter = 0;
+
+static int test_set_cycle(struct sw_gauge *gauge, int old, int *new_cycle)
+{
+	cycle_iter = VALUES * *new_cycle;
+
+	return 0;
+}
+
 static int test_get_cycle(struct sw_gauge *gauge, int *cycle)
 {
-	static int iter = 0;
 
-	iter ++;
-	*cycle = iter/VALUES;
+	cycle_iter ++;
+	*cycle = cycle_iter/VALUES;
 
 	return 0;
 }
@@ -476,6 +483,8 @@ static int test_zero_cap_adjust(struct sw_gauge *sw, int *effective_cap,
 	int i, ret;
 	int ocv;
 	int dsoc;
+	int vdrop;
+	unsigned int dsoc_at_newzero;
 
 	/*
 	 * Calculate SOC from CC and effective battery cap.
@@ -483,16 +492,36 @@ static int test_zero_cap_adjust(struct sw_gauge *sw, int *effective_cap,
 	 */
 	dsoc = cc_uah * 1000 / *effective_cap;
 
+	pr_info("cc_uah before zero-adjust %u\n", cc_uah);
+	pr_info("dcap at zero-adjust %u\n", dsoc);
+
 	ret = test_get_ocv_by_soc(sw, dsoc, 0, &ocv);
 	if (ret)
 		return ret;
 
+	vdrop = ocv - vbat;
+
+	pr_info("OCV corresponding dcap: %d\n", ocv);
+	pr_info("vbat: %d\n", vbat);
+	pr_info("vdrop: %d\n", vdrop);
+	pr_info("Look for SOC when OCV - vdrop is below sys limit (%d)\n",
+		TEST_MIN_VOLTAGE);
+
 	for (i = 1; i < NUM_BAT_PARAMS; i++) {
-		ocv_table_load[i] = ocv_table[i] - (ocv - vbat);
+		ocv_table_load[i] = ocv_table[i] - vdrop;
+		pr_info("ocv_table[i] %d - vdrop %d = %d (limit %d) - %s\n",
+			ocv_table[i], vdrop, ocv_table_load[i],
+			TEST_MIN_VOLTAGE,
+			(ocv_table_load[i] <= TEST_MIN_VOLTAGE) ?
+				"Found": "Not Found");
 		if (ocv_table_load[i] <= TEST_MIN_VOLTAGE) {
 			break;
 		}
 	}
+
+	pr_info("SOC index near estimated system min voltage (%d), is %d\n",
+		 ocv_table_load[i], i);
+	dsoc_at_newzero = soc_table[i];
 
 	/*
 	 * For improved accuracy ROHM helps customers to measure some
@@ -513,9 +542,19 @@ static int test_zero_cap_adjust(struct sw_gauge *sw, int *effective_cap,
 				break;
 			}
 		}
+		pr_info("Fine-tuned index is %d\n", j);
+		dsoc_at_newzero += j * 10;
+		pr_info("New dsoc_at_zero = %d\n", dsoc_at_newzero);
+		pr_info("lost cap from dsoc_at_zero = %d\n", dsoc_at_newzero / 10 * *effective_cap / 100);
+		pr_info("((%d - %d) * 5 + (%d - 1)) * %d/100\n",
+			NUM_BAT_PARAMS - 2, i, j, *effective_cap);
+		pr_info("SOC scaler by VDROP=%d\n",
+			((NUM_BAT_PARAMS - 2 - i) * 5 + (j - 1)));
 
 		lost_cap = ((NUM_BAT_PARAMS - 2 - i) * 5 + (j - 1)) *
 			    *effective_cap / 100;
+
+		pr_info("Lost cap drom vdrop %d\n", lost_cap);
 
 		for (m = 0; m < soc_est_max_num; m++) {
 			new_lost_cap = lost_cap;
@@ -555,7 +594,11 @@ static int test_zero_cap_adjust(struct sw_gauge *sw, int *effective_cap,
 				break;
 		}
 
+		pr_info("After all vdr table iterations lost cap %d\n", lost_cap);
+
+		pr_info("Old effective cap %d\n", *effective_cap);
 		*effective_cap -= lost_cap;
+		pr_info("New effective cap %d\n", *effective_cap);
 	}
 
 	return 0;
@@ -657,7 +700,20 @@ static enum power_supply_property test_battery_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_CHARGE_FULL,
 	POWER_SUPPLY_PROP_TEMP,
+	POWER_SUPPLY_PROP_CYCLE_COUNT,
 };
+
+static int bd70528_prop_is_writable(struct power_supply *psy,
+				    enum power_supply_property psp)
+{
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		return 1;
+	default:
+		break;
+	}
+	return 0;
+}
 
 
 static const struct power_supply_desc test_bat_desc = {
@@ -666,6 +722,7 @@ static const struct power_supply_desc test_bat_desc = {
 	.properties	= test_battery_props,
 	.num_properties	= ARRAY_SIZE(test_battery_props),
 	.get_property	= test_battery_get_property,
+	.property_is_writeable	= bd70528_prop_is_writable,
 };
 
 static void swgauge_test_soc(struct kunit *test)

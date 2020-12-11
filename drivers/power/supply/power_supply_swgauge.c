@@ -647,8 +647,7 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 	if (cc_uah > sw->designed_cap)
 		cc_uah = sw->designed_cap;
 
-	pr_info("Lost cap %u\n",
-		sw->designed_cap - current_cap_uah);
+	pr_info("Lost cap %d\n", current_cap_uah - sw->designed_cap);
 	pr_info("corrected cc_uah %u\n", cc_uah);
 
 	/* Store computed values */
