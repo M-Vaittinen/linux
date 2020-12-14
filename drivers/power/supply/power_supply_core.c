@@ -791,28 +791,33 @@ EXPORT_SYMBOL_GPL(power_supply_temp2resist_simple);
  * power_supply_cap2ocv_simple() - find the battery OCV by capacity
  * @table: Pointer to battery OCV/CAP lookup table
  * @table_len: OCV/CAP table length
- * @cap: Current cap value
+ * @cap: Current cap value in units of 0.1%
  *
- * This helper function is used to look up battery OCV according to
- * current capacity value from one OCV table, and the OCV table must be ordered
- * descending.
+ * OCV (Open Circuit Voltage) is often used to estimate the battery SOC (State
+ * Of Charge). Usually conversion tables are used to store the corresponding
+ * OCV and SOC. Systems which use so called "Zero Adjust" where at the near
+ * end-of-battery condition the SOC from coulomb counter is used to retrieve
+ * the OCV - and OCV and VSYS difference is used to re-estimate the battery
+ * capacity. This helper function can be used to look up battery OCV according
+ * to current capacity value from one OCV table, and the OCV table must be
+ * ordered descending.
  *
- * Return: the battery OCV.
+ * Return: the battery OCV in uV.
  */
-int power_supply_cap2ocv_simple(struct power_supply_battery_ocv_table *table,
-				int table_len, int cap)
+int power_supply_dcap2ocv_simple(struct power_supply_battery_ocv_table *table,
+				int table_len, int dcap)
 {
 	int i, ocv, tmp;
 
 	for (i = 0; i < table_len; i++)
-		if (cap > table[i].capacity)
+		if (dcap > table[i].capacity * 10)
 			break;
 
 	if (i > 0 && i < table_len) {
 		tmp = (table[i - 1].ocv - table[i].ocv) *
-		      (cap - table[i].capacity);
+		      (dcap - table[i].capacity * 10);
 
-		tmp /= table[i - 1].capacity - table[i].capacity;
+		tmp /= (table[i - 1].capacity - table[i].capacity) * 10;
 		ocv = tmp + table[i].ocv;
 	} else if (i == 0) {
 		ocv = table[0].ocv;
@@ -822,7 +827,7 @@ int power_supply_cap2ocv_simple(struct power_supply_battery_ocv_table *table,
 
 	return ocv;
 }
-EXPORT_SYMBOL_GPL(power_supply_cap2ocv_simple);
+EXPORT_SYMBOL_GPL(power_supply_dcap2ocv_simple);
 
 /**
  * power_supply_ocv2cap_simple() - find the battery capacity
@@ -884,8 +889,8 @@ power_supply_find_ocv2cap_table(struct power_supply_battery_info *info,
 }
 EXPORT_SYMBOL_GPL(power_supply_find_ocv2cap_table);
 
-int power_supply_batinfo_cap2ocv(struct power_supply_battery_info *info,
-				 int cap, int temp)
+int power_supply_batinfo_dcap2ocv(struct power_supply_battery_info *info,
+				 int dcap, int temp)
 {
 	struct power_supply_battery_ocv_table *table;
 	int table_len;
@@ -894,9 +899,9 @@ int power_supply_batinfo_cap2ocv(struct power_supply_battery_info *info,
 	if (!table)
 		return -EINVAL;
 
-	return power_supply_cap2ocv_simple(table, table_len, cap);
+	return power_supply_dcap2ocv_simple(table, table_len, dcap);
 }
-EXPORT_SYMBOL_GPL(power_supply_batinfo_cap2ocv);
+EXPORT_SYMBOL_GPL(power_supply_batinfo_dcap2ocv);
 
 int power_supply_batinfo_ocv2cap(struct power_supply_battery_info *info,
 				 int ocv, int temp)
