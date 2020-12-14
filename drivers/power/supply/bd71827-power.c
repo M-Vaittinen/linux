@@ -1002,12 +1002,12 @@ static int bd71827_get_ocv(struct sw_gauge *sw, int dsoc, int temp, int *ocv)
 		return 0;
 	}
 	if (dsoc == 0) {
-		*ocv = ocv_table[21];
+		*ocv = ocv_table[NUM_BAT_PARAMS - 2];
 		return 0;
 	}
 
 	i = 0;
-	while (i < 22) {
+	while (i < NUM_BAT_PARAMS - 1) {
 		if ((dsoc <= soc_table[i]) && (dsoc > soc_table[i+1])) {
 			*ocv = (ocv_table[i] - ocv_table[i+1]) *
 			       (dsoc - soc_table[i+1]) / (soc_table[i] -
@@ -1017,7 +1017,7 @@ static int bd71827_get_ocv(struct sw_gauge *sw, int dsoc, int temp, int *ocv)
 		i++;
 	}
 
-	*ocv = ocv_table[22];
+	*ocv = ocv_table[NUM_BAT_PARAMS - 1];
 
 	return 0;
 }
@@ -1963,6 +1963,7 @@ static void fgauge_initial_values(struct bd71827_power *pwr)
 	d->degrade_cycle_uah = dgrd_cyc_cap;
 	d->cap_adjust_volt_threshold = THR_VOLTAGE_DEFAULT;
 	d->designed_cap = pwr->battery_cap;
+	d->clamp_soc = true;
 
 	o->get_uah_from_full = bd71828_get_uah_from_full;	/* Ok */
 	o->get_uah = bd71828_get_uah;				/* Ok */
@@ -2080,7 +2081,7 @@ static int bd71827_power_probe(struct platform_device *pdev)
 	}
 
 	/* Is name needed? If yes, then it should be numbered.. :/ */
-	pwr->gdesc.name = "bd71828-gauge";
+// 	pwr->gdesc.name = "bd71828-gauge";
 	pwr->sw = devm_psy_register_sw_gauge(pwr->dev, &psycfg, &pwr->ops,
 					&pwr->gdesc);
 	if (IS_ERR(pwr->sw)) {
