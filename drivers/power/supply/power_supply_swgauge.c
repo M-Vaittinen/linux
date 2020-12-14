@@ -397,17 +397,12 @@ static int update_cycle(struct sw_gauge *sw)
 
 static int sw_gauge_cap2ocv(struct sw_gauge *sw, int dsoc, int temp, int *ocv)
 {
-	int ret, soc;
+	int ret;
 
 	if (sw->ops.get_ocv_by_soc)
 		return sw->ops.get_ocv_by_soc(sw, dsoc, temp, ocv);
 
-	/*
-	 * Ouch.. I'm afraid this kind of kills the accuracy.
-	 * The cap2OCV should accept soc at least as 0.1%
-	 */
-	soc = dsoc / 10;
-	ret = power_supply_batinfo_cap2ocv(&sw->info, soc, temp / 10);
+	ret = power_supply_batinfo_dcap2ocv(&sw->info, dsoc, temp / 10);
 	if (ret > 0) {
 		*ocv = ret;
 		ret = 0;
