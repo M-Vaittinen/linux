@@ -124,7 +124,7 @@ struct sw_gauge_ops {
  * correction) provided by the sw_gauge framework must be described by the
  * sw_gauge_desc prior reistration to the sw_gauge framework.
  *
- * @name:		Identifying name for gauge
+ * @name:		Identifying name for gauge (Is this needed?)
  * @degrade_cycle_uah:	constant lost capacity / battery cycle in uAh.
  * @amount_of_temp_dgr:	amount of temperature ranges provided in temp_dgr
  * @temp_dgr:		ranges of constant lost capacity / temperature degree
@@ -153,7 +153,6 @@ struct sw_gauge_ops {
  *			to Vsys which correspond empty battery situation.
  */
 struct sw_gauge_desc {
-	const char *name;
 	int degrade_cycle_uah;
 	int amount_of_temp_dgr;
 	struct sw_gauge_temp_degr *temp_dgr;
