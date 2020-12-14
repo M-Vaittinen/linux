@@ -5,8 +5,13 @@
  * Copyright (C) 2020, ROHM Semiconductors.
  * Author: Matti Vaittinen <matti.vaittien@fi.rohmeurope.com>
  */
+
+#define DRIVER_DT_TEST
+//#define KUNIT_TEST
+
 #include <kunit/test.h>
 #include <linux/delay.h>
+#include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/power/sw_gauge.h>
@@ -614,13 +619,15 @@ static struct sw_gauge_ops o =
 	.get_cycle = test_get_cycle,
 	.set_cycle = test_set_cycle,
 	.get_vsys = test_get_vsys,
+#ifndef DRIVER_DT_TEST
 	.get_soc_by_ocv = test_get_soc_by_ocv,
 	.get_ocv_by_soc = test_get_ocv_by_soc,
+	.zero_cap_adjust = test_zero_cap_adjust,
+#endif
 	.age_correct_cap = test_age_correct_cap,
 	.temp_correct_cap = test_temp_correct_cap,
 	.calibrate = test_calibrate,
 	.suspend_calibrate = test_suspend_calibrate,
-	.zero_cap_adjust = test_zero_cap_adjust,
 };
 
 static struct sw_gauge_desc d =
@@ -632,7 +639,9 @@ static struct sw_gauge_desc d =
 	.degrade_cycle_uah = TEST_DEGRADE_PER_CYCLE,
 	.cap_adjust_volt_threshold = TEST_THR_VOLTAGE,
 	.system_min_voltage = TEST_MIN_VOLTAGE,
+#ifndef DRIVER_DT_TEST
 	.designed_cap = TEST_DESIGNED_CAP,
+#endif
 };
 
 static int test_battery_get_property(struct power_supply *psy,
@@ -729,18 +738,22 @@ static void swgauge_test_soc(struct kunit *test)
 {
 	int i, ret;
 	struct sw_gauge *g;
-	struct platform_device *pdev;
+	struct platform_device *pdev = NULL;
 	enum power_supply_property psp;
 	union power_supply_propval soc, chg, chg_des, chg_now, cyc;
 	struct sw_gauge_psy psycfg;
 	struct power_supply_config test_bat_cfg = {};
 
-	init_waitqueue_head(&_SWG_TESTwq);
-
+#ifdef DRIVER_DT_TEST
+	pdev = (struct platform_device *)test;
+	test_bat_cfg.of_node = pdev->dev.of_node;
+#endif
 	psycfg.pcfg = &test_bat_cfg;
 	psycfg.pdesc = &test_bat_desc;
+	init_waitqueue_head(&_SWG_TESTwq);
 
-	pdev = platform_device_register_simple("test_gauge_device", -1, NULL,
+	if (!pdev)
+		pdev = platform_device_register_simple("test_gauge_device", -1, NULL,
 					        0);
 
 	g = psy_register_sw_gauge(&pdev->dev, &psycfg, &o, &d);
@@ -772,12 +785,15 @@ static void swgauge_test_soc(struct kunit *test)
 		wake_up(&_SWG_TESTwq);
 	}
 
+#ifndef DRIVER_DT_TEST
 	platform_device_put(pdev);
+#endif
 //	KUNIT_EXPECT_EQ(test, 0, ret);
 //	KUNIT_EXPECT_EQ(test, sel, swgauge2_sels[RANGE2_NUM_VALS - 1]);
 //	KUNIT_EXPECT_FALSE(test, found);
 }
 
+#ifdef KUNIT_TEST
 static struct kunit_case swgauge_test_cases[] = {
 	KUNIT_CASE(swgauge_test_soc),
 	{},
@@ -789,5 +805,36 @@ static struct kunit_suite swgauge_test_module = {
 };
 
 kunit_test_suites(&swgauge_test_module);
+#endif
+
+#ifdef DRIVER_DT_TEST
+static int test_probe(struct platform_device *pdev)
+{
+	swgauge_test_soc((struct kunit *)pdev);
+
+	return 0;
+}
+
+static const struct of_device_id test_of_match[] = {
+	{ .compatible = "rohm,test-swgauge", },
+	{ },
+};
+MODULE_DEVICE_TABLE(of, test_of_match);
+
+static struct platform_driver test_driver = {
+	.driver = {
+		   .name = "test-swgauge",
+		   .owner = THIS_MODULE,
+		   .of_match_table = test_of_match,
+		   },
+	.probe = test_probe,
+};
+
+module_platform_driver(test_driver);
+
+MODULE_AUTHOR("Matti Vaittinen <matti.vaittinen@fi.rohmeurope.com>");
+MODULE_DESCRIPTION("BD71837 voltage regulator driver");
+#endif
+
 
 MODULE_LICENSE("GPL");
