@@ -175,9 +175,6 @@ static int sw_gauge_get_property(struct power_supply *psy,
 		spin_unlock(&sw->lock);
 		return 0;
 	case POWER_SUPPLY_PROP_TEMP:
-		/* TODO: Cache last obtained temperature
-		 * Units(?) Check if we have 0.1 degrees C
-		 */
 		spin_lock(&sw->lock);
 		val->intval = sw->temp;
 		spin_unlock(&sw->lock);
@@ -444,9 +441,12 @@ static int load_based_soc_zero_adjust(struct sw_gauge *sw, int *effective_cap,
 	 * This way we can see what is the new 'zero adjusted capacity' for
 	 * our battery.
 	 *
-	 * TODO: Should we support non DT originated OCV table also here? Or
-	 * should the driver just provide whole low-voltage call-back in that
-	 * case?
+	 * We don't support non DT originated OCV table here.
+	 *
+	 * I guess we could allow user to provide standard OCV tables in desc.
+	 * Or the full batinfo for that matter. But for now we just force the
+	 * drivers W/O OCV tables in DT to just provide whole low-voltage
+	 * call-back.
 	 */
 	table = power_supply_find_ocv2cap_table(&sw->info, temp / 10,
 						&table_len);
