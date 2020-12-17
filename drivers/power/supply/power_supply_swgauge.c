@@ -608,9 +608,7 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 	if (sw->ops.temp_correct_cap)
 		ret = sw->ops.temp_correct_cap(sw, &current_cap_uah, temp);
 	else if (sw->amount_of_temp_dgr)
-		ret = compute_temp_correct_uah(sw, &current_cap_uah, temp);
-	else
-		ret = -EINVAL;
+		ret = compute_temp_correct_uah(sw, &current_cap_uah, temp);;
 
 	if (ret)
 		dev_warn(sw->dev,
@@ -975,9 +973,13 @@ struct sw_gauge *__must_check psy_register_sw_gauge(struct device *parent,
 		new->batinfo_got = true;
 
 	if (new->info.temp_dgrd_values) {
+		pr_info("Found %d temp_dgrd values from batinfo\n",
+			new->info.temp_dgrd_values);
 		new->amount_of_temp_dgr = new->info.temp_dgrd_values;
 		new->temp_dgr = new->info.temp_dgrd;
 	} else {
+		pr_info("Found %d temp_dgrd values from desc\n",
+			new->desc->amount_of_temp_dgr);
 		new->amount_of_temp_dgr = new->desc->amount_of_temp_dgr;
 		new->temp_dgr = new->desc->temp_dgr;
 	}
