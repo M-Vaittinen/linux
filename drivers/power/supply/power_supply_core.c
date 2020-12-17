@@ -663,15 +663,20 @@ int power_supply_get_battery_info(struct power_supply *psy,
 				   1, &info->temp_max);
 
 	len = of_property_count_u32_elems(battery_np, "temp-degrade-table");
-	if (len < 0 && len != -EINVAL) {
+	if (len == -EINVAL)
+		len = 0;
+	if (len < 0) {
 		err = len;
 		goto out_put_node;
 	}
 	/* table should consist of value pairs - maximum of 100 pairs */
 	if (len % 3 || len / 3 > POWER_SUPPLY_TEMP_DGRD_MAX_VALUES) {
+		dev_warn(&psy->dev,
+			 "bad amount of temperature-capacity degrade values\n");
 		err = -EINVAL;
 		goto out_put_node;
 	}
+	pr_info("Found %d temp-cap values (%d triplets)\n", len, len/3);
 	info->temp_dgrd_values = len / 3;
 	if (info->temp_dgrd_values) {
 		info->temp_dgrd = devm_kcalloc(&psy->dev,
@@ -691,6 +696,8 @@ int power_supply_get_battery_info(struct power_supply *psy,
 						 "temp-degrade-table",
 						 dgrd_table, len);
 		if (err) {
+			dev_warn(&psy->dev,
+				 "bad temperature - capacity degrade values %d\n", err);
 			kfree(dgrd_table);
 			info->temp_dgrd_values = 0;
 			goto out_put_node;
