@@ -15,26 +15,6 @@
 #define SW_GAUGE_MAY_BE_LOW BIT(2)
 #define SW_GAUGE_CLAMP_SOC BIT(3)
 
-/**
- * struct sw_gauge_temp_degr - linear impact of temperature to battery capacity
- *
- * Usually temperature impacts on battery capacity. For systems where it is
- * sufficient to describe capacity change as a series of temperature ranges
- * where the change is linear (Eg delta cap = temperature_change * constant)
- * can be described by this structure.
- *
- * Please note - in order to avoid unnecessary rounding errors the change
- * of capacity (uAh) is per change of temperature degree C while the temperature
- * range floor is in tenths of degree C
- *
- * @temp_floor: Lowest temperature where change is valid (unit 0.1 degree C)
- * @temp_degrade_1C: Capacity change / temperature change (uAh / degree C)
- */
-struct sw_gauge_temp_degr {
-	int temp_floor;
-	int temp_degrade_1C;
-};
-
 struct sw_gauge;
 
 /**
@@ -60,7 +40,8 @@ struct sw_gauge;
  *			IC specific low-voltage SOC correction.
  * @get_soc_by_ocv:	setups which do not store the OCV/SOC information in
  *			standard battery_info can implement this function to
- *			compute SOC based on OCV.
+ *			compute SOC based on OCV. SOC should be returned as
+ *			units of 0.1%
  * @get_ocv_by_soc:	setups which do not store the OCV/SOC information in
  *			standard battery_info can implement this function to
  *			compute OCV based on SOC. NOTE: Soc is provided to
@@ -198,6 +179,8 @@ struct sw_gauge {
 	struct power_supply_battery_info info;
 	struct sw_gauge_ops ops;
 	struct list_head node;
+	int amount_of_temp_dgr;
+	struct sw_gauge_temp_degr *temp_dgr;
 	spinlock_t lock;
 	bool batinfo_got;
 	wait_queue_head_t wq;

@@ -182,9 +182,6 @@ static int sw_gauge_get_property(struct power_supply *psy,
 		spin_unlock(&sw->lock);
 		return 0;
 	case POWER_SUPPLY_PROP_TEMP:
-		/* TODO: Cache last obtained temperature
-		 * Units(?) Check if we have 0.1 degrees C
-		 */
 		spin_lock(&sw->lock);
 		val->intval = sw->temp;
 		spin_unlock(&sw->lock);
@@ -224,7 +221,7 @@ static int gauge_reserved(struct sw_gauge *sw)
 	return sw->refcount;
 }
 
-static int get_soc_from_ocv(struct sw_gauge *sw, int *soc, int temp, int ocv)
+static int get_dsoc_from_ocv(struct sw_gauge *sw, int *dsoc, int temp, int ocv)
 {
 	int ret;
 
@@ -236,7 +233,7 @@ static int get_soc_from_ocv(struct sw_gauge *sw, int *soc, int temp, int ocv)
 	 */
 	ret = power_supply_batinfo_ocv2cap(&sw->info, ocv, temp / 10);
 	if (ret > 0) {
-		*soc = ret;
+		*dsoc = ret * 10;
 		ret = 0;
 	}
 
@@ -244,7 +241,7 @@ static int get_soc_from_ocv(struct sw_gauge *sw, int *soc, int temp, int ocv)
 		if (!sw->ops.get_soc_by_ocv)
 			return ret;
 		/* For driver callbacks we use tenths of degree */
-		ret = sw->ops.get_soc_by_ocv(sw, ocv, temp, soc);
+		ret = sw->ops.get_soc_by_ocv(sw, ocv, temp, dsoc);
 	}
 	return ret;
 }
@@ -289,7 +286,7 @@ static int age_correct_cap(struct sw_gauge *sw, int *uah)
 
 static int adjust_cc_relax(struct sw_gauge *sw, int rex_volt)
 {
-	int ret, temp, soc;
+	int ret, temp, dsoc;
 	int full_uah = sw->designed_cap;
 	int uah_now;
 
@@ -299,7 +296,7 @@ static int adjust_cc_relax(struct sw_gauge *sw, int rex_volt)
 		return ret;
 
 	/* get ocv */
-	ret = get_soc_from_ocv(sw, &soc, temp, rex_volt);
+	ret = get_dsoc_from_ocv(sw, &dsoc, temp, rex_volt);
 	if (ret)
 		return ret;
 
@@ -309,7 +306,7 @@ static int adjust_cc_relax(struct sw_gauge *sw, int rex_volt)
 	 * lost capacity when converting CC value to uAh. I guess this prevents
 	 * CC from hitting the floor.
 	 */
-	uah_now = full_uah * soc / 100 + sw->soc_rounding;
+	uah_now = full_uah * dsoc / 1000 + sw->soc_rounding;
 	if (uah_now > sw->designed_cap)
 		uah_now = sw->designed_cap;
 
@@ -451,9 +448,12 @@ static int load_based_soc_zero_adjust(struct sw_gauge *sw, int *effective_cap,
 	 * This way we can see what is the new 'zero adjusted capacity' for
 	 * our battery.
 	 *
-	 * TODO: Should we support non DT originated OCV table also here? Or
-	 * should the driver just provide whole low-voltage call-back in that
-	 * case?
+	 * We don't support non DT originated OCV table here.
+	 *
+	 * I guess we could allow user to provide standard OCV tables in desc.
+	 * Or the full batinfo for that matter. But for now we just force the
+	 * drivers W/O OCV tables in DT to just provide whole low-voltage
+	 * call-back.
 	 */
 	table = power_supply_find_ocv2cap_table(&sw->info, temp / 10,
 						&table_len);
@@ -517,27 +517,43 @@ static int sw_gauge_zero_cap_adjust(struct sw_gauge *sw, int *effective_cap,
 	return ret;
 }
 
-static int compute_temp_correct_uah(struct sw_gauge *sw, int *cap_uah, int temp)
+static int find_dcap_change(struct sw_gauge *sw, int temp, int *delta_cap)
 {
-	int i, temp_diff, uah_corr;
+	struct sw_gauge_temp_degr *dclosest = NULL, *d;
+	int i;
 
-	for (i = 0; i < sw->desc->amount_of_temp_dgr &&
-		    sw->desc->temp_dgr[i].temp_floor > temp; i++)
-		;
-
-	if (i == sw->desc->amount_of_temp_dgr) {
-		i -= 1;
-		dev_warn(sw->dev,
-			 "Temperature below min %d, using range %d->\n", temp,
-			sw->desc->temp_dgr[i].temp_floor);
+	for (i = 0; i < sw->amount_of_temp_dgr; i++) {
+		    d = &sw->temp_dgr[i];
+		if (!dclosest) {
+			dclosest = d;
+			continue;
+		}
+		if (abs(d->temp_set_point - temp) <
+		    abs(dclosest->temp_set_point))
+			dclosest = d;
 	}
 
-	temp_diff = sw->desc->temp_dgr[i].temp_floor - temp;
+	if (!dclosest)
+		return - EINVAL;
+
 	/*
 	 * Temperaure range is in tenths of degrees and degrade value is for a
 	 * degree => divide by 10 after multiplication to fix the scale
 	 */
-	uah_corr = temp_diff * sw->desc->temp_dgr[i].temp_degrade_1C / 10;
+	*delta_cap = (d->temp_set_point - temp) * d->temp_degrade_1C / 10 +
+		     d->degrade_at_set;
+
+	return 0;
+}
+
+static int compute_temp_correct_uah(struct sw_gauge *sw, int *cap_uah, int temp)
+{
+	int ret, uah_corr;
+
+	ret = find_dcap_change(sw, temp, &uah_corr);
+	if (ret)
+		return ret;
+
 	if (*cap_uah < -uah_corr)
 		*cap_uah = 0;
 	else
@@ -591,7 +607,7 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 
 	if (sw->ops.temp_correct_cap)
 		ret = sw->ops.temp_correct_cap(sw, &current_cap_uah, temp);
-	else if (sw->desc->amount_of_temp_dgr)
+	else if (sw->amount_of_temp_dgr)
 		ret = compute_temp_correct_uah(sw, &current_cap_uah, temp);
 	else
 		ret = -EINVAL;
@@ -602,7 +618,6 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 
 	pr_info("Temp and age corrected cap %u\n", current_cap_uah);
 
-
 	/*
 	 * We keep HW CC counter aligned to ideal battery CAP - EG, when
 	 * battery is full, CC is set according to ideal battery capacity.
@@ -610,7 +625,6 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 	 * cancel this offset by decreasing the CC uah with the lost capacity
 	 */
 	cc_uah -= (sw->designed_cap - current_cap_uah);
-
 
 	/* Only need zero correction when discharging */
 	do_zero_correct = !!(state & SW_GAUGE_MAY_BE_LOW);
@@ -959,6 +973,14 @@ struct sw_gauge *__must_check psy_register_sw_gauge(struct device *parent,
 	}
 	if (!ret)
 		new->batinfo_got = true;
+
+	if (new->info.temp_dgrd_values) {
+		new->amount_of_temp_dgr = new->info.temp_dgrd_values;
+		new->temp_dgr = new->info.temp_dgrd;
+	} else {
+		new->amount_of_temp_dgr = new->desc->amount_of_temp_dgr;
+		new->temp_dgr = new->desc->temp_dgr;
+	}
 
 	if (desc->designed_cap) {
 		new->designed_cap = desc->designed_cap;
