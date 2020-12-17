@@ -640,8 +640,8 @@ static struct sw_gauge_desc d =
 {
 	.poll_interval = TEST_JITTER_DEFAULT,
 	.allow_set_cycle = true,
-//	.amount_of_temp_dgr = ARRAY_SIZE(battery_temp_dgr_table),
-//	.temp_dgr = battery_temp_dgr_table,
+	.amount_of_temp_dgr = ARRAY_SIZE(battery_temp_dgr_table),
+	.temp_dgr = battery_temp_dgr_table,
 	.degrade_cycle_uah = TEST_DEGRADE_PER_CYCLE,
 	.cap_adjust_volt_threshold = TEST_THR_VOLTAGE,
 	.system_min_voltage = TEST_MIN_VOLTAGE,
