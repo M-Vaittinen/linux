@@ -100,23 +100,29 @@
 extern volatile int TEST_loop;
 extern volatile int LOST_teep;
 extern wait_queue_head_t _SWG_TESTwq;
-
+/*
+	TODO: test also giving degrade values from DT.
+*/
 static struct sw_gauge_temp_degr battery_temp_dgr_table[] = {
 	{
-		.temp_floor = DGRD_TEMP_VL_DEFAULT,
-		.temp_degrade_1C = 0,
+		.temp_set_point = -20, /* -2 C - unit is 0.1 C */
+		.degrade_at_set = 200, /* uAh */
+		.temp_degrade_1C = 5, /* uAh / degree C */
 	},
 	{
-		.temp_floor = DGRD_TEMP_L_DEFAULT,
-		.temp_degrade_1C = 0,
+		.temp_set_point = 200,
+		.degrade_at_set = 100,
+		.temp_degrade_1C = 2,
 	},
 	{
-		.temp_floor = DGRD_TEMP_M_DEFAULT,
-		.temp_degrade_1C = 0,
+		.temp_set_point = -100,
+		.degrade_at_set = 400,
+		.temp_degrade_1C = 7,
 	},
 	{
-		.temp_floor = DGRD_TEMP_H_DEFAULT,
-		.temp_degrade_1C = 0,
+		.temp_set_point = 400,
+		.degrade_at_set = 0,
+		.temp_degrade_1C = 1,
 	},
 };
 
@@ -634,8 +640,8 @@ static struct sw_gauge_desc d =
 {
 	.poll_interval = TEST_JITTER_DEFAULT,
 	.allow_set_cycle = true,
-	.amount_of_temp_dgr = ARRAY_SIZE(battery_temp_dgr_table),
-	.temp_dgr = battery_temp_dgr_table,
+//	.amount_of_temp_dgr = ARRAY_SIZE(battery_temp_dgr_table),
+//	.temp_dgr = battery_temp_dgr_table,
 	.degrade_cycle_uah = TEST_DEGRADE_PER_CYCLE,
 	.cap_adjust_volt_threshold = TEST_THR_VOLTAGE,
 	.system_min_voltage = TEST_MIN_VOLTAGE,
