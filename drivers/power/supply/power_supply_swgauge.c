@@ -529,7 +529,7 @@ static int find_dcap_change(struct sw_gauge *sw, int temp, int *delta_cap)
 			continue;
 		}
 		if (abs(d->temp_set_point - temp) <
-		    abs(dclosest->temp_set_point))
+		    abs(dclosest->temp_set_point - temp))
 			dclosest = d;
 	}
 
