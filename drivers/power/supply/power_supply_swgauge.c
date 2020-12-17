@@ -510,27 +510,43 @@ static int sw_gauge_zero_cap_adjust(struct sw_gauge *sw, int *effective_cap,
 	return ret;
 }
 
-static int compute_temp_correct_uah(struct sw_gauge *sw, int *cap_uah, int temp)
+static int find_dcap_change(struct sw_gauge *sw, int temp, int *delta_cap)
 {
-	int i, temp_diff, uah_corr;
+	struct sw_gauge_temp_degr *dclosest = NULL, *d;
+	int i;
 
-	for (i = 0; i < sw->desc->amount_of_temp_dgr &&
-		    sw->desc->temp_dgr[i].temp_floor > temp; i++)
-		;
-
-	if (i == sw->desc->amount_of_temp_dgr) {
-		i -= 1;
-		dev_warn(sw->dev,
-			 "Temperature below min %d, using range %d->\n", temp,
-			sw->desc->temp_dgr[i].temp_floor);
+	for (i = 0; i < sw->amount_of_temp_dgr; i++) {
+		    d = &sw->temp_dgr[i];
+		if (!dclosest) {
+			dclosest = d;
+			continue;
+		}
+		if (abs(d->temp_set_point - temp) <
+		    abs(dclosest->temp_set_point))
+			dclosest = d;
 	}
 
-	temp_diff = sw->desc->temp_dgr[i].temp_floor - temp;
+	if (!dclosest)
+		return - EINVAL;
+
 	/*
 	 * Temperaure range is in tenths of degrees and degrade value is for a
 	 * degree => divide by 10 after multiplication to fix the scale
 	 */
-	uah_corr = temp_diff * sw->desc->temp_dgr[i].temp_degrade_1C / 10;
+	*delta_cap = (d->temp_set_point - temp) * d->temp_degrade_1C / 10 +
+		     d->degrade_at_set;
+
+	return 0;
+}
+
+static int compute_temp_correct_uah(struct sw_gauge *sw, int *cap_uah, int temp)
+{
+	int ret, uah_corr;
+
+	ret = find_dcap_change(sw, temp, &uah_corr);
+	if (ret)
+		return ret;
+
 	if (*cap_uah < -uah_corr)
 		*cap_uah = 0;
 	else
@@ -581,7 +597,7 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 
 	if (sw->ops.temp_correct_cap)
 		ret = sw->ops.temp_correct_cap(sw, &current_cap_uah, temp);
-	else if (sw->desc->amount_of_temp_dgr)
+	else if (sw->amount_of_temp_dgr)
 		ret = compute_temp_correct_uah(sw, &current_cap_uah, temp);
 	else
 		ret = -EINVAL;
@@ -933,6 +949,14 @@ struct sw_gauge *__must_check psy_register_sw_gauge(struct device *parent,
 	}
 	if (!ret)
 		new->batinfo_got = true;
+
+	if (new->info.temp_dgrd_values) {
+		new->amount_of_temp_dgr = new->info.temp_dgrd_values;
+		new->temp_dgr = new->info.temp_dgrd;
+	} else {
+		new->amount_of_temp_dgr = new->desc->amount_of_temp_dgr;
+		new->temp_dgr = new->desc->temp_dgr;
+	}
 
 	if (desc->designed_cap) {
 		new->designed_cap = desc->designed_cap;
