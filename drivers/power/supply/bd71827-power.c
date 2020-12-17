@@ -92,11 +92,12 @@
 #define DGRD_TEMP_VL_DEFAULT		0	/* 0.1 degrees C unit */
 
 #define SOC_EST_MAX_NUM_DEFAULT		5
+/*
 #define DGRD_TEMP_CAP_H_DEFAULT		0
 #define DGRD_TEMP_CAP_M_DEFAULT		0
 #define DGRD_TEMP_CAP_L_DEFAULT		0
 #define DGRD_TEMP_CAP_VL_DEFAULT	0
-
+*/
 #define PWRCTRL_NORMAL			0x22
 #define PWRCTRL_RESET			0x23
 
@@ -386,12 +387,12 @@ static int battery_cap_mah;
 static int dgrd_cyc_cap = DGRD_CYC_CAP_DEFAULT;
 
 static int soc_est_max_num;
-
+/*
 static int dgrd_temp_cap_h;
 static int dgrd_temp_cap_m;
 static int dgrd_temp_cap_l;
 static int dgrd_temp_cap_vl;
-
+*/
 static int ocv_table[NUM_BAT_PARAMS];
 static int soc_table[NUM_BAT_PARAMS];
 static int vdr_table_h[NUM_BAT_PARAMS];
@@ -972,11 +973,6 @@ static int bd71828_get_uah(struct sw_gauge *sw, int *uah)
 	return ret;
 }
 
-static int init_cc(struct bd71827_power *pwr)
-{
-	return start_cc(pwr);
-}
-
 /*
  * Standard batinfo supports only accuracy of 1% for SOC - which
  * may not be sufficient for us. SWGAUGE provides soc in unts of 0.1% here
@@ -1229,7 +1225,7 @@ static int bd71827_init_hardware(struct bd71827_power *pwr)
 			return ret;
 		}
 
-		/* Stop Coulomb Counter */
+		/* Ensure Coulomb Counter is stopped */
 		ret = stop_cc(pwr);
 		if (ret)
 			return ret;
@@ -1267,7 +1263,7 @@ static int bd71827_init_hardware(struct bd71827_power *pwr)
 		if (ret)
 			return ret;
 
-		/* convert to correct unit */
+		/* Set monitor threshold to 9/10 of battery uAh capacity */
 		cc_val = UAH_to_CC(pwr, pwr->battery_cap);
 
 		ret = bd7182x_write16(pwr, pwr->regs->batcap_mon_limit_u,
@@ -1280,9 +1276,7 @@ static int bd71827_init_hardware(struct bd71827_power *pwr)
 			(cc_val * 9 / 10));
 	}
 
-	ret = init_cc(pwr);
-
-	return 0;
+	return start_cc(pwr);
 }
 
  /* Set default parameters if no module parameters were given */
@@ -1294,9 +1288,11 @@ static void bd71827_set_battery_parameters(struct bd71827_power *pwr)
 		battery_cap_mah = BATTERY_CAP_MAH_DEFAULT;
 		dgrd_cyc_cap = DGRD_CYC_CAP_DEFAULT;
 		soc_est_max_num = SOC_EST_MAX_NUM_DEFAULT;
+/*
 		dgrd_temp_cap_h = DGRD_TEMP_CAP_H_DEFAULT;
 		dgrd_temp_cap_m = DGRD_TEMP_CAP_M_DEFAULT;
 		dgrd_temp_cap_l = DGRD_TEMP_CAP_L_DEFAULT;
+*/
 		for (i = 0; i < NUM_BAT_PARAMS; i++) {
 			ocv_table[i] = ocv_table_default[i];
 			soc_table[i] = soc_table_default[i];
@@ -1915,41 +1911,17 @@ static int bd71828_get_cycle(struct sw_gauge *sw, int *cycle)
 	return ret;
 }
 
-/* TODO: These are battery specific and should come from DT */
-/* Add these in batinfo? */
-static struct sw_gauge_temp_degr battery_temp_dgr_table[] = {
-	{
-		.temp_floor = DGRD_TEMP_VL_DEFAULT,
-	},
-	{
-		.temp_floor = DGRD_TEMP_L_DEFAULT,
-	},
-	{
-		.temp_floor = DGRD_TEMP_M_DEFAULT,
-	},
-	{
-		.temp_floor = DGRD_TEMP_H_DEFAULT,
-	},
-};
-
 static void fgauge_initial_values(struct bd71827_power *pwr)
 {
 	struct sw_gauge_desc *d = &pwr->gdesc;
 	struct sw_gauge_ops *o = &pwr->ops;
 	int sz;
 
-	/* Set temperature degradation by module parameters */
-	battery_temp_dgr_table[0].temp_degrade_1C = dgrd_temp_cap_vl;
-	battery_temp_dgr_table[1].temp_degrade_1C = dgrd_temp_cap_l;
-	battery_temp_dgr_table[2].temp_degrade_1C = dgrd_temp_cap_m;
-	battery_temp_dgr_table[3].temp_degrade_1C = dgrd_temp_cap_h;
-
 	/* TODO: See if these could be get from DT? */
 	d->poll_interval = JITTER_DEFAULT; /* 3 seconds */
 	d->allow_set_cycle = true;
-	d->amount_of_temp_dgr = ARRAY_SIZE(battery_temp_dgr_table);
-	d->temp_dgr = battery_temp_dgr_table;
-	d->degrade_cycle_uah = dgrd_cyc_cap;
+	//d->amount_of_temp_dgr = ARRAY_SIZE(battery_temp_dgr_table);
+	//d->temp_dgr = battery_temp_dgr_table;
 	d->cap_adjust_volt_threshold = THR_VOLTAGE_DEFAULT;
 	d->designed_cap = pwr->battery_cap;
 	d->clamp_soc = true;
@@ -2120,18 +2092,6 @@ MODULE_PARM_DESC(dgrd_cyc_cap, "dgrd_cyc_cap:Degraded capacity per cycle (uAh)")
 
 module_param(soc_est_max_num, int, 0444);
 MODULE_PARM_DESC(soc_est_max_num, "soc_est_max_num:SOC estimation max repeat number");
-
-module_param(dgrd_temp_cap_h, int, 0444);
-MODULE_PARM_DESC(dgrd_temp_cap_h, "dgrd_temp_cap_h:Degraded capacity at high temperature (uAh)");
-
-module_param(dgrd_temp_cap_m, int, 0444);
-MODULE_PARM_DESC(dgrd_temp_cap_m, "dgrd_temp_cap_m:Degraded capacity at middle temperature (uAh)");
-
-module_param(dgrd_temp_cap_l, int, 0444);
-MODULE_PARM_DESC(dgrd_temp_cap_l, "dgrd_temp_cap_l:Degraded capacity at low temperature (uAh)");
-
-module_param(dgrd_temp_cap_vl, int, 0444);
-MODULE_PARM_DESC(dgrd_temp_cap_vl, "dgrd_temp_cap_vl:Degraded capacity at very low temperature (uAh)");
 
 module_param_array(ocv_table, int, NULL, 0444);
 MODULE_PARM_DESC(ocv_table, "ocv_table:Open Circuit Voltage table (uV)");
