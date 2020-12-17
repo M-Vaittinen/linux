@@ -618,6 +618,7 @@ int power_supply_dev_get_battery_info(struct device *dev,
 	struct fwnode_handle *battery_node;
 	int err, len, index;
 	const char *value;
+	u32 *dgrd_table;
 	u32 tuple[2];
 
 	info->technology                     = POWER_SUPPLY_TECHNOLOGY_UNKNOWN;
@@ -638,6 +639,8 @@ int power_supply_dev_get_battery_info(struct device *dev,
 	info->factory_internal_resistance_uohm  = -EINVAL;
 	info->resist_table = NULL;
 	info->degrade_cycle_uah = 0;
+	info->temp_dgrd_values = 0;
+	info->temp_dgrd = NULL;
 
 	for (index = 0; index < POWER_SUPPLY_OCV_TEMP_MAX; index++) {
 		info->ocv_table[index]       = NULL;
@@ -736,11 +739,61 @@ int power_supply_dev_get_battery_info(struct device *dev,
 		info->temp_max = tuple[1];
 	}
 
-	len = fwnode_property_count_u32(battery_node, "ocv-capacity-celsius");
+
+	len = fwnode_property_count_u32(battery_node, "temp-degrade-table");
 	if (len == -EINVAL)
 		len = 0;
-
 	if (len < 0) {
+		dev_err(dev, "malformed temp-degrade-table %d\n", len);
+		err = len;
+		goto out_put_node;
+	}
+	/* table should consist of value pairs - maximum of 100 triplets */
+	if (len % 3 || len / 3 > POWER_SUPPLY_TEMP_DGRD_MAX_VALUES) {
+		dev_warn(dev,
+			 "bad amount of temperature-capacity degrade values\n");
+		err = -EINVAL;
+		goto out_put_node;
+	}
+	info->temp_dgrd_values = len / 3;
+	if (info->temp_dgrd_values) {
+		info->temp_dgrd = devm_kcalloc(dev, info->temp_dgrd_values,
+					       sizeof(*info->temp_dgrd),
+					       GFP_KERNEL);
+		if (!info->temp_dgrd) {
+			err = -ENOMEM;
+			goto out_put_node;
+		}
+		dgrd_table = kcalloc(len, sizeof(*dgrd_table), GFP_KERNEL);
+		if (!dgrd_table) {
+			err = -ENOMEM;
+			goto out_put_node;
+		}
+		err = fwnode_property_read_u32_array(battery_node,
+						     "temp-degrade-table",
+						     dgrd_table, len);
+		if (err) {
+			dev_warn(dev,
+				 "bad temperature - capacity degrade values %d\n",
+				 err);
+			kfree(dgrd_table);
+			info->temp_dgrd_values = 0;
+			goto out_put_node;
+		}
+		for (index = 0; index < info->temp_dgrd_values; index++) {
+			struct power_supply_temp_degr *d = &info->temp_dgrd[index];
+
+			d->temp_degrade_1C = dgrd_table[index * 3];
+			d->degrade_at_set = dgrd_table[index * 3 + 1];
+			d->temp_set_point = dgrd_table[index * 3 + 2];
+		}
+		kfree(dgrd_table);
+	}
+
+	len = fwnode_property_count_u32(battery_node, "ocv-capacity-celsius");
+	if (len == -EINVAL) {
+		len = 0;
+	} else if (len < 0) {
 		dev_err(dev, "malformed ocv-capacity-celsius table\n");
 		err = len;
 		goto out_put_node;
