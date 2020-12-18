@@ -706,8 +706,8 @@ int power_supply_get_battery_info(struct power_supply *psy,
 			struct sw_gauge_temp_degr *d = &info->temp_dgrd[index];
 
 			d->temp_degrade_1C = dgrd_table[index * 3];
-			d->degrade_at_set = dgrd_table[index * 2 + 1];
-			d->temp_set_point = dgrd_table[index * 2 + 2];
+			d->degrade_at_set = dgrd_table[index * 3 + 1];
+			d->temp_set_point = dgrd_table[index * 3 + 2];
 		}
 		kfree(dgrd_table);
 	}
