@@ -520,7 +520,7 @@ static int sw_gauge_zero_cap_adjust(struct sw_gauge *sw, int *effective_cap,
 static int find_dcap_change(struct sw_gauge *sw, int temp, int *delta_cap)
 {
 	struct sw_gauge_temp_degr *dclosest = NULL, *d;
-	int i;
+	int i, tdiff;
 
 	for (i = 0; i < sw->amount_of_temp_dgr; i++) {
 		d = &sw->temp_dgr[i];
@@ -536,19 +536,24 @@ static int find_dcap_change(struct sw_gauge *sw, int temp, int *delta_cap)
 	if (!dclosest)
 		return - EINVAL;
 
-	pr_info("Found temp dgr range with set-point %d C, current temp %d C\n",
-		dclosest->temp_set_point / 10, temp / 10);
+	tdiff = dclosest->temp_set_point - temp;
+
+	pr_info("temp dgr range: set-point %d/10 C offset %d uAh, degr/C %d\n",
+		dclosest->temp_set_point, dclosest->degrade_at_set,
+		dclosest->temp_degrade_1C);
+
+	pr_info ("current temp %d/10 C, difference %d/10 C\n",temp, tdiff);
 	/*
 	 * Temperaure range is in tenths of degrees and degrade value is for a
 	 * degree => divide by 10 after multiplication to fix the scale
 	 */
-	*delta_cap = (dclosest->temp_set_point - temp) *
-		     dclosest->temp_degrade_1C / 10 + dclosest->degrade_at_set;
+	*delta_cap = (tdiff) * dclosest->temp_degrade_1C / 10 +
+		     dclosest->degrade_at_set;
 
 	pr_info("Computed cap change %d\n", *delta_cap);
 	pr_info("%d uAh for temp diff %d + setpoint uAh %d\n",
-		(dclosest->temp_set_point - temp) * dclosest->temp_degrade_1C / 10,
-		(dclosest->temp_set_point - temp) / 10, dclosest->degrade_at_set);
+		(tdiff) * dclosest->temp_degrade_1C / 10,
+		(tdiff) / 10, dclosest->degrade_at_set);
 
 	return 0;
 }
