@@ -6,8 +6,8 @@
  * Author: Matti Vaittinen <matti.vaittien@fi.rohmeurope.com>
  */
 
-#define DRIVER_DT_TEST
-//#define KUNIT_TEST
+//#define DRIVER_DT_TEST
+#define KUNIT_TEST
 
 #include <kunit/test.h>
 #include <linux/delay.h>
@@ -15,7 +15,7 @@
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
 #include <linux/power/sw_gauge.h>
-#include "_bd71828-batdata/A01/out/Discharge-0p1C_Cont-0dC.h"
+#include "_bd71828-batdata/A01/out/Discharge-0p2C_Cont-0dC.h"
 /*
 #include "_bd71828-batdata/A01/out/Discharge-0p1C_Cont-15dC.h"
 #include "_bd71828-batdata/A01/out/Discharge-0p1C_Cont-25dC.h"
@@ -100,9 +100,7 @@
 extern volatile int TEST_loop;
 extern volatile int LOST_teep;
 extern wait_queue_head_t _SWG_TESTwq;
-/*
-	TODO: test also giving degrade values from DT.
-*/
+
 static struct sw_gauge_temp_degr battery_temp_dgr_table[] = {
 	{
 		.temp_set_point = -20, /* -2 C - unit is 0.1 C */
@@ -484,9 +482,6 @@ static int test_get_vdr(int dsoc, int temp)
 	return vdr;
 }
 
-
-
-
 static int test_zero_cap_adjust(struct sw_gauge *sw, int *effective_cap,
 				int cc_uah, int vbat, int temp)
 {
@@ -496,7 +491,19 @@ static int test_zero_cap_adjust(struct sw_gauge *sw, int *effective_cap,
 	int dsoc;
 	int vdrop;
 	unsigned int dsoc_at_newzero;
+	int hack = 0;
+	int hack2 = 0;
 
+	/* Debug hack to display vdrop calc for strange values */
+	if (vbat == 3511871) {
+		hack2 = 1;
+		pr_info("******************* PROBLEM ROUND? *******************\n");
+	}
+	if (vbat == 3511871 || vbat == 3512438) {
+		hack = 1;
+		if (!hack2)
+		pr_info("******************* REFERENCE ROUND *******************\n");
+	}
 	/*
 	 * Calculate SOC from CC and effective battery cap.
 	 * Use unit of 0.1% for dsoc to improve accuracy
@@ -565,22 +572,35 @@ static int test_zero_cap_adjust(struct sw_gauge *sw, int *effective_cap,
 		lost_cap = ((NUM_BAT_PARAMS - 2 - i) * 5 + (j - 1)) *
 			    *effective_cap / 100;
 
-		pr_info("Lost cap drom vdrop %d\n", lost_cap);
+		pr_info("Lost cap from vdrop %d\n", lost_cap);
 
 		for (m = 0; m < soc_est_max_num; m++) {
 			new_lost_cap = lost_cap;
 			dsoc0 = lost_cap * 1000 / *effective_cap;
+
+			if (hack)
+				pr_info("dsoc0 by lost cap = %d, m=%d\n", dsoc0, m);
 			if ((dsoc >= 0 && dsoc0 > dsoc) ||
-			    (dsoc < 0 && dsoc0 < dsoc))
+			    (dsoc < 0 && dsoc0 < dsoc)) {
 				dsoc0 = dsoc;
+				if (hack)
+					pr_info("dsoc0 set from dsoc to = %d, m=%d\n", dsoc0, m);
+			}
 
 			vdr = test_get_vdr(dsoc, temp);
+			if (hack)
+				pr_info("vdr by dsoc = %d, m=%d\n", vdr, m);
+
 			vdr0 = test_get_vdr(dsoc0, temp);
+			if (hack)
+				pr_info("vdr by dsoc0 = %d\n", vdr0);
 
 			for (k = 1; k < NUM_BAT_PARAMS; k++) {
 				ocv_table_load[k] = ocv_table[k] -
 						    (ocv - vbat) * vdr0 / vdr;
 				if (ocv_table_load[k] <= TEST_MIN_VOLTAGE) {
+					if (hack)
+						pr_info("1. ocv_table_load[k] at break %d, k=%d\n", ocv_table_load[k], k);
 					break;
 				}
 			}
@@ -589,20 +609,35 @@ static int test_zero_cap_adjust(struct sw_gauge *sw, int *effective_cap,
 				     ocv_table_load[k]) / 5;
 				for (j = 1; j < 5; j++)
 					if ((ocv_table_load[k] + dv * j) >
-					     TEST_MIN_VOLTAGE)
+					     TEST_MIN_VOLTAGE) {
+						if (hack)
+							pr_info("1. ocv_table_load[k]+dv *j  at break %d, j=%d, dv=%d\n", ocv_table_load[k] + dv * j, j, dv);
 						break;
+					}
 
 				new_lost_cap = ((NUM_BAT_PARAMS - 2 - k) *
 						 5 + (j - 1)) *
 						*effective_cap / 100;
+				if (hack)
+					pr_info("new_lost_cap=%d, m=%d\n", new_lost_cap, m);
 				if (soc_est_max_num == 1)
 					lost_cap = new_lost_cap;
-				else
+				else {
+					if (hack) {
+						pr_info("old lost cap=%d\n", lost_cap);
+						pr_info("Adding %d to old lost cap\n", (new_lost_cap - lost_cap) /(2 * (soc_est_max_num - m)));
+					}
 					lost_cap += (new_lost_cap - lost_cap) /
 						    (2 * (soc_est_max_num - m));
+					if (hack)
+						pr_info("lost_cap after m=%d is %d\n", m, lost_cap);
+				}
 			}
-			if (new_lost_cap == lost_cap)
+			if (new_lost_cap == lost_cap) {
+				if (hack)
+					pr_info("new_lost_cap == lost_cap %d\n", lost_cap);
 				break;
+			}
 		}
 
 		pr_info("After all vdr table iterations lost cap %d\n", lost_cap);
@@ -611,6 +646,10 @@ static int test_zero_cap_adjust(struct sw_gauge *sw, int *effective_cap,
 		*effective_cap -= lost_cap;
 		pr_info("New effective cap %d\n", *effective_cap);
 	}
+	if (hack2)
+		pr_info("******************* PROBLEM ROUND? *******************\n");
+	if (hack && !hack2)
+		pr_info("******************* REFERENCE ROUND *******************\n");
 
 	return 0;
 }
@@ -640,8 +679,8 @@ static struct sw_gauge_desc d =
 {
 	.poll_interval = TEST_JITTER_DEFAULT,
 	.allow_set_cycle = true,
-	.amount_of_temp_dgr = ARRAY_SIZE(battery_temp_dgr_table),
-	.temp_dgr = battery_temp_dgr_table,
+//	.amount_of_temp_dgr = ARRAY_SIZE(battery_temp_dgr_table),
+//	.temp_dgr = battery_temp_dgr_table,
 	.degrade_cycle_uah = TEST_DEGRADE_PER_CYCLE,
 	.cap_adjust_volt_threshold = TEST_THR_VOLTAGE,
 	.system_min_voltage = TEST_MIN_VOLTAGE,
