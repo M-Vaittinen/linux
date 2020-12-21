@@ -849,7 +849,6 @@ static int gauge_thread(void *data)
 		wait_event_interruptible_timeout(swgauge_thread_wait,
 						 swgauge_forced_run, timeout);
 		swgauge_forced_run = 0;
-	//	msleep(jiffies_to_msecs(timeout));
 	}
 
 	return 0;
