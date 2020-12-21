@@ -182,6 +182,7 @@ struct sw_gauge {
 	int cycle;
 	u64 next_iter; /* Time of next iteration in jiffies64 */
 	u64 next_cal; /* Time of next calibration in jiffies64 */
+	int force_run;
 	int refcount;
 	struct power_supply *psy;
 	int (*orig_get_property)(struct power_supply *psy,
@@ -217,5 +218,6 @@ struct sw_gauge *__must_check
 devm_psy_register_sw_gauge(struct device *parent, struct sw_gauge_psy *psycfg,
 			   struct sw_gauge_ops *ops,
 			   struct sw_gauge_desc *desc);
+void swgauge_run(struct sw_gauge *sw);
 
 #endif /* POWER_SW_GAUGE_H */

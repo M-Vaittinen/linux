@@ -762,7 +762,9 @@ static bool should_calibrate(struct sw_gauge *sw, u64 time)
 
 static bool should_compute(struct sw_gauge *sw, u64 time)
 {
-	if (sw->next_iter <= time + msecs_to_jiffies(SWGAUGE_TIMEOUT_JITTER)) {
+	if (sw->next_iter <= time + msecs_to_jiffies(SWGAUGE_TIMEOUT_JITTER) ||
+	    sw->force_run) {
+		sw->force_run = 0;
 		sw->next_iter = time +
 				msecs_to_jiffies(sw->desc->poll_interval);
 		return true;
@@ -782,6 +784,29 @@ static void adjust_next_tmo(struct sw_gauge *sw, u64 *timeout, u64 now)
 	if (*timeout < msecs_to_jiffies(SWGAUGE_TIMEOUT_JITTER))
 		*timeout = msecs_to_jiffies(SWGAUGE_TIMEOUT_JITTER);
 }
+
+static DECLARE_WAIT_QUEUE_HEAD(swgauge_thread_wait);
+
+static int swgauge_forced_run;
+
+/**
+ * swgauge_run - force running the computation loop for gauge
+ *
+ * Drivers utilizing swgauge can trigger running the SOC computation loop even
+ * prior the time-out occurs. This is usable for drivers with longish period
+ * but which may get interrupts form device when some condition changes. Note,
+ * this function schedules the iteration but does not block.
+ *
+ * @sw: gauge fow which the computation should be ran.
+ */
+void swgauge_run(struct sw_gauge *sw)
+{
+	sw->force_run = 1;
+	swgauge_forced_run = 1;
+	smp_wmb();
+	wake_up(&swgauge_thread_wait);
+}
+EXPORT_SYMBOL_GPL(swgauge_run);
 
 static int gauge_thread(void *data)
 {
@@ -821,7 +846,10 @@ static int gauge_thread(void *data)
 		 * kick us here
 		 */
 		pr_debug("sleeping %u msec\n", jiffies_to_msecs(timeout));
-		msleep(jiffies_to_msecs(timeout));
+		wait_event_interruptible_timeout(swgauge_thread_wait,
+						 swgauge_forced_run, timeout);
+		swgauge_forced_run = 0;
+	//	msleep(jiffies_to_msecs(timeout));
 	}
 
 	return 0;
@@ -862,7 +890,7 @@ static int start_gauge_thread(struct task_struct *k)
 	return ret;
 }
 
-/**
+/*
  * I think this is unnecessary. If someone registers SW gauge to the system
  * then we can probably leave this running even if the gauge was temporarily
  * removed. So let's consider removing this and thus simplifying the design.
@@ -902,6 +930,25 @@ static int swgauge_is_writable_default(struct power_supply *psy,
 	return 0;
 }
 
+/**
+ * psy_register_sw_gauge - register driver to swgauge
+ *
+ * @parent:	Parent device for power-supply class device.
+ * @psycfg:	Confiurations for power-supply class.
+ * @ops:	swgauge specific operations.
+ * @desc:	swgauge configuration data.
+ *
+ * Return:	pointer to swgauge on success, an ERR_PTR on failure.
+ *
+ * A power-supply driver for a device with drifting coulomb counter (CC) can
+ * register for periodical polling/CC correction. CC correction is done when
+ * battery is reported to be FULL or relaxed. For FULL battery the CC is set
+ * based on designed capacity and for relaxed battery CC is set based on open
+ * circuit voltage. The swgauge takes care of registering a power-supply class
+ * and reporting a few power-supply properties to user-space. See
+ * SWGAUGE_PSY_PROPS. Swauge can also do battery capacity corretions based on
+ * provided temperature/cycle degradation values and/or system voltage limit.
+ */
 struct sw_gauge *__must_check psy_register_sw_gauge(struct device *parent,
 						    struct sw_gauge_psy *psycfg,
 						    struct sw_gauge_ops *ops,
@@ -920,6 +967,8 @@ struct sw_gauge *__must_check psy_register_sw_gauge(struct device *parent,
 		dev_err(parent, "interval missing\n");
 		return ERR_PTR(-EINVAL);
 	}
+
+	init_waitqueue_head(&new->wq);
 
 	/*
 	 * I don't like this. I mean, we should either get the psy desc from
@@ -1047,6 +1096,11 @@ free_pd_out:
 }
 EXPORT_SYMBOL_GPL(psy_register_sw_gauge);
 
+/**
+ * psy_remove_sw_gauge - deregister driver from swgauge
+ *
+ * @sw:	gauge driver to be deregistered.
+ */
 void psy_remove_sw_gauge(struct sw_gauge *sw)
 {
 	mutex_lock(&sw_gauge_lock);
@@ -1071,6 +1125,26 @@ static void devm_sw_gauge_release(struct device *dev, void *res)
 	psy_remove_sw_gauge(*sw);
 }
 
+/**
+ * devm_psy_register_sw_gauge - managed register driver to swgauge
+ *
+ * @parent:	Parent device for power-supply class device. Swgauge's lifetime
+ *		is also bound to this device.
+ * @psycfg:	Confiurations for power-supply class.
+ * @ops:	swgauge specific operations.
+ * @desc:	swgauge configuration data.
+ *
+ * Return:	pointer to swgauge on success, an ERR_PTR on failure.
+ *
+ * A power-supply driver for a device with drifting coulomb counter (CC) can
+ * register for periodical polling/CC correction. CC correction is done when
+ * battery is reported to be FULL or relaxed. For FULL battery the CC is set
+ * based on designed capacity and for relaxed battery CC is set based on open
+ * circuit voltage. The swgauge takes care of registering a power-supply class
+ * and reporting a few power-supply properties to user-space. See
+ * SWGAUGE_PSY_PROPS. Swauge can also do battery capacity corretions based on
+ * provided temperature/cycle degradation values and/or system voltage limit.
+ */
 struct sw_gauge *__must_check
 devm_psy_register_sw_gauge(struct device *parent, struct sw_gauge_psy *psycfg,
 			   struct sw_gauge_ops *ops, struct sw_gauge_desc *desc)
