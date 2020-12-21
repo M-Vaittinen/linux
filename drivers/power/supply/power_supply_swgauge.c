@@ -580,7 +580,7 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 	int current_cap_uah;
 	int temp;
 	int new_soc;
-	bool do_zero_correct;
+	bool do_zero_correct, changed = false;
 
 	ret = sw->ops.get_uah(sw, &cc_uah);
 	/*
@@ -606,8 +606,8 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 		spin_lock(&sw->lock);
 		sw->capacity_uah = 0;
 		sw->soc = 0;
-		spin_unlock(&sw->lock);
-		return 0;
+		changed = true;
+		goto battery_eol_out;
 	}
 
 	/* Do battery temperature compensation */
@@ -675,14 +675,13 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 	sw->temp = temp;
 	sw->capacity_uah = current_cap_uah;
 	new_soc = SOC_BY_CAP(cc_uah, sw->soc_rounding, current_cap_uah);
-	if (sw->soc != new_soc) {
-		/*
-		 * Should we ping user-space about the change?
-		 * Should we ping user-space when SOC changes more than N%?
-		 * Should the N be configurable by user-space?
-		 */
-		;
-	}
+
+	/*
+	 * Should we only ping user-space when SOC changes more than N%?
+	 * Should the N be configurable (by user-space?)
+	 */
+	if (sw->soc != new_soc)
+		changed = true;
 
 	sw->soc = new_soc;
 	if (state & SW_GAUGE_CLAMP_SOC) {
@@ -690,6 +689,8 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 			sw->soc = sw->clamped_soc;
 	}
 	sw->clamped_soc = sw->soc;
+
+battery_eol_out:
 	spin_unlock(&sw->lock);
 
 	TEST_loop = 1;
@@ -697,6 +698,9 @@ static int compute_soc_by_cc(struct sw_gauge *sw, int state)
 	wait_event(_SWG_TESTwq, !TEST_loop);
 	wait_event(_SWG_TESTwq, LOST_teep);
 	LOST_teep = 0;
+
+	if (changed)
+		power_supply_changed(sw->psy);
 
 	return ret;
 }
@@ -886,6 +890,18 @@ static int sw_gauge_set_ops(struct sw_gauge *sw, struct sw_gauge_ops *ops)
 	return 0;
 }
 
+static int swgauge_is_writable_default(struct power_supply *psy,
+				       enum power_supply_property psp)
+{
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CYCLE_COUNT:
+		return 1;
+	default:
+		break;
+	}
+	return 0;
+}
+
 struct sw_gauge *__must_check psy_register_sw_gauge(struct device *parent,
 						    struct sw_gauge_psy *psycfg,
 						    struct sw_gauge_ops *ops,
@@ -932,20 +948,14 @@ struct sw_gauge *__must_check psy_register_sw_gauge(struct device *parent,
 	}
 	new->desc = desc;
 
-	/*
-	 * Besides - we add our own property getting stuff so we should edit
-	 * the available properties. Should we have constant set of properties
-	 * always handled by swgauge (SOC, TEMP, ... ? ) - or should we allow
-	 * different drivers to specify which properties swgauge handles -
-	 * or should we silently handle properties which we can based on
-	 * callbacks provided by driver?
-	 */
 	*pd = *psycfg->pdesc;
 	new->orig_get_property = pd->get_property;
 	new->orig_set_property = pd->set_property;
 	spin_lock_init(&new->lock);
 	pd->get_property = sw_gauge_get_property;
 	pd->set_property = sw_gauge_set_property;
+	if (!pd->property_is_writeable && desc->allow_set_cycle)
+		pd->property_is_writeable = swgauge_is_writable_default;
 
 	/* Do we need power_supply_register_ws? */
 	/*

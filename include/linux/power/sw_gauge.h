@@ -15,6 +15,20 @@
 #define SW_GAUGE_MAY_BE_LOW BIT(2)
 #define SW_GAUGE_CLAMP_SOC BIT(3)
 
+/*
+ * Power supply properties handled by swgauge
+ *
+ * Power supply drivers registering to swgauge can append SWGAUGE_PSY_PROPS to
+ * their list of supported power-supply properties to advertice existence of
+ * the values computed by the swgauge.
+ */
+#define SWGAUGE_PSY_PROPS	POWER_SUPPLY_PROP_CAPACITY,		\
+				POWER_SUPPLY_PROP_CYCLE_COUNT,		\
+				POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,	\
+				POWER_SUPPLY_PROP_CHARGE_FULL,		\
+				POWER_SUPPLY_PROP_CHARGE_NOW,		\
+				POWER_SUPPLY_PROP_TEMP
+
 struct sw_gauge;
 
 /**
