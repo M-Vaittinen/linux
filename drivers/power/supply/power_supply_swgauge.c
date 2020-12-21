@@ -968,8 +968,6 @@ struct sw_gauge *__must_check psy_register_sw_gauge(struct device *parent,
 		return ERR_PTR(-EINVAL);
 	}
 
-	init_waitqueue_head(&new->wq);
-
 	/*
 	 * I don't like this. I mean, we should either get the psy desc from
 	 * driver - or fill the desc here based on information from driver.
