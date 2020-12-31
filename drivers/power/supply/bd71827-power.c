@@ -18,13 +18,14 @@
 #include <linux/interrupt.h>
 #include <linux/power_supply.h>
 #include <linux/power/sw_gauge.h>
+#include <linux/mfd/rohm-bd71815.h>
 #include <linux/mfd/rohm-bd71827.h>
 #include <linux/mfd/rohm-bd71828.h>
 #include <linux/delay.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/of.h>
-#include <linux/proc_fs.h>
+//#include <linux/proc_fs.h>
 #include <linux/uaccess.h>
 
 /* This is horrible - what kind of a helper would be good? */
@@ -48,8 +49,9 @@
 #define BD7182x_MASK_CHG_STATE		0x7f
 #define BD7182x_MASK_CC_FULL_CLR	0x10
 #define BD7182x_MASK_BAT_TEMP		0x07
-#define BD7182x_MASK_DCIN_DET		0x01
-#define BD7182x_MASK_CONF_PON		0x01
+#define BD7182x_MASK_DCIN_DET		BIT(0)
+#define BD7182x_MASK_CONF_PON		BIT(0)
+#define BD71815_MASK_CONF_XSTB		BIT(1)
 #define BD7182x_MASK_BAT_STAT		0x3f
 #define BD7182x_MASK_DCIN_STAT		0x07
 
@@ -63,8 +65,9 @@
 #define BD7182x_DCIN_COLLAPSE_DEFAULT	0x36
 
 /* Measured min and max value clear bits */
-#define BD7182x_MASK_VSYS_MIN_AVG_CLR	0x10
-#define BD7182x_MASK_VBAT_MIN_AVG_CLR	0x01
+#define BD718XX_MASK_VSYS_MIN_AVG_CLR	0x10
+
+/* #define BD718XX_MASK_VBAT_MIN_AVG_CLR	0x01 */
 
 
 #define JITTER_DEFAULT			3000
@@ -109,14 +112,15 @@
 #define NUM_BAT_PARAMS			23
 
 struct pwr_regs {
+	int used_init_regs;
 	u8 vbat_init;
 	u8 vbat_init2;
 	u8 vbat_init3;
 	u8 vbat_avg;
 	u8 ibat;
 	u8 ibat_avg;
-	u8 vsys_avg;
-	u8 vbat_min_avg;
+/*	u8 vsys_avg; */
+/*	u8 vbat_min_avg; */
 	u8 meas_clear;
 	u8 vsys_min_avg;
 	u8 btemp_vth;
@@ -127,8 +131,8 @@ struct pwr_regs {
 	u8 coulomb0;
 	u8 coulomb_ctrl;
 	u8 vbat_rex_avg;
-	u8 rex_clear_reg;
-	u8 rex_clear_mask;
+/*	u8 rex_clear_reg; */
+/*	u8 rex_clear_mask; */
 	u8 coulomb_full3;
 	u8 cc_full_clr;
 	u8 coulomb_chg3;
@@ -140,7 +144,7 @@ struct pwr_regs {
 	u8 vbat_alm_limit_u;
 	u8 batcap_mon_limit_u;
 	u8 conf;
-	u8 bat_stat;
+	/* u8 bat_stat; */
 	u8 vdcin;
 #ifdef PWRCTRL_HACK
 	u8 pwrctrl;
@@ -151,11 +155,12 @@ struct pwr_regs pwr_regs_bd71827 = {
 	.vbat_init = BD71827_REG_VM_OCV_PRE_U,
 	.vbat_init2 = BD71827_REG_VM_OCV_PST_U,
 	.vbat_init3 = BD71827_REG_VM_OCV_PWRON_U,
+	.used_init_regs = 3,
 	.vbat_avg = BD71827_REG_VM_SA_VBAT_U,
 	.ibat = BD71827_REG_CC_CURCD_U,
 	.ibat_avg = BD71827_REG_CC_SA_CURCD_U,
-	.vsys_avg = BD71827_REG_VM_SA_VSYS_U,
-	.vbat_min_avg = BD71827_REG_VM_SA_VBAT_MIN_U,
+	/* .vsys_avg = BD71827_REG_VM_SA_VSYS_U, */
+	/* .vbat_min_avg = BD71827_REG_VM_SA_VBAT_MIN_U, */
 	.meas_clear = BD71827_REG_VM_SA_MINMAX_CLR,
 	.vsys_min_avg = BD71827_REG_VM_SA_VSYS_MIN_U,
 	.btemp_vth = BD71827_REG_VM_BTMP,
@@ -165,9 +170,9 @@ struct pwr_regs pwr_regs_bd71827 = {
 	.coulomb1 = BD71827_REG_CC_CCNTD_1,
 	.coulomb0 = BD71827_REG_CC_CCNTD_0,
 	.coulomb_ctrl = BD71827_REG_CC_CTRL,
-	.vbat_rex_avg = BD71827_REG_REX_SA_VBAT_U,
-	.rex_clear_reg = BD71827_REG_REX_CTRL_1,
-	.rex_clear_mask = BD71827_REX_CLR_MASK,
+/*	.vbat_rex_avg = BD71827_REG_REX_SA_VBAT_U, */
+/*	.rex_clear_reg = BD71827_REG_REX_CTRL_1,
+	.rex_clear_mask = BD71827_REX_CLR_MASK, */
 	.coulomb_full3 = BD71827_REG_FULL_CCNTD_3,
 	.cc_full_clr = BD71827_REG_FULL_CTRL,
 	.coulomb_chg3 = BD71827_REG_CCNTD_CHG_3,
@@ -179,7 +184,7 @@ struct pwr_regs pwr_regs_bd71827 = {
 	.vbat_alm_limit_u = BD71827_REG_ALM_VBAT_TH_U,
 	.batcap_mon_limit_u = BD71827_REG_CC_BATCAP1_TH_U,
 	.conf = BD71827_REG_CONF,
-	.bat_stat = BD71827_REG_BAT_STAT,
+	/* .bat_stat = BD71827_REG_BAT_STAT, */
 	.vdcin = BD71827_REG_VM_DCIN_U,
 #ifdef PWRCTRL_HACK
 	.pwrctrl = BD71827_REG_PWRCTRL,
@@ -191,11 +196,12 @@ struct pwr_regs pwr_regs_bd71828 = {
 	.vbat_init = BD71828_REG_VBAT_INITIAL1_U,
 	.vbat_init2 = BD71828_REG_VBAT_INITIAL2_U,
 	.vbat_init3 = BD71828_REG_OCV_PWRON_U,
+	.used_init_regs = 3,
 	.vbat_avg = BD71828_REG_VBAT_U,
 	.ibat = BD71828_REG_IBAT_U,
 	.ibat_avg = BD71828_REG_IBAT_AVG_U,
-	.vsys_avg = BD71828_REG_VSYS_AVG_U,
-	.vbat_min_avg = BD71828_REG_VBAT_MIN_AVG_U,
+/*	.vsys_avg = BD71828_REG_VSYS_AVG_U, */
+/*	.vbat_min_avg = BD71828_REG_VBAT_MIN_AVG_U, */
 	.meas_clear = BD71828_REG_MEAS_CLEAR,
 	.vsys_min_avg = BD71828_REG_VSYS_MIN_AVG_U,
 	.btemp_vth = BD71828_REG_VM_BTMP_U,
@@ -205,9 +211,12 @@ struct pwr_regs pwr_regs_bd71828 = {
 	.coulomb1 = BD71828_REG_CC_CNT1,
 	.coulomb0 = BD71828_REG_CC_CNT0,
 	.coulomb_ctrl = BD71828_REG_COULOMB_CTRL,
+/*
+ * 	REX CC is not utilized - but maybe we should..
+ */
 	.vbat_rex_avg = BD71828_REG_VBAT_REX_AVG_U,
-	.rex_clear_reg = BD71828_REG_COULOMB_CTRL2,
-	.rex_clear_mask = BD71828_MASK_REX_CC_CLR,
+/*	.rex_clear_reg = BD71828_REG_COULOMB_CTRL2,
+	.rex_clear_mask = BD71828_MASK_REX_CC_CLR, */
 	.coulomb_full3 = BD71828_REG_CC_CNT_FULL3,
 	.cc_full_clr = BD71828_REG_COULOMB_CTRL2,
 	.coulomb_chg3 = BD71828_REG_CC_CNT_CHG3,
@@ -219,11 +228,55 @@ struct pwr_regs pwr_regs_bd71828 = {
 	.vbat_alm_limit_u = BD71828_REG_ALM_VBAT_LIMIT_U,
 	.batcap_mon_limit_u = BD71828_REG_BATCAP_MON_LIMIT_U,
 	.conf = BD71828_REG_CONF,
-	.bat_stat = BD71828_REG_BAT_STAT,
+	/* .bat_stat = BD71828_REG_BAT_STAT, */
 	.vdcin = BD71828_REG_VDCIN_U,
 #ifdef PWRCTRL_HACK
 	.pwrctrl = BD71828_REG_PS_CTRL_1,
 	.hibernate_mask = 0x2,
+#endif
+};
+
+struct pwr_regs pwr_regs_bd71815 = {
+	.vbat_init = BD71815_REG_VM_OCV_PRE_U,
+	.vbat_init2 = BD71815_REG_VM_OCV_PST_U,
+	.used_init_regs = 2,
+	.vbat_avg = BD71815_REG_VM_SA_VBAT_U,
+	/* BD71815 does not have separate current and current avg */
+	.ibat = BD71815_REG_CC_CURCD_U,
+	.ibat_avg = BD71815_REG_CC_CURCD_U,
+
+/*	.vsys_avg = BD71828_REG_VSYS_AVG_U, */
+	.meas_clear = BD71815_REG_VM_SA_MINMAX_CLR,
+	.vsys_min_avg = BD71815_REG_VM_SA_VSYS_MIN_U,
+/*	.vbat_min_avg = BD71828_REG_VBAT_MIN_AVG_U, */
+	.btemp_vth = BD71815_REG_VM_BTMP,
+	.chg_state = BD71815_REG_CHG_STATE,
+	.coulomb3 = BD71815_REG_CC_CCNTD_3,
+	.coulomb2 = BD71815_REG_CC_CCNTD_2,
+	.coulomb1 = BD71815_REG_CC_CCNTD_1,
+	.coulomb0 = BD71815_REG_CC_CCNTD_0,
+	.coulomb_ctrl = BD71815_REG_CC_CTRL,
+	.vbat_rex_avg = BD71815_REG_REX_SA_VBAT_U,
+/*	.rex_clear_reg = BD71828_REG_COULOMB_CTRL2,
+	.rex_clear_mask = BD71828_MASK_REX_CC_CLR, */
+	.coulomb_full3 = BD71815_REG_FULL_CCNTD_3,
+	.cc_full_clr = BD71815_REG_FULL_CTRL,
+	.coulomb_chg3 = BD71815_REG_CCNTD_CHG_3,
+	.bat_temp = BD71815_REG_BAT_TEMP,
+	.dcin_stat = BD71815_REG_DCIN_STAT,
+	.dcin_collapse_limit = BD71815_REG_DCIN_CLPS,
+	.chg_set1 = BD71815_REG_CHG_SET1,
+	.chg_en   = BD71815_REG_CHG_SET1,
+	.vbat_alm_limit_u = BD71815_REG_ALM_VBAT_TH_U,
+	.batcap_mon_limit_u = BD71815_REG_CC_BATCAP1_TH_U,
+	.conf = BD71815_REG_CONF,
+	/* .bat_stat = BD71828_REG_BAT_STAT, */
+
+	.vdcin = BD71815_REG_VM_DCIN_U,
+#ifdef PWRCTRL_HACK
+#error "Not implemented for BD71815"
+	.pwrctrl = ,
+	.hibernate_mask = ,
 #endif
 };
 
@@ -415,14 +468,13 @@ struct bd71827_power {
 	struct power_supply *ac;	/**< alternating current power */
 	int gauge_delay;		/**< Schedule to call gauge algorithm */
 	int	relax_time;		/**< Relax Time */
-	spinlock_t dlock;
-	struct delayed_work bd_work;	/**< delayed work for timed work */
 
 	struct pwr_regs *regs;
 	/* Reg val to uA */
 	int curr_factor;
 	int rsens;
 	int (*get_temp)(struct bd71827_power *pwr, int *temp);
+	int (*bat_inserted)(struct bd71827_power *pwr);
 	int battery_cap;
 };
 
@@ -482,23 +534,23 @@ static int bd7182x_read16_himask(struct bd71827_power *pwr, int reg, int himask,
 }
 
 #if INIT_COULOMB == BY_VBATLOAD_REG
-#define INITIAL_OCV_REGS 3
+#define MAX_INITIAL_OCV_REGS 3
 /* get initial battery voltage and current */
 static int bd71827_get_init_voltage(struct bd71827_power *pwr,
 				     int *ocv)
 {
 	int ret;
 	int i;
-	u8 regs[INITIAL_OCV_REGS] = {
+	u8 regs[MAX_INITIAL_OCV_REGS] = {
 		pwr->regs->vbat_init,
 		pwr->regs->vbat_init2,
 		pwr->regs->vbat_init3
 	 };
-	uint16_t vals[INITIAL_OCV_REGS];
+	uint16_t vals[MAX_INITIAL_OCV_REGS];
 
 	*ocv = 0;
 
-	for (i = 0; i < INITIAL_OCV_REGS; i++) {
+	for (i = 0; i < pwr->regs->used_init_regs; i++) {
 
 		ret = bd7182x_read16_himask(pwr, regs[i], BD7182x_MASK_VBAT_U,
 					    &vals[i]);
@@ -894,8 +946,8 @@ static int bd71827_get_vsys_min(struct sw_gauge *sw, int *uv)
 		return ret;
 	}
 	ret = regmap_update_bits(pwr->regmap, pwr->regs->meas_clear,
-				 BD7182x_MASK_VSYS_MIN_AVG_CLR,
-				 BD7182x_MASK_VSYS_MIN_AVG_CLR);
+				 BD718XX_MASK_VSYS_MIN_AVG_CLR,
+				 BD718XX_MASK_VSYS_MIN_AVG_CLR);
 	if (ret)
 		dev_warn(pwr->dev, "failed to clear cached Vsys\n");
 
@@ -903,6 +955,44 @@ static int bd71827_get_vsys_min(struct sw_gauge *sw, int *uv)
 
 	return 0;
 }
+
+#if 0
+static int bd71815_get_rex_vbat(struct bd71827_power *pwr, int *rex_vbat)
+{
+	uint16_t tmp_vcell;
+	int ret;
+
+	ret = bd7182x_read16_himask(pwr, pwr->regs->vbat_rex_avg,
+				    BD7182x_MASK_VBAT_U, &tmp_vcell);
+	if (ret)
+		dev_err(pwr->dev, "Failed to read battery average voltage\n");
+	else
+		*vcell = ((int)tmp_vcell) * 1000;
+
+	return ret;
+
+}
+
+static int bd71815_get_rex_voltage(struct sw_gauge *sw, int *vbat)
+{
+	int voltage, ret;
+	struct bd71827_power *pwr = GAUGE_GET_DRVDATA(sw);
+
+	BD71827_REG_VM_SA_VBAT_U,
+	ret = bd71815_get_rex_vbat(pwr, &voltage);
+	if (ret)
+		return ret;
+
+	*vbat = voltage;
+
+	return 0;
+}
+static bool bd71815_is_relaxed(struct sw_gauge *sw, int *rex_volt)
+{
+
+
+}
+#endif
 
 /* This should be used for relax Vbat with BD71827 */
 static int bd71827_get_voltage(struct sw_gauge *sw, int *vbat)
@@ -1213,9 +1303,45 @@ static int get_bat_online(struct bd71827_power *pwr, int *bat_online)
 	return 0;
 }
 
+static int bd71828_bat_inserted(struct bd71827_power *pwr)
+{
+	int ret, val;
+
+	ret = regmap_read(pwr->regmap, pwr->regs->conf, &val);
+	if (ret) {
+		dev_err(pwr->dev, "Failed to read CONF register\n");
+		return 0;
+	}
+	ret = val & BD7182x_MASK_CONF_PON;
+
+	if (ret)
+		regmap_update_bits(pwr->regmap, pwr->regs->conf,
+				   BD7182x_MASK_CONF_PON, 0);
+
+	return ret;
+}
+
+static int bd71815_bat_inserted(struct bd71827_power *pwr)
+{
+	int ret, val;
+
+	ret = regmap_read(pwr->regmap, pwr->regs->conf, &val);
+	if (ret) {
+		dev_err(pwr->dev, "Failed to read CONF register\n");
+		return ret;
+	}
+
+	ret = !(val & BD71815_MASK_CONF_XSTB);
+	if (ret)
+		regmap_write(pwr->regmap, pwr->regs->conf,  val |
+			     BD71815_MASK_CONF_XSTB);
+
+	return ret;
+}
+
 static int bd71827_init_hardware(struct bd71827_power *pwr)
 {
-	int r, ret;
+	int ret;
 
 	ret = regmap_write(pwr->regmap, pwr->regs->dcin_collapse_limit,
 			   BD7182x_DCIN_COLLAPSE_DEFAULT);
@@ -1224,22 +1350,12 @@ static int bd71827_init_hardware(struct bd71827_power *pwr)
 		return ret;
 	}
 
-	ret = regmap_read(pwr->regmap, pwr->regs->conf, &r);
-	if (ret) {
-		dev_err(pwr->dev, "Failed to read CONF register\n");
+	ret = pwr->bat_inserted(pwr);
+	if (ret < 0)
 		return ret;
-	}
 
-	if (r & BD7182x_MASK_CONF_PON) {
+	if (ret) {
 		int cc_val;
-
-		/* Init HW, when the battery is inserted. */
-		ret = regmap_update_bits(pwr->regmap, pwr->regs->conf,
-					 BD7182x_MASK_CONF_PON, 0);
-		if (ret) {
-			dev_err(pwr->dev, "Failed to clear CONF register\n");
-			return ret;
-		}
 
 		/* Ensure Coulomb Counter is stopped */
 		ret = stop_cc(pwr);
@@ -1260,10 +1376,12 @@ static int bd71827_init_hardware(struct bd71827_power *pwr)
 			return ret;
 
 		/* Clear Relaxed Coulomb Counter */
+/*
+ * ATM We do not use REX_CC
 		ret = regmap_update_bits(pwr->regmap, pwr->regs->rex_clear_reg,
 					 pwr->regs->rex_clear_mask,
 					 pwr->regs->rex_clear_mask);
-
+*/
 		/* Set initial Coulomb Counter by HW OCV */
 		calibration_coulomb_counter(pwr);
 
@@ -1281,6 +1399,12 @@ static int bd71827_init_hardware(struct bd71827_power *pwr)
 
 		/* Set monitor threshold to 9/10 of battery uAh capacity */
 		cc_val = UAH_to_CC(pwr, pwr->battery_cap);
+
+#if 0
+/* TODO: This mysterious thing should perhaps be done on BD71815 */
+/* Mask Relax decision by PMU STATE */
+                bd7181x_set_bits(pwr->mfd, BD71815_REG_REX_CTRL_1, REX_PMU_STATE_MASK);
+#endif
 
 		ret = bd7182x_write16(pwr, pwr->regs->batcap_mon_limit_u,
 				      cc_val * 9 / 10);
@@ -1937,7 +2061,6 @@ static void fgauge_initial_values(struct bd71827_power *pwr)
 	 * interest/need for more accurate SOC estimation then he should not
 	 * be forced to get the VDR parameters from ROHM.
 	 */
-	o->zero_cap_adjust = bd71828_zero_correct;
 
 	if (!of_find_property(pwr->dev->of_node, "ocv-capacity-celsius",
 			      &sz)) {
@@ -1952,13 +2075,22 @@ static void fgauge_initial_values(struct bd71827_power *pwr)
 	 */
 	switch (pwr->chip_type) {
 	case ROHM_CHIP_TYPE_BD71828:
-	case ROHM_CHIP_TYPE_BD71878:
 		o->get_temp = bd71828_get_temp;
 		o->is_relaxed = bd71828_is_relaxed;
+		o->zero_cap_adjust = bd71828_zero_correct;
 		break;
 	case ROHM_CHIP_TYPE_BD71827:
 		o->get_temp = bd71827_get_temp;
 		o->is_relaxed = bd71827_is_relaxed;
+		o->zero_cap_adjust = bd71828_zero_correct;
+		break;
+	case ROHM_CHIP_TYPE_BD71815:
+		o->get_temp = bd71827_get_temp;
+		o->is_relaxed = bd71828_is_relaxed;
+		/* TODO: BD71815 has not been used with VDR. Use default
+		 * zero-correction by setting thresholds and by populating
+		 * correct SOC-OCV tables
+		 */
 		break;
 	/*
 	 * No need to handle default here as this is done already in probe.
@@ -1994,18 +2126,21 @@ static int bd71827_power_probe(struct platform_device *pdev)
 	pwr->regmap = regmap;
 	pwr->dev = &pdev->dev;
 	pwr->chip_type = platform_get_device_id(pdev)->driver_data;
-	spin_lock_init(&pwr->dlock);
 
 	switch (pwr->chip_type) {
 	case ROHM_CHIP_TYPE_BD71828:
-	case ROHM_CHIP_TYPE_BD71878:
+		pwr->bat_inserted = bd71828_bat_inserted;
 		pwr->regs = &pwr_regs_bd71828;
 		dev_info(pwr->dev, "Found ROHM BD718x8\n");
 		break;
 	case ROHM_CHIP_TYPE_BD71827:
+		pwr->bat_inserted = bd71828_bat_inserted;
 		pwr->regs = &pwr_regs_bd71827;
 		dev_warn(pwr->dev, "BD71817 not tested\n");
 		break;
+	case ROHM_CHIP_TYPE_BD71815:
+		pwr->bat_inserted = bd71815_bat_inserted;
+	break;
 	default:
 		dev_err(pwr->dev, "Unknown PMIC\n");
 		return -EINVAL;
@@ -2063,9 +2198,9 @@ static int bd71827_power_probe(struct platform_device *pdev)
 }
 
 static const struct platform_device_id bd71827_charger_id[] = {
+	{ "bd71815-power", ROHM_CHIP_TYPE_BD71815 },
 	{ "bd71827-power", ROHM_CHIP_TYPE_BD71827 },
 	{ "bd71828-power", ROHM_CHIP_TYPE_BD71828 },
-	{ "bd71878-power", ROHM_CHIP_TYPE_BD71878 },
 	{ },
 };
 MODULE_DEVICE_TABLE(platform, bd71827_charger_id);
@@ -2108,5 +2243,5 @@ module_param_array(vdr_table_vl, int, NULL, 0444);
 MODULE_PARM_DESC(vdr_table_vl, "vdr_table_vl:Voltage Drop Ratio temperature very low area table");
 
 MODULE_AUTHOR("Cong Pham <cpham2403@gmail.com>");
-MODULE_DESCRIPTION("ROHM BD718(27/28/78) PMIC Battery Charger driver");
+MODULE_DESCRIPTION("ROHM BD718(15/17/27/28/78) PMIC Battery Charger driver");
 MODULE_LICENSE("GPL");
