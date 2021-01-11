@@ -371,8 +371,10 @@ enum {
 #define BD71815_GPIO_CMOS		BIT(4)
 
 /* BD71815_REG_CHG_SET1 bits */
+/*
+ * Use common define from chg drv
 #define CHG_EN				BIT(0)
-
+*/
 /* BD71815 interrupt masks */
 enum {
 	BD71815_INT_EN_01_BUCKAST_MASK	=	0x0F,
@@ -548,17 +550,21 @@ enum {
 #define CCCALIB					0x20
 
 /* BD71815_REG_CHG_SET1 bits */
+/* same as on BD71828 - use common define in power-supply drv
 #define WDT_AUTO				0x40
-
+*/
 /* BD71815_REG_CC_CURCD */
 #define CURDIR_Discharging			0x8000
 
 /* BD71815_REG_VM_SA_IBAT */
 #define IBAT_SA_DIR_Discharging			0x8000
 
-/* BD71815_REG_VM_SA_MINMAX_CLR bits */
+/* BD71815_REG_VM_SA_MINMAX_CLR bits 
+ * same as on BD71828 - use common define in power-supply drv
 #define VSYS_SA_MIN_CLR				0x10
 #define VBAT_SA_MIN_CLR				0x01
+*/
+
 
 /* BD71815_REG_REX_CTRL_1 bits */
 #define REX_CLR					0x10
@@ -566,9 +572,10 @@ enum {
 /* BD71815_REG_REX_CTRL_1 bits */
 #define REX_PMU_STATE_MASK			0x04
 
-/* BD71815_REG_FULL_CTRL bits */
+/* BD71815_REG_FULL_CTRL bits
+ * same as on BD71828 - use common define in power-supply drv
 #define FULL_CLR				0x10
-
+*/
 /* BD71815_REG_LED_CTRL bits */
 #define CHGDONE_LED_EN				0x10
 
