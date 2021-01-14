@@ -239,8 +239,8 @@ enum {
 #define BD71815_BUCK_SUSP_ON			BIT(0)
 
 /* BD71815_REG_BUCK1_VOLT_H bits */
-#define BD71815_BUCK_DVSSEL			0x80
-#define BD71815_BUCK_STBY_DVS			0x40
+#define BD71815_BUCK_DVSSEL			BIT(7)
+#define BD71815_BUCK_STBY_DVS			BIT(6)
 #define BD71815_VOLT_MASK			0x3F
 #define BD71815_BUCK1_H_DEFAULT			0x14
 #define BD71815_BUCK1_L_DEFAULT			0x14
@@ -259,11 +259,11 @@ enum {
 #define LED_SUSP_ON			BIT(0)
 
 /* BD71815_REG_LDO1_CTRL bits */
-#define LDO1_EN				0x01
-#define LDO2_EN				0x02
-#define LDO3_EN				0x04
-#define DVREF_EN			0x08
-#define VOSNVS_SW_EN			0x10
+#define LDO1_EN				BIT(0)
+#define LDO2_EN				BIT(1)
+#define LDO3_EN				BIT(2)
+#define DVREF_EN			BIT(3)
+#define VOSNVS_SW_EN			BIT(4)
 
 /* LDO_MODE1_register */
 #define LDO1_SNVS_ON			BIT(7)
@@ -317,52 +317,51 @@ enum {
 #define OUT32K_MODE_OPEN_DRAIN		0
 
 /* BD71815_REG_BAT_STAT bits */
-#define BAT_DET				0x20
+#define BAT_DET				BIT(5)
 #define BAT_DET_OFFSET			5
-#define BAT_DET_DONE			0x10
-#define VBAT_OV				0x08
-#define DBAT_DET			0x01
+#define BAT_DET_DONE			BIT(4)
+#define VBAT_OV				BIT(3)
+#define DBAT_DET			BIT(0)
 
 /* BD71815_REG_VBUS_STAT bits */
-#define VBUS_DET			0x01
+#define VBUS_DET			BIT(0)
 
 #define BD71815_REG_RTC_START BD71815_REG_SEC
 #define BD71815_REG_RTC_ALM_START BD71815_REG_ALM0_SEC
 
 /* BD71815_REG_ALM0_MASK bits */
-#define A0_ONESEC			0x80
+#define A0_ONESEC			BIT(7)
 
 /* BD71815_REG_INT_EN_00 bits */
-#define ALMALE				0x1
+#define ALMALE				BIT(0)
 
 /* BD71815_REG_INT_STAT_03 bits */
-#define DCIN_MON_DET			0x02
-#define DCIN_MON_RES			0x01
-#define POWERON_LONG			0x04
-#define POWERON_MID			0x08
-#define POWERON_SHORT			0x10
-#define POWERON_PRESS			0x20
-
+#define DCIN_MON_DET			BIT(1)
+#define DCIN_MON_RES			BIT(0)
+#define POWERON_LONG			BIT(2)
+#define POWERON_MID			BIT(3)
+#define POWERON_SHORT			BIT(4)
+#define POWERON_PRESS			BIT(5)
 
 /* BD71805_REG_INT_STAT_08 bits */
-#define VBAT_MON_DET			0x02
-#define VBAT_MON_RES			0x01
+#define VBAT_MON_DET			BIT(1)
+#define VBAT_MON_RES			BIT(0)
 
 /* BD71805_REG_INT_STAT_11 bits */
-#define	INT_STAT_11_VF_DET		0x80
-#define	INT_STAT_11_VF_RES		0x40
-#define	INT_STAT_11_VF125_DET		0x20
-#define	INT_STAT_11_VF125_RES		0x10
-#define	INT_STAT_11_OVTMP_DET		0x08
-#define	INT_STAT_11_OVTMP_RES		0x04
-#define	INT_STAT_11_LOTMP_DET		0x02
-#define	INT_STAT_11_LOTMP_RES		0x01
+#define	INT_STAT_11_VF_DET		BIT(7)
+#define	INT_STAT_11_VF_RES		BIT(6)
+#define	INT_STAT_11_VF125_DET		BIT(5)
+#define	INT_STAT_11_VF125_RES		BIT(4)
+#define	INT_STAT_11_OVTMP_DET		BIT(3)
+#define	INT_STAT_11_OVTMP_RES		BIT(2)
+#define	INT_STAT_11_LOTMP_DET		BIT(1)
+#define	INT_STAT_11_LOTMP_RES		BIT(0)
 
-#define VBAT_MON_DET			0x02
-#define VBAT_MON_RES			0x01
+#define VBAT_MON_DET			BIT(1)
+#define VBAT_MON_RES			BIT(0)
 
 /* BD71815_REG_PWRCTRL bits */
-#define RESTARTEN			0x01
+#define RESTARTEN			BIT(0)
 
 /* BD71815_REG_GPO bits */
 #define READY_FORCE_LOW			BIT(2)
@@ -370,11 +369,6 @@ enum {
 #define BD71815_GPIO_OPEN_DRAIN		0
 #define BD71815_GPIO_CMOS		BIT(4)
 
-/* BD71815_REG_CHG_SET1 bits */
-/*
- * Use common define from chg drv
-#define CHG_EN				BIT(0)
-*/
 /* BD71815 interrupt masks */
 enum {
 	BD71815_INT_EN_01_BUCKAST_MASK	=	0x0F,
@@ -549,21 +543,11 @@ enum {
 #define CCNTENB					0x40
 #define CCCALIB					0x20
 
-/* BD71815_REG_CHG_SET1 bits */
-/* same as on BD71828 - use common define in power-supply drv
-#define WDT_AUTO				0x40
-*/
 /* BD71815_REG_CC_CURCD */
 #define CURDIR_Discharging			0x8000
 
 /* BD71815_REG_VM_SA_IBAT */
 #define IBAT_SA_DIR_Discharging			0x8000
-
-/* BD71815_REG_VM_SA_MINMAX_CLR bits 
- * same as on BD71828 - use common define in power-supply drv
-#define VSYS_SA_MIN_CLR				0x10
-#define VBAT_SA_MIN_CLR				0x01
-*/
 
 
 /* BD71815_REG_REX_CTRL_1 bits */
@@ -572,10 +556,6 @@ enum {
 /* BD71815_REG_REX_CTRL_1 bits */
 #define REX_PMU_STATE_MASK			0x04
 
-/* BD71815_REG_FULL_CTRL bits
- * same as on BD71828 - use common define in power-supply drv
-#define FULL_CLR				0x10
-*/
 /* BD71815_REG_LED_CTRL bits */
 #define CHGDONE_LED_EN				0x10
 
