@@ -1231,3 +1231,36 @@ void devm_free_percpu(struct device *dev, void __percpu *pdata)
 			       (void *)pdata));
 }
 EXPORT_SYMBOL_GPL(devm_free_percpu);
+
+static void dev_delayed_work_drop(struct device *dev, void *res)
+{
+	cancel_delayed_work_sync(*(struct delayed_work **)res);
+}
+
+/**
+ * devm_delayed_work_autocancel - Resource-managed work allocation
+ * @dev: Device which lifetime work is bound to
+ * @pdata: work to be cancelled when device exits
+ *
+ * Initialize work which is automatically cancelled when device exits.
+ * A few drivers need delayed work which must be cancelled before driver
+ * is unload to avoid accessing removed resources.
+ * devm_delayed_work_autocancel() can be used to omit the explicit
+ * cancelleation when driver is unload.
+ */
+int devm_delayed_work_autocancel(struct device *dev, struct delayed_work *w,
+				 void (*worker)(struct work_struct *work))
+{
+	struct delayed_work **ptr;
+
+	ptr = devres_alloc(dev_delayed_work_drop, sizeof(*ptr), GFP_KERNEL);
+	if (!ptr)
+		return -ENOMEM;
+
+	INIT_DELAYED_WORK(w, worker);
+	*ptr = w;
+	devres_add(dev, ptr);
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(devm_delayed_work_autocancel);

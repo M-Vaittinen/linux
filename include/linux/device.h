@@ -27,6 +27,7 @@
 #include <linux/uidgid.h>
 #include <linux/gfp.h>
 #include <linux/overflow.h>
+#include <linux/workqueue.h>
 #include <linux/device/bus.h>
 #include <linux/device/class.h>
 #include <linux/device/driver.h>
@@ -248,6 +249,10 @@ void __iomem *devm_ioremap_resource_wc(struct device *dev,
 void __iomem *devm_of_iomap(struct device *dev,
 			    struct device_node *node, int index,
 			    resource_size_t *size);
+
+/* delayed work which is cancelled when driver exits */
+int devm_delayed_work_autocancel(struct device *dev, struct delayed_work *w,
+				 void (*worker)(struct work_struct *work));
 
 /* allows to add/remove a custom action to devres stack */
 int devm_add_action(struct device *dev, void (*action)(void *), void *data);
