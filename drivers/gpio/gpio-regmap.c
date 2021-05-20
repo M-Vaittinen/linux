@@ -27,6 +27,10 @@ struct gpio_regmap {
 	int (*reg_mask_xlate)(struct gpio_regmap *gpio, unsigned int base,
 			      unsigned int offset, unsigned int *reg,
 			      unsigned int *mask);
+	int (*set_config)(struct gpio_regmap *gpio, unsigned int offset,
+			  unsigned long config);
+	int (*init_valid_mask)(struct gpio_regmap *gpio,
+			       unsigned long *valid_mask, unsigned int ngpios);
 
 	void *driver_data;
 };
@@ -37,6 +41,27 @@ static unsigned int gpio_regmap_addr(unsigned int addr)
 		return 0;
 
 	return addr;
+}
+
+static int regmap_gpio_init_valid_mask(struct gpio_chip *gc,
+					unsigned long *valid_mask,
+					unsigned int ngpios)
+{
+	struct gpio_regmap *gpio;
+
+	gpio = gpiochip_get_data(gc);
+
+	return gpio->init_valid_mask(gpio, valid_mask, ngpios);
+}
+
+static int gpio_regmap_set_config(struct gpio_chip *gc, unsigned int offset,
+				  unsigned long config)
+{
+	struct gpio_regmap *gpio;
+
+	gpio = gpiochip_get_data(gc);
+
+	return gpio->set_config(gpio, offset, config);
 }
 
 static int gpio_regmap_simple_xlate(struct gpio_regmap *gpio,
@@ -178,11 +203,11 @@ static int gpio_regmap_direction_output(struct gpio_chip *chip,
 	return gpio_regmap_set_direction(chip, offset, true);
 }
 
-void gpio_regmap_set_drvdata(struct gpio_regmap *gpio, void *data)
+struct regmap *gpio_regmap_get_regmap(struct gpio_regmap *gpio)
 {
-	gpio->driver_data = data;
+	return gpio->regmap;
 }
-EXPORT_SYMBOL_GPL(gpio_regmap_set_drvdata);
+EXPORT_SYMBOL_GPL(gpio_regmap_get_regmap);
 
 void *gpio_regmap_get_drvdata(struct gpio_regmap *gpio)
 {
@@ -235,6 +260,9 @@ struct gpio_regmap *gpio_regmap_register(const struct gpio_regmap_config *config
 	gpio->reg_clr_base = config->reg_clr_base;
 	gpio->reg_dir_in_base = config->reg_dir_in_base;
 	gpio->reg_dir_out_base = config->reg_dir_out_base;
+	gpio->driver_data = config->drvdata;
+	gpio->set_config = config->set_config;
+	gpio->init_valid_mask = config->init_valid_mask;
 
 	/* if not set, assume there is only one register */
 	if (!gpio->ngpio_per_reg)
@@ -253,6 +281,10 @@ struct gpio_regmap *gpio_regmap_register(const struct gpio_regmap_config *config
 	chip->ngpio = config->ngpio;
 	chip->names = config->names;
 	chip->label = config->label ?: dev_name(config->parent);
+	if (gpio->set_config)
+		chip->set_config = gpio_regmap_set_config;
+	if (gpio->init_valid_mask)
+		chip->init_valid_mask = regmap_gpio_init_valid_mask;
 
 #if defined(CONFIG_OF_GPIO)
 	/* gpiolib will use of_node of the parent if chip->of_node is NULL */
