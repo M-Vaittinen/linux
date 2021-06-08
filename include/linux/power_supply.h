@@ -377,6 +377,7 @@ struct power_supply_battery_info {
 	int ocv_table_size[POWER_SUPPLY_OCV_TEMP_MAX];
 	struct power_supply_resistance_temp_table *resist_table;
 	int resist_table_size;
+	int degrade_cycle_uah;
 };
 
 extern struct atomic_notifier_head power_supply_notifier;
