@@ -914,6 +914,45 @@ int power_supply_dcap2ocv_simple(struct power_supply_battery_ocv_table *table,
 EXPORT_SYMBOL_GPL(power_supply_dcap2ocv_simple);
 
 /**
+ * power_supply_ocv2dcap_simple() - find the battery capacity at 0.1% accuracy
+ * @table: Pointer to battery OCV lookup table
+ * @table_len: OCV table length
+ * @ocv: Current OCV value
+ *
+ * This helper function is used to look up battery capacity according to
+ * current OCV value from one OCV table, and the OCV table must be ordered
+ * descending. Return the SOC in the units of 0.1% for improved accuracy.
+ *
+ * Return: the battery capacity using the unit 0.1%.
+ */
+int power_supply_ocv2dcap_simple(struct power_supply_battery_ocv_table *table,
+				int table_len, int ocv)
+{
+	int i, dcap;
+
+	for (i = 0; i < table_len; i++)
+		if (ocv > table[i].ocv)
+			break;
+
+	if (i > 0 && i < table_len)
+		dcap = fixp_linear_interpolate(table[i].ocv,
+					      table[i].capacity * 10,
+					      table[i - 1].ocv,
+					      table[i - 1].capacity * 10,
+					      ocv);
+	else if (i == 0)
+		dcap = table[0].capacity * 10;
+	else
+		dcap = table[table_len - 1].capacity * 10;
+
+	if (dcap < 0)
+		dcap = 0;
+
+	return dcap;
+}
+EXPORT_SYMBOL_GPL(power_supply_ocv2dcap_simple);
+
+/**
  * power_supply_ocv2cap_simple() - find the battery capacity
  * @table: Pointer to battery OCV lookup table
  * @table_len: OCV table length
@@ -928,24 +967,7 @@ EXPORT_SYMBOL_GPL(power_supply_dcap2ocv_simple);
 int power_supply_ocv2cap_simple(struct power_supply_battery_ocv_table *table,
 				int table_len, int ocv)
 {
-	int i, cap, tmp;
-
-	for (i = 0; i < table_len; i++)
-		if (ocv > table[i].ocv)
-			break;
-
-	if (i > 0 && i < table_len) {
-		tmp = (table[i - 1].capacity - table[i].capacity) *
-			(ocv - table[i].ocv);
-		tmp /= table[i - 1].ocv - table[i].ocv;
-		cap = tmp + table[i].capacity;
-	} else if (i == 0) {
-		cap = table[0].capacity;
-	} else {
-		cap = table[table_len - 1].capacity;
-	}
-
-	return cap;
+	return power_supply_ocv2dcap_simple(table, table_len, ocv) / 10;
 }
 EXPORT_SYMBOL_GPL(power_supply_ocv2cap_simple);
 
@@ -1000,8 +1022,20 @@ int power_supply_batinfo_dcap2ocv(struct power_supply_battery_info *info,
 }
 EXPORT_SYMBOL_GPL(power_supply_batinfo_dcap2ocv);
 
-int power_supply_batinfo_ocv2cap(struct power_supply_battery_info *info,
-				 int ocv, int temp)
+/**
+ * power_supply_batinfo_ocv2dcap - compute SOC based on OCV and temperature
+ * @info:	pointer to battery information
+ * @ocv:	Open circuit voltage in uV
+ * @temp:	Temperature in Celsius
+ *
+ * Use OCV tables in battery info to compute the battery capacity based on
+ * provided open circuit voltage at given and temperature.
+ *
+ * Return: battery capacity correspondinggiven OCV and temperature at 0.1%.
+ *         -EINVAL if OCV table is not present.
+ */
+int power_supply_batinfo_ocv2dcap(struct power_supply_battery_info *info,
+				  int ocv, int temp)
 {
 	struct power_supply_battery_ocv_table *table;
 	int table_len;
@@ -1010,7 +1044,20 @@ int power_supply_batinfo_ocv2cap(struct power_supply_battery_info *info,
 	if (!table)
 		return -EINVAL;
 
-	return power_supply_ocv2cap_simple(table, table_len, ocv);
+	return power_supply_ocv2dcap_simple(table, table_len, ocv);
+}
+EXPORT_SYMBOL_GPL(power_supply_batinfo_ocv2dcap);
+
+int power_supply_batinfo_ocv2cap(struct power_supply_battery_info *info,
+				 int ocv, int temp)
+{
+	int ret;
+
+	ret = power_supply_batinfo_ocv2dcap(info, ocv, temp);
+	if (ret != -EINVAL)
+		ret /= 10;
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(power_supply_batinfo_ocv2cap);
 
