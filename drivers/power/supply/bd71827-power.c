@@ -71,7 +71,7 @@ static const struct linear_range dcin_collapse = {
 /* Measured min and max value clear bits */
 #define BD718XX_MASK_VSYS_MIN_AVG_CLR		0x10
 
-#define JITTER_DEFAULT				3000
+#define JITTER_DEFAULT				3000000
 #define MAX_CURRENT_DEFAULT			890000		/* uA */
 #define AC_NAME					"bd71827_ac"
 #define BAT_NAME				"bd71827_bat"
