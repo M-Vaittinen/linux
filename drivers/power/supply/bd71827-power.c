@@ -2456,6 +2456,9 @@ static int bd71827_power_probe(struct platform_device *pdev)
 		return PTR_ERR(pwr->sw);
 	}
 
+	/* Add simple-gauge to test device's platform-data */
+	dev_set_drvdata(pdev->dev.parent, pwr->sw);
+
 	ret = bd7182x_get_irqs(pdev, pwr);
 	if (ret) {
 		dev_err(&pdev->dev, "failed to request IRQs: %d\n", ret);
