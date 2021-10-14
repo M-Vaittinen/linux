@@ -2557,7 +2557,18 @@ static struct platform_driver bd71827_power_driver = {
 	.id_table = bd71827_charger_id,
 };
 
-module_platform_driver(bd71827_power_driver);
+static int __init foo_init(void)
+{
+	return platform_driver_register(&bd71827_power_driver);
+}
+subsys_initcall(foo_init);
+
+static void __exit foo_exit(void)
+{
+	platform_driver_unregister(&bd71827_power_driver);
+}
+module_exit(foo_exit);
+
 MODULE_ALIAS("platform:bd718xx-power");
 
 module_param(use_load_bat_params, int, 0444);
