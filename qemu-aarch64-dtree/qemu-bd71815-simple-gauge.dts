@@ -1,0 +1,562 @@
+/dts-v1/;
+
+/ {
+	interrupt-parent = <0x8001>;
+	#size-cells = <0x02>;
+	#address-cells = <0x02>;
+	compatible = "linux,dummy-virt";
+
+	psci {
+		migrate = <0xc4000005>;
+		cpu_on = <0xc4000003>;
+		cpu_off = <0x84000002>;
+		cpu_suspend = <0xc4000001>;
+		method = "hvc";
+		compatible = "arm,psci-0.2\0arm,psci";
+	};
+
+	memory@40000000 {
+		reg = <0x00 0x40000000 0x01 0x00>;
+		device_type = "memory";
+	};
+
+	platform@c000000 {
+		interrupt-parent = <0x8001>;
+		ranges = <0x00 0x00 0xc000000 0x2000000>;
+		#address-cells = <0x01>;
+		#size-cells = <0x01>;
+		compatible = "qemu,platform\0simple-bus";
+	};
+
+	fw-cfg@9020000 {
+		dma-coherent;
+		reg = <0x00 0x9020000 0x00 0x18>;
+		compatible = "qemu,fw-cfg-mmio";
+	};
+
+	virtio_mmio@a000000 {
+		dma-coherent;
+		interrupts = <0x00 0x10 0x01>;
+		reg = <0x00 0xa000000 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a000200 {
+		dma-coherent;
+		interrupts = <0x00 0x11 0x01>;
+		reg = <0x00 0xa000200 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a000400 {
+		dma-coherent;
+		interrupts = <0x00 0x12 0x01>;
+		reg = <0x00 0xa000400 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a000600 {
+		dma-coherent;
+		interrupts = <0x00 0x13 0x01>;
+		reg = <0x00 0xa000600 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a000800 {
+		dma-coherent;
+		interrupts = <0x00 0x14 0x01>;
+		reg = <0x00 0xa000800 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a000a00 {
+		dma-coherent;
+		interrupts = <0x00 0x15 0x01>;
+		reg = <0x00 0xa000a00 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a000c00 {
+		dma-coherent;
+		interrupts = <0x00 0x16 0x01>;
+		reg = <0x00 0xa000c00 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a000e00 {
+		dma-coherent;
+		interrupts = <0x00 0x17 0x01>;
+		reg = <0x00 0xa000e00 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a001000 {
+		dma-coherent;
+		interrupts = <0x00 0x18 0x01>;
+		reg = <0x00 0xa001000 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a001200 {
+		dma-coherent;
+		interrupts = <0x00 0x19 0x01>;
+		reg = <0x00 0xa001200 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a001400 {
+		dma-coherent;
+		interrupts = <0x00 0x1a 0x01>;
+		reg = <0x00 0xa001400 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a001600 {
+		dma-coherent;
+		interrupts = <0x00 0x1b 0x01>;
+		reg = <0x00 0xa001600 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a001800 {
+		dma-coherent;
+		interrupts = <0x00 0x1c 0x01>;
+		reg = <0x00 0xa001800 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a001a00 {
+		dma-coherent;
+		interrupts = <0x00 0x1d 0x01>;
+		reg = <0x00 0xa001a00 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a001c00 {
+		dma-coherent;
+		interrupts = <0x00 0x1e 0x01>;
+		reg = <0x00 0xa001c00 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a001e00 {
+		dma-coherent;
+		interrupts = <0x00 0x1f 0x01>;
+		reg = <0x00 0xa001e00 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a002000 {
+		dma-coherent;
+		interrupts = <0x00 0x20 0x01>;
+		reg = <0x00 0xa002000 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a002200 {
+		dma-coherent;
+		interrupts = <0x00 0x21 0x01>;
+		reg = <0x00 0xa002200 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a002400 {
+		dma-coherent;
+		interrupts = <0x00 0x22 0x01>;
+		reg = <0x00 0xa002400 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a002600 {
+		dma-coherent;
+		interrupts = <0x00 0x23 0x01>;
+		reg = <0x00 0xa002600 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a002800 {
+		dma-coherent;
+		interrupts = <0x00 0x24 0x01>;
+		reg = <0x00 0xa002800 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a002a00 {
+		dma-coherent;
+		interrupts = <0x00 0x25 0x01>;
+		reg = <0x00 0xa002a00 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a002c00 {
+		dma-coherent;
+		interrupts = <0x00 0x26 0x01>;
+		reg = <0x00 0xa002c00 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a002e00 {
+		dma-coherent;
+		interrupts = <0x00 0x27 0x01>;
+		reg = <0x00 0xa002e00 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a003000 {
+		dma-coherent;
+		interrupts = <0x00 0x28 0x01>;
+		reg = <0x00 0xa003000 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a003200 {
+		dma-coherent;
+		interrupts = <0x00 0x29 0x01>;
+		reg = <0x00 0xa003200 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a003400 {
+		dma-coherent;
+		interrupts = <0x00 0x2a 0x01>;
+		reg = <0x00 0xa003400 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a003600 {
+		dma-coherent;
+		interrupts = <0x00 0x2b 0x01>;
+		reg = <0x00 0xa003600 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a003800 {
+		dma-coherent;
+		interrupts = <0x00 0x2c 0x01>;
+		reg = <0x00 0xa003800 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a003a00 {
+		dma-coherent;
+		interrupts = <0x00 0x2d 0x01>;
+		reg = <0x00 0xa003a00 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a003c00 {
+		dma-coherent;
+		interrupts = <0x00 0x2e 0x01>;
+		reg = <0x00 0xa003c00 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	virtio_mmio@a003e00 {
+		dma-coherent;
+		interrupts = <0x00 0x2f 0x01>;
+		reg = <0x00 0xa003e00 0x00 0x200>;
+		compatible = "virtio,mmio";
+	};
+
+	gpio-keys {
+		#address-cells = <0x01>;
+		#size-cells = <0x00>;
+		compatible = "gpio-keys";
+
+		poweroff {
+			gpios = <0x8003 0x03 0x00>;
+			linux,code = <0x74>;
+			label = "GPIO Key Poweroff";
+		};
+	};
+
+	pl061@9030000 {
+		phandle = <0x8003>;
+		clock-names = "apb_pclk";
+		clocks = <0x8000>;
+		interrupts = <0x00 0x07 0x04>;
+		gpio-controller;
+		#gpio-cells = <0x02>;
+		compatible = "arm,pl061\0arm,primecell";
+		reg = <0x00 0x9030000 0x00 0x1000>;
+	};
+
+	pcie@10000000 {
+		interrupt-map-mask = <0x1800 0x00 0x00 0x07>;
+		interrupt-map = <0x00 0x00 0x00 0x01 0x8001 0x00 0x00 0x00 0x03 0x04 0x00 0x00 0x00 0x02 0x8001 0x00 0x00 0x00 0x04 0x04 0x00 0x00 0x00 0x03 0x8001 0x00 0x00 0x00 0x05 0x04 0x00 0x00 0x00 0x04 0x8001 0x00 0x00 0x00 0x06 0x04 0x800 0x00 0x00 0x01 0x8001 0x00 0x00 0x00 0x04 0x04 0x800 0x00 0x00 0x02 0x8001 0x00 0x00 0x00 0x05 0x04 0x800 0x00 0x00 0x03 0x8001 0x00 0x00 0x00 0x06 0x04 0x800 0x00 0x00 0x04 0x8001 0x00 0x00 0x00 0x03 0x04 0x1000 0x00 0x00 0x01 0x8001 0x00 0x00 0x00 0x05 0x04 0x1000 0x00 0x00 0x02 0x8001 0x00 0x00 0x00 0x06 0x04 0x1000 0x00 0x00 0x03 0x8001 0x00 0x00 0x00 0x03 0x04 0x1000 0x00 0x00 0x04 0x8001 0x00 0x00 0x00 0x04 0x04 0x1800 0x00 0x00 0x01 0x8001 0x00 0x00 0x00 0x06 0x04 0x1800 0x00 0x00 0x02 0x8001 0x00 0x00 0x00 0x03 0x04 0x1800 0x00 0x00 0x03 0x8001 0x00 0x00 0x00 0x04 0x04 0x1800 0x00 0x00 0x04 0x8001 0x00 0x00 0x00 0x05 0x04>;
+		#interrupt-cells = <0x01>;
+		ranges = <0x1000000 0x00 0x00 0x00 0x3eff0000 0x00 0x10000 0x2000000 0x00 0x10000000 0x00 0x10000000 0x00 0x2eff0000 0x3000000 0x80 0x00 0x80 0x00 0x80 0x00>;
+		reg = <0x40 0x10000000 0x00 0x10000000>;
+		msi-parent = <0x8002>;
+		dma-coherent;
+		bus-range = <0x00 0xff>;
+		linux,pci-domain = <0x00>;
+		#size-cells = <0x02>;
+		#address-cells = <0x03>;
+		device_type = "pci";
+		compatible = "pci-host-ecam-generic";
+	};
+
+	pl031@9010000 {
+		clock-names = "apb_pclk";
+		clocks = <0x8000>;
+		interrupts = <0x00 0x02 0x04>;
+		reg = <0x00 0x9010000 0x00 0x1000>;
+		compatible = "arm,pl031\0arm,primecell";
+	};
+
+	pl011@9000000 {
+		clock-names = "uartclk\0apb_pclk";
+		clocks = <0x8000 0x8000>;
+		interrupts = <0x00 0x01 0x04>;
+		reg = <0x00 0x9000000 0x00 0x1000>;
+		compatible = "arm,pl011\0arm,primecell";
+	};
+
+	pmu {
+		interrupts = <0x01 0x07 0x304>;
+		compatible = "arm,armv8-pmuv3";
+	};
+
+	intc@8000000 {
+		phandle = <0x8001>;
+		reg = <0x00 0x8000000 0x00 0x10000 0x00 0x8010000 0x00 0x10000>;
+		compatible = "arm,cortex-a15-gic";
+		ranges;
+		#size-cells = <0x02>;
+		#address-cells = <0x02>;
+		interrupt-controller;
+		#interrupt-cells = <0x03>;
+
+		v2m@8020000 {
+			phandle = <0x8002>;
+			reg = <0x00 0x8020000 0x00 0x1000>;
+			msi-controller;
+			compatible = "arm,gic-v2m-frame";
+		};
+	};
+
+	flash@0 {
+		bank-width = <0x04>;
+		reg = <0x00 0x00 0x00 0x4000000 0x00 0x4000000 0x00 0x4000000>;
+		compatible = "cfi-flash";
+	};
+
+	cpus {
+		#size-cells = <0x00>;
+		#address-cells = <0x01>;
+
+		cpu@0 {
+			reg = <0x00>;
+			enable-method = "psci";
+			compatible = "arm,cortex-a57";
+			device_type = "cpu";
+		};
+
+		cpu@1 {
+			reg = <0x01>;
+			enable-method = "psci";
+			compatible = "arm,cortex-a57";
+			device_type = "cpu";
+		};
+	};
+
+	timer {
+		interrupts = <0x01 0x0d 0x304 0x01 0x0e 0x304 0x01 0x0b 0x304 0x01 0x0a 0x304>;
+		always-on;
+		compatible = "arm,armv8-timer\0arm,armv7-timer";
+	};
+
+	apb-pclk {
+		phandle = <0x8000>;
+		clock-output-names = "clk24mhz";
+		clock-frequency = <0x16e3600>;
+		#clock-cells = <0x00>;
+		compatible = "fixed-clock";
+	};
+
+	chosen {
+		stdout-path = "/pl011@9000000";
+		kaslr-seed = <0x12ea20d8 0x66e23fa2>;
+	};
+
+	test_battery: test_battery {
+		compatible ="simple-battery";
+ 		voltage-min-design-microvolt = <3400000>;
+		voltage-max-design-microvolt = <4350000>;
+		charge-full-design-microamp-hours = <1738000>;
+
+		ocv-capacity-celsius = <0>;
+		/* This I think was from UT batdata? */
+		ocv-capacity-table-0 = <4400000 100>,
+			<4375377 100>, <4314793 95>,
+			<4257284 90>, <4200969 85>,
+			<4146652 80>, <4094464 75>,
+			<4048556 70>, <3997034 65>,
+			<3959858 60>, <3917668 55>,
+			<3860165 50>, <3837491 45>,
+			<3817893 40>, <3801408 35>,
+			<3788071 30>, <3775836 25>,
+			<3752263 20>, <3732625 15>,
+			<3698262 10>, <3680138 5>, <3637500 0>;
+/*			2668849 (-5) */
+/*
+This was hard-coded to driver methinks.
+		ocv-capacity-table-0 = <4350000 100>,
+		<4325945 100>, <4255935 95>, <4197476 90>,
+		<4142843 85>, <4090615 80>, <4047113 75>,
+		<3987352 70>, <3957835 65>, <3920815 60>,
+		<3879834 55>, <3827010 50>, <3807239 45>,
+		<3791379 40>, <3779925 35>, <3775038 30>,
+		<3773530 25>, <3756695 20>, <3734099 15>,
+		<3704867 10>, <3635377 5>, <3512942 0>;
+*/
+				/* there could be <3019825 (-5)> -not sure if
+				   it would be handled correctly though
+				*/
+				/*
+				  45C 25C 5C 0C
+				  45000mC 25000mC 5000mC 0mC
+				  45000+273150 25000+273150 5000+273150 273150
+				 */
+				rohm,volt-drop-temp-millikelvin = <318150 298150 278150 273150>;
+				rohm,volt-drop-high-temp-microvolt = <100
+					102 104 107 110 114 122 126 139 155 94
+					107 113 120 129 113 104 110 109 116 128
+					/* 525 */>;
+				rohm,volt-drop-normal-temp-microvolt = <100
+					100 100 100 100 100 100 98 95 90 85 85
+					90 93 95 98 98 100 106 109 130 /* 451 */>;
+				rohm,volt-drop-low-temp-microvolt = <100 98
+					96 95 96 98 110 105 108 95 86 87 90 92
+					96 102 109 111 122 144 219 /* 393 */>;
+				rohm,volt-drop-very-low-temp-microvolt = <
+					100 98 95 94 94 95 105 96 97 87 84 84 86
+					90 93 101 110 117 130 157 195 /* 31 */>;
+				rohm,volt-drop-soc = <1000 950 900 850 800
+						      750 700 650 600 550 500
+						      450 400 350 300 250 200
+						      150 100 50 0 /* -50 */>;
+
+
+/* TODO: Add rest of the needed properties like OCV tables etc...
+  over-voltage-threshold-microvolt:
+    description: battery over-voltage limit
+
+  re-charge-voltage-microvolt:
+    description: limit to automatically start charging again
+*/
+/*
+  trickle-charge-current-microamp:
+    description: current for trickle-charge phase
+
+  precharge-current-microamp:
+    description: current for pre-charge phase
+
+  precharge-upper-limit-microvolt:
+    description: limit when to change to constant charging
+
+  charge-term-current-microamp:
+    description: current for charge termination phase
+
+  constant-charge-current-max-microamp:
+    description: maximum constant input current
+
+  constant-charge-voltage-max-microvolt:
+    description: maximum constant input voltage
+
+  factory-internal-resistance-micro-ohms:
+    description: battery factory internal resistance
+
+  resistance-temp-table:
+    description: |
+      An array providing the temperature in degree Celsius
+      and corresponding battery internal resistance percent, which is used to
+      look up the resistance percent according to current temperature to get an
+      accurate batterty internal resistance in different temperatures.
+
+  ocv-capacity-celsius:
+    description: |
+      An array containing the temperature in degree Celsius,
+      for each of the battery capacity lookup table.
+
+  operating-range-celsius:
+    description: operating temperature range of a battery
+    items:
+      - description: minimum temperature at which battery can operate
+      - description: maximum temperature at which battery can operate
+
+  ambient-celsius:
+    description: safe range of ambient temperature
+    items:
+      - description: alert when ambient temperature is lower than this value
+      - description: alert when ambient temperature is higher than this value
+
+  alert-celsius:
+    description: safe range of battery temperature
+    items:
+      - description: alert when battery temperature is lower than this value
+      - description: alert when battery temperature is higher than this value
+
+  temp-degrade-table:
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+    description: |
+      An array of value triplets. First value is "capacity change per degree C"
+      when temperature differs from 'set point'. Second value is "capacity
+      degradation at given 'set point' temperature" and third value is "the
+      'set-point' temperature" where given degradation is correct.
+      Up to 100 value triplets can be provided to specify different degradation
+      for different temperature ranges. When capacity change caused by
+      temperatures is computed the range which 'set point' is closest to the
+      current temperature is used. Capacity change should be in units of
+      micro Ah. Temperature is in units of 0.1 C degree.
+    maxItems: 100
+    items:
+      items:
+        - description: capacity drop per degree C in micro Ah
+        - description: capacity drop at 'set point' temperature in micro Ah
+        - description: 'set point' temperature for this range in 0.1 degree C
+
+patternProperties:
+  '^ocv-capacity-table-[0-9]+$':
+    $ref: /schemas/types.yaml#/definitions/uint32-matrix
+    description: |
+      An array providing the open circuit voltage (OCV)
+      of the battery and corresponding battery capacity percent, which is used
+      to look up battery capacity according to current OCV value. And the open
+      circuit voltage unit is microvolt.
+    maxItems: 100
+    items:
+      items:
+        - description: open circuit voltage (OCV) in microvolts
+        - description: battery capacity percent
+          maximum: 100
+
+examples:
+        ocv-capacity-celsius = <(-10) 0 10>;
+         table for -10 degree Celsius 
+        ocv-capacity-table-0 = <4185000 100>, <4113000 95>, <4066000 90>;
+         table for 0 degree Celsius 
+        ocv-capacity-table-1 = <4200000 100>, <4185000 95>, <4113000 90>;
+         table for 10 degree Celsius 
+        ocv-capacity-table-2 = <4250000 100>, <4200000 95>, <4185000 90>;
+        resistance-temp-table = <20 100>, <10 90>, <0 80>, <(-10) 60>;
+        operating-range-celsius = <(-30) 50>;
+        ambient-celsius = <(-5) 50>;
+*/
+	};
+	bdpmic: bd71815@4b {
+		reg = <0x4b>;
+		compatible = "rohm,test-bd71815-simple-gauge";
+		interrupt-parent = <0x8001>;
+		/* Oh dear, may cause troubles */
+		interrupts = <0x00 0x06 0x01>;
+/*		interrupts = <29 8>; */
+		/* The simple-gauge test value calculation is
+		 * assuming 1MOhm Rsense
+		 */
+		rohm,charger-sense-resistor-ohms = <10000000>;
+       		monitored-battery = <&test_battery>;
+	};
+
+};
