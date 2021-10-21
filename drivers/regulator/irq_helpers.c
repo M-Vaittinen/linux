@@ -162,7 +162,7 @@ static bool single_bit_set(int val, int bits_to_check)
 	if (bit == bits_to_check)
 		return false;
 
-	bit = find_next_bit(&bits, bits_to_check, bit);
+	bit = find_next_bit(&bits, bits_to_check, bit + 1);
 
 	return (bit == bits_to_check);
 }
@@ -392,7 +392,7 @@ void *regulator_irq_helper(struct device *dev,
 
 	if (!h->desc.map_event) {
 		if (rdev_amount != 1 ||
-		    !single_bit_set(common_errs, sizeof(common_errs * 8)) ||
+		    !single_bit_set(common_errs, sizeof(common_errs) * 8) ||
 		    per_rdev_errs)
 			return ERR_PTR(-EINVAL);
 		else
