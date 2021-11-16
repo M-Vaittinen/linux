@@ -654,7 +654,7 @@ static int compute_soc_by_cc(struct simple_gauge *sw, int state)
 	 */
 	if (cc_uah < 0) {
 		dev_warn(sw->dev,
-			 "Bad battery caoacity estimate\n");
+			 "Bad battery capacity estimate\n");
 		cc_uah = 0;
 	}
 	/* Store computed values */
