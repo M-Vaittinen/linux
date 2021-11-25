@@ -63,12 +63,11 @@ struct simple_gauge;
  *			can implement this to adjust capacity based on battery
  *			cycles. For constant aging use degrade_cycle_uah
  *			in desc.
- * @temp_correct_cap:	batteries/devices with more complicated temperature
- *			correction than ranges of temperatures with constant
- *			change uah/degree C can implement this to adjust
- *			capacity based on battery temperature.
- *			For temperature ranges with constant change uAh/degree
- *			use temp_dgr and amount_of_temp_dgr at desc.
+ * @temp_correct_cap:	batteries/devices can provide this function to
+ *			compensate the temperature impact to battery capacity.
+ *			It is preferable to compensate the capacity degradation
+ *			caused by the temperature change by providing OCV tables
+ *			for different temperatures.
  * @calibrate:		many devices implement coulomb counter calibration
  *			(for example by measuring ADC offset pins shorted).
  *			Such devices can implement this function for periodical
@@ -119,10 +118,6 @@ struct simple_gauge_ops {
  *
  * @name:		Identifying name for gauge (Is this needed?)
  * @degrade_cycle_uah:	constant lost capacity / battery cycle in uAh.
- * @amount_of_temp_dgr:	amount of temperature ranges provided in temp_dgr
- * @temp_dgr:		ranges of constant lost capacity / temperature degree
- *			in uAh. Ranges should be sorted in asecnding order by
- *			temperature_floor.
  * @poll_interval:	time interval in mS at which this fuel gauge iteration
  *			loop for volage polling and coulomb counter corrections
  *			should be ran.
@@ -147,8 +142,6 @@ struct simple_gauge_ops {
  */
 struct simple_gauge_desc {
 	int degrade_cycle_uah;
-	int amount_of_temp_dgr;
-	struct power_supply_temp_degr *temp_dgr;
 	int poll_interval;
 	int calibrate_interval;
 	int designed_cap; /* This is also looked from batinfo (DT node) */
@@ -211,8 +204,6 @@ struct simple_gauge {
 	struct power_supply_battery_info info;
 	struct simple_gauge_ops ops;
 	struct list_head node;
-	int amount_of_temp_dgr;
-	struct power_supply_temp_degr *temp_dgr;
 	spinlock_t lock;
 	bool batinfo_got;
 	wait_queue_head_t wq;

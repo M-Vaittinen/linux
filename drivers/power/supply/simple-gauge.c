@@ -509,7 +509,7 @@ static int simple_gauge_zero_cap_adjust(struct simple_gauge *sw, int *effective_
 
 	return ret;
 }
-
+#if 0
 static int find_dcap_change(struct simple_gauge *sw, int temp, int *delta_cap)
 {
 	struct power_supply_temp_degr *dclosest = NULL, *d;
@@ -555,7 +555,7 @@ static int compute_temp_correct_uah(struct simple_gauge *sw, int *cap_uah, int t
 
 	return 0;
 }
-
+#endif
 static int compute_soc_by_cc(struct simple_gauge *sw, int state)
 {
 	int cc_uah, ret;
@@ -599,15 +599,21 @@ static int compute_soc_by_cc(struct simple_gauge *sw, int state)
 		return ret;
 	}
 
-	if (sw->ops.temp_correct_cap)
+	/*
+	 * Some ICs may have temperature correction which is not utilizing
+	 * set of OCV 0 => CAP tables for different temperatures. Allow them
+	 * to provide custom temp compensation routine
+	 */
+	if (sw->ops.temp_correct_cap) {
 		ret = sw->ops.temp_correct_cap(sw, &current_cap_uah, temp);
+/*
 	else if (sw->amount_of_temp_dgr)
 		ret = compute_temp_correct_uah(sw, &current_cap_uah, temp);
-
-	if (ret)
-		dev_warn(sw->dev,
-			 "Couldn't do temperature correction to battery cap\n");
-
+*/
+		if (ret)
+			dev_warn(sw->dev,
+				 "Couldn't do temperature correction to battery cap\n");
+	}
 	/*
 	 * We keep HW CC counter aligned to ideal battery CAP - EG, when
 	 * battery is full, CC is set according to ideal battery capacity.
@@ -1173,7 +1179,7 @@ struct simple_gauge *__must_check psy_register_simple_gauge(struct device *paren
 	}
 	if (!ret)
 		new->batinfo_got = true;
-
+/*
 	if (new->info.temp_dgrd_values) {
 		new->amount_of_temp_dgr = new->info.temp_dgrd_values;
 		new->temp_dgr = new->info.temp_dgrd;
@@ -1181,6 +1187,7 @@ struct simple_gauge *__must_check psy_register_simple_gauge(struct device *paren
 		new->amount_of_temp_dgr = new->desc.amount_of_temp_dgr;
 		new->temp_dgr = new->desc.temp_dgr;
 	}
+*/
 
 	if (desc->designed_cap) {
 		new->designed_cap = desc->designed_cap;
