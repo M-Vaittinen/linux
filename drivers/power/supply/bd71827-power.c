@@ -461,7 +461,7 @@ static int bd71827_get_current_ds_adc(struct bd71827_power *pwr, int *curr, int 
 	int dir = 1;
 	int regs[] = { pwr->regs->ibat, pwr->regs->ibat_avg };
 	int *vals[] = { curr, curr_avg };
-	int ret, i;
+	int ret, i, curr_host;
 
 	for (dir = 1, i = 0; i < ARRAY_SIZE(regs); i++) {
 		ret = regmap_bulk_read(pwr->regmap, regs[i], &tmp_curr,
@@ -473,9 +473,9 @@ static int bd71827_get_current_ds_adc(struct bd71827_power *pwr, int *curr, int 
 			dir = -1;
 
 		*tmp &= BD7182x_MASK_IBAT_U;
-		tmp_curr = be16_to_cpu(tmp_curr);
+		curr_host = be16_to_cpu(tmp_curr);
 
-		*vals[i] = dir * ((int)tmp_curr) * pwr->curr_factor;
+		*vals[i] = dir * curr_host * pwr->curr_factor;
 	}
 
 	return ret;
@@ -642,7 +642,7 @@ static int __write_cc(struct bd71827_power *pwr, uint16_t bcap,
 	int ret;
 	__be32 tmp;
 	__be16 *swap_hi = (__be16 *)&tmp;
-	uint16_t *swap_lo = swap_hi + 1;
+	__be16 *swap_lo = swap_hi + 1;
 
 	*swap_hi = cpu_to_be16(bcap & BD7182x_MASK_CC_CCNTD_HI);
 	*swap_lo = 0;
