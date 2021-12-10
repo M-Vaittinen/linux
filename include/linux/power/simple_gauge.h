@@ -150,6 +150,8 @@ struct simple_gauge_desc {
 	bool allow_set_cycle;
 	bool clamp_soc;
 	void *drv_data;
+	struct power_supply_temp_degr_table *temp_dgrd_table;
+	int temp_dgrd_table_size;
 };
 
 /**
@@ -207,6 +209,14 @@ struct simple_gauge {
 	spinlock_t lock;
 	bool batinfo_got;
 	wait_queue_head_t wq;
+	/*
+	 * The degradation table information is not directly used from
+	 * battery-info because we also support giving this via simple-gauge
+	 * desc. We populate this at simple-gauge registration from the
+	 * preferred source.
+	 */
+	struct power_supply_temp_degr_table *temp_dgrd_table;
+	int temp_dgrd_table_size;
 	int soc_rounding;
 	int clamped_soc;
 	/* Cached values from prev iteration */
