@@ -364,6 +364,11 @@ struct power_supply_resistance_temp_table {
 	int resistance;	/* internal resistance percent */
 };
 
+struct power_supply_temp_degr_table {
+	int cap_ppm;	/* Capacity as PPM from capacity at nominal temp */
+	int temp:	/* celsius */
+};
+
 #define POWER_SUPPLY_OCV_TEMP_MAX 20
 
 /*
@@ -401,8 +406,8 @@ struct power_supply_battery_info {
 	int ocv_table_size[POWER_SUPPLY_OCV_TEMP_MAX];
 	struct power_supply_resistance_temp_table *resist_table;
 	int resist_table_size;
-	int temp_dgrd_values;
-	struct power_supply_temp_degr *temp_dgrd;
+	struct power_supply_temp_degr_table *temp_dgrd_table;
+	int temp_dgrd_table_size;
 	int degrade_cycle_uah;
 };
 
