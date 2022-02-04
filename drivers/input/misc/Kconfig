@@ -403,6 +403,17 @@ config INPUT_KIONIX_KX122
 	  To compile this driver as a module, choose M here: the module will
 	  be called kx122.
 
+config INPUT_KIONIX_KX132
+	tristate "Kionix KX132 tri-axis digital accelerometer"
+	depends on I2C
+	select REGMAP_I2C
+	help
+	  Say Y here to enable support for the Kionix KX132 digital tri-axis
+	  accelerometer.
+
+	  To compile this driver as a module, choose M here: the module will
+	  be called kx132.
+
 config INPUT_POWERMATE
 	tristate "Griffin PowerMate and Contour Jog support"
 	depends on USB_ARCH_HAS_HCD
