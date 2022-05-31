@@ -1,0 +1,93 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/input/kionix,kx022a.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: ROHM/Kionix KX022A Accelerometer bindings
+
+maintainers:
+  - Matti Vaittinen <matti.vaittinen@fi.rohmeurope.com>
+
+description: |
+  KX022A is a 3-axis accelerometer with all kinds of cool stuff.
+
+properties:
+  compatible:
+    oneOf:
+      - items:
+        - const: kionix,kx022a-i2c
+        - const: kionix,kx022a-spi
+
+  reg:
+    description:
+      I2C slave address or SPI chip-select.
+    maxItems: 1
+
+  interrupts:
+    maxItems: 1
+
+  kionix,xyz-axis-map:
+    description: |
+      Array specifying the axis orientation. Indicate which of the three axis
+      is 'X', 'Y', and 'Z' by integers '0', '1' and '2'. First item in array
+      specifies the orientation for accelerometer axis-0, second for axis-1 and
+      third for axis-2. Eg. <0 1 2> would indicate IC positioning where
+      axis-0 is X, axis-1 is Y and axis-2 is Z.
+    $ref: "/schemas/types.yaml#/definitions/uint32-array"
+    items:
+      minimum: 0
+      maximum: 2
+    minItems: 3
+    maxItems: 3
+    default: [0, 1, 2]
+
+  kionix,invert-x-axis:
+    description: |
+      Whether the X-axis directions is inverted or not depending on
+      the sensor placement.
+    type: boolean
+
+  kionix,invert-y-axis:
+    description: |
+      Whether the Y-axis directions is inverted or not depending on
+      the sensor placement.
+    type: boolean
+
+  kionix,invert-x-axis:
+    description: |
+      Whether the X-axis directions is inverted or not depending on
+      the sensor placement.
+    type: boolean
+
+  kionix,g-range-milli-g:
+    description: |
+      The selected G-range for measuring acceleration. 2000 indicates 2 g,
+      4000 indicates 4 g, ...
+    $ref: "/schemas/types.yaml#/definitions/uint32"
+    enum: [2, 4, 8, 16]
+
+required:
+  - compatible
+  - reg
+  - interrupts
+
+additionalProperties: false
+
+examples:
+  - |
+    #include <dt-bindings/interrupt-controller/irq.h>
+    i2c {
+        #address-cells = <1>;
+        #size-cells = <0>;
+          accel@1f {
+            compatible = "kionix,kx022a-i2c";
+            reg = <0x1f>;
+
+            interrupt-parent = <&gpio1>;
+            interrupts = <29 IRQ_TYPE_LEVEL_LOW>;
+
+            kionix,g-range-milli-g = <2000>;
+            kionix,xyz-axis-map = <0 1 2>;
+        };
+    }
