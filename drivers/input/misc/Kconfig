@@ -383,6 +383,27 @@ config INPUT_KEYSPAN_REMOTE
 	  To compile this driver as a module, choose M here: the module will
 	  be called keyspan_remote.
 
+config INPUT_KX022A
+	tristate
+
+config INPUT_KX022A_SPI
+	tristate "Kionix KX022 tri-axis digital accelerometer"
+	depends on I2C
+	select INPUT_KX022A
+	help
+	  Say Y here to enable support for the Kionix KX022 digital tri-axis
+	  accelerometer connected to I2C interface. See INPUT_KX022A_SPI if
+	  you want to enable support for the KX022A connected via SPI.
+
+config INPUT_KX022A_I2C
+	tristate "Kionix KX022 tri-axis digital accelerometer"
+	depends on I2C
+	select INPUT_KX022A
+	help
+	  Say Y here to enable support for the Kionix KX022 digital tri-axis
+	  accelerometer connected to I2C interface. See INPUT_KX022A_SPI if
+	  you want to enable support for the KX022A connected via SPI.
+
 config INPUT_KXTJ9
 	tristate "Kionix KXTJ9 tri-axis digital accelerometer"
 	depends on I2C
