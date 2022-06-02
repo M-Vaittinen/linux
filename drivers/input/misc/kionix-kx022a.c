@@ -32,10 +32,11 @@
 #define KX022_STATE_STRM BIT(0)
 #define KX022_STATE_FIFO BIT(1)
 #define KX022_STATE_TILT BIT(2)
+#define KX022_STATE_RUNNING BIT(3)
 
 /* Regmap configs */
 /* TODO: Add rest of the special regs */
-static const struct regmap_range kx022_volatile_ranges[] = {
+static const struct regmap_range kx022a_volatile_ranges[] = {
 	{
 		.range_min = KX022_REG_XHP_L,
 		.range_max = KX022_REG_COTR,
@@ -54,28 +55,28 @@ static const struct regmap_range kx022_volatile_ranges[] = {
 	},
 };
 
-static const struct regmap_access_table kx022_volatile_regs = {
-	.yes_ranges = &kx022_volatile_ranges[0],
-	.n_yes_ranges = ARRAY_SIZE(kx022_volatile_ranges),
+static const struct regmap_access_table kx022a_volatile_regs = {
+	.yes_ranges = &kx022a_volatile_ranges[0],
+	.n_yes_ranges = ARRAY_SIZE(kx022a_volatile_ranges),
 };
 
-static const struct regmap_range kx022_precious_ranges[] = {
+static const struct regmap_range kx022a_precious_ranges[] = {
 	{
 		.range_min = KX022_REG_INT_REL,
 		.range_max = KX022_REG_INT_REL,
 	},
 };
 
-static const struct regmap_access_table kx022_precious_regs = {
-	.yes_ranges = &kx022_precious_ranges[0],
-	.n_yes_ranges = ARRAY_SIZE(kx022_precious_ranges),
+static const struct regmap_access_table kx022a_precious_regs = {
+	.yes_ranges = &kx022a_precious_ranges[0],
+	.n_yes_ranges = ARRAY_SIZE(kx022a_precious_ranges),
 };
 
 /*
  * The HW does not set WHO_AM_I reg as read-only but we don't want to write it
  * so we still include it in the read-only ranges.
  */
-static const struct regmap_range kx022_read_only_ranges[] = {
+static const struct regmap_range kx022a_read_only_ranges[] = {
 	{
 		.range_min = KX022_REG_XHP_L,
 		.range_max = KX022_REG_INT_REL,
@@ -88,12 +89,12 @@ static const struct regmap_range kx022_read_only_ranges[] = {
 	},
 };
 
-static const struct regmap_access_table kx022_ro_regs = {
-	.yes_ranges = &kx022_read_only_ranges[0],
-	.n_yes_ranges = ARRAY_SIZE(kx022_read_only_ranges),
+static const struct regmap_access_table kx022a_ro_regs = {
+	.yes_ranges = &kx022a_read_only_ranges[0],
+	.n_yes_ranges = ARRAY_SIZE(kx022a_read_only_ranges),
 };
 
-static const struct regmap_range kx022_write_only_ranges[] = {
+static const struct regmap_range kx022a_write_only_ranges[] = {
 	{
 		.range_min = KX022_REG_BTS_WUF_TH,
 		.range_max = KX022_REG_BTS_WUF_TH,
@@ -109,37 +110,37 @@ static const struct regmap_range kx022_write_only_ranges[] = {
 	},
 };
 
-static const struct regmap_access_table kx022_wo_regs = {
-	.yes_ranges = &kx022_write_only_ranges[0],
-	.n_yes_ranges = ARRAY_SIZE(kx022_write_only_ranges),
+static const struct regmap_access_table kx022a_wo_regs = {
+	.yes_ranges = &kx022a_write_only_ranges[0],
+	.n_yes_ranges = ARRAY_SIZE(kx022a_write_only_ranges),
 };
 
-static const struct regmap_range kx022_noinc_read_ranges[] = {
+static const struct regmap_range kx022a_noinc_read_ranges[] = {
 	{
 		.range_min = KX022_REG_BUF_READ,
 		.range_max = KX022_REG_BUF_READ,
 	},
 };
 
-static const struct regmap_access_table kx022_nir_regs = {
-	.yes_ranges = &kx022_noinc_read_ranges[0],
-	.n_yes_ranges = ARRAY_SIZE(kx022_noinc_read_ranges),
+static const struct regmap_access_table kx022a_nir_regs = {
+	.yes_ranges = &kx022a_noinc_read_ranges[0],
+	.n_yes_ranges = ARRAY_SIZE(kx022a_noinc_read_ranges),
 };
 
-const struct regmap_config kx022_regmap = {
+const struct regmap_config kx022a_regmap = {
 	.reg_bits = 8,
 	.val_bits = 8,
-	.volatile_table = &kx022_volatile_regs,
-	.wr_table = &kx022_wo_regs,
-	.rd_table = &kx022_ro_regs,
-	.rd_noinc_table = &kx022_nir_regs,
-	.precious_table = &kx022_precious_regs,
+	.volatile_table = &kx022a_volatile_regs,
+	.wr_table = &kx022a_wo_regs,
+	.rd_table = &kx022a_ro_regs,
+	.rd_noinc_table = &kx022a_nir_regs,
+	.precious_table = &kx022a_precious_regs,
 	.max_register = KX022_MAX_REGISTER,
 	.cache_type = REGCACHE_RBTREE,
 };
-EXPORT_SYMBOL_GPL(kx022_regmap);
+EXPORT_SYMBOL_GPL(kx022a_regmap);
 
-struct kx022_data {
+struct kx022a_data {
 	struct regmap *regmap;
 	struct device *dev;
 	struct input_dev *accel_input_dev;
@@ -168,31 +169,36 @@ struct kx022_data {
  */
 
 /**
- * kx022_sysfs_get_max_latency - return fifo read latency
+ * kx022a_sysfs_get_max_latency - return fifo read latency
  */
-static ssize_t kx022_sysfs_get_max_latency(struct device *dev,
+static ssize_t kx022a_sysfs_get_max_latency(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
-	struct kx022_data *data = dev_get_drvdata(dev);
+	struct kx022a_data *data = dev_get_drvdata(dev);
 
 	return sprintf(buf, "%u\n", data->max_latency);
 }
 
 /**
- * kx022_sysfs_set_max_latency - set fifo read latency
+ * kx022a_sysfs_set_max_latency - set fifo read latency
  */
-static ssize_t kx022_sysfs_set_max_latency(struct device *dev,
+static ssize_t kx022a_sysfs_set_max_latency(struct device *dev,
 				struct device_attribute *attr,
 				const char *buf, size_t len)
 {
 	unsigned long value;
-	struct kx022_data *data = dev_get_drvdata(dev);
+	struct kx022a_data *data = dev_get_drvdata(dev);
 
 	if (kstrtoul(buf, 0, &value))
 		return -EINVAL;
 
 	mutex_lock(&data->state_lock);
-	data->max_latency = value;
+	if (data->state == KX022_STATE_RUNNING) {
+		dev_err(data->dev, "measurement running\n");
+		len = -EBUSY;
+	} else {
+		data->max_latency = value;
+	}
 	mutex_unlock(&data->state_lock);
 
 	return len;
@@ -200,11 +206,11 @@ static ssize_t kx022_sysfs_set_max_latency(struct device *dev,
 
 static struct device_attribute dev_attr_accel_max_latency = __ATTR(max_latency,
 		0644,
-		kx022_sysfs_get_max_latency,
-		kx022_sysfs_set_max_latency);
+		kx022a_sysfs_get_max_latency,
+		kx022a_sysfs_set_max_latency);
 
 
-static struct attribute *kx022_sysfs_attrs[] = {
+static struct attribute *kx022a_sysfs_attrs[] = {
 //	&dev_attr_accel_tilt_enable.attr,
 //	&dev_attr_accel_enable.attr,
 //	&dev_attr_accel_delay.attr,
@@ -212,11 +218,11 @@ static struct attribute *kx022_sysfs_attrs[] = {
 	NULL
 };
 
-static struct attribute_group kx022_accel_attribute_group = {
-	.attrs = kx022_sysfs_attrs
+static struct attribute_group kx022a_accel_attribute_group = {
+	.attrs = kx022a_sysfs_attrs
 };
 
-static int kx022_set_g_range(struct kx022_data *data, unsigned int g_range)
+static int kx022a_set_g_range(struct kx022a_data *data, unsigned int g_range)
 {
 	int gsel;
 
@@ -252,7 +258,7 @@ static int sanity_check_axis(u32 *axis)
 	return (chk != GENMASK(2, 0));
 }
 
-static int kx022_parse_dt(struct kx022_data *data)
+static int kx022a_parse_dt(struct kx022a_data *data)
 {
 	int ret, i;
 	u32 g_range, axis_order[3];
@@ -305,17 +311,17 @@ static int kx022_parse_dt(struct kx022_data *data)
 	data->invert_y = fwnode_property_present(fw, "kionix,invert-y-axis");
 	data->invert_z = fwnode_property_present(fw, "kionix,invert-z-axis");
 
-	return kx022_set_g_range(data, g_range);
+	return kx022a_set_g_range(data, g_range);
 }
 
-static void kx022_map_data(struct kx022_data *data, int *raw_xyz, int *xyz)
+static void kx022a_map_data(struct kx022a_data *data, int *raw_xyz, int *xyz)
 {
 	xyz[0] = data->invert_x ? -raw_xyz[data->x_idx] : raw_xyz[data->x_idx];
 	xyz[1] = data->invert_y ? -raw_xyz[data->y_idx] : raw_xyz[data->y_idx];
 	xyz[2] = data->invert_z ? -raw_xyz[data->z_idx] : raw_xyz[data->z_idx];
 }
 
-static void kx022_convert_raw_data(struct kx022_data *data, s16 *raw_xyz,
+static void kx022a_convert_raw_data(struct kx022a_data *data, s16 *raw_xyz,
 				   int *xyz)
 {
 	int i, tmp[3];
@@ -323,10 +329,10 @@ static void kx022_convert_raw_data(struct kx022_data *data, s16 *raw_xyz,
 	for (i = 0; i < 3; i++)
 		tmp[i] = le16_to_cpu(raw_xyz[i]);
 
-	kx022_map_data(data, &tmp[0], xyz);
+	kx022a_map_data(data, &tmp[0], xyz);
 }
 
-static int kx022_data_read_xyz(struct kx022_data *data, int *xyz)
+static int kx022a_data_read_xyz(struct kx022a_data *data, int *xyz)
 {
 	int ret;
 	s16 raw_xyz[3] = { 0 };
@@ -335,7 +341,7 @@ static int kx022_data_read_xyz(struct kx022_data *data, int *xyz)
 	if (ret)
 		return ret;
 
-	kx022_convert_raw_data(data, &raw_xyz[0], &xyz[0]);
+	kx022a_convert_raw_data(data, &raw_xyz[0], &xyz[0]);
 
 	return 0;
 }
@@ -364,7 +370,7 @@ static void kx122_data_calibrate_xyz(struct kx122_data *data, int *xyz)
 	unsigned int cutoff;
 	u8 mask;
 }
-static const int delay_table kx022_odr_delay_table[] = {
+static const int delay_table kx022a_odr_delay_table[] = {
 	2560, 1280,
 	{ 5, KX132_1211_ODCNTL_OSA_400},
 	{ 10, KX132_1211_ODCNTL_OSA_200},
@@ -377,7 +383,7 @@ static const int delay_table kx022_odr_delay_table[] = {
 	{ 1280,	KX132_1211_ODCNTL_OSA_1P563},
 	{ 2560, KX132_1211_ODCNTL_OSA_0P781},};
 */
-static int kx022_data_delay_set(struct kx022_data *data, unsigned long delay)
+static int kx022a_data_delay_set(struct kx022a_data *data, unsigned long delay)
 {
 	unsigned long tmp = 5;
 	int i;
@@ -406,7 +412,7 @@ static int kx022_data_delay_set(struct kx022_data *data, unsigned long delay)
 		KX022_MASK_ODR, i);
 }
 
-static int kx022_fifo_set_wmi(struct kx022_data *data)
+static int kx022a_fifo_set_wmi(struct kx022a_data *data)
 {
 	u8 threshold;
 
@@ -420,7 +426,7 @@ static int kx022_fifo_set_wmi(struct kx022_data *data)
 				 KX022_MASK_WM_TH, threshold);
 }
 
-static int kx022_fifo_enable(struct kx022_data *data)
+static int kx022a_fifo_enable(struct kx022a_data *data)
 {
 	int ret = 0;
 
@@ -432,11 +438,11 @@ static int kx022_fifo_enable(struct kx022_data *data)
 		goto unlock_out;
 
 	/* update sensor ODR */
-	ret = kx022_data_delay_set(data, data->req_sample_interval_ms);
+	ret = kx022a_data_delay_set(data, data->req_sample_interval_ms);
 	if (ret < 0)
 		goto unlock_out;
 
-	ret = kx022_fifo_set_wmi(data);
+	ret = kx022a_fifo_set_wmi(data);
 	if (ret < 0)
 		goto unlock_out;
 
@@ -467,7 +473,7 @@ unlock_out:
 	return ret;
 }
 
-static void kx022_input_report_xyz(struct input_dev *dev, int *xyz, ktime_t ts)
+static void kx022a_input_report_xyz(struct input_dev *dev, int *xyz, ktime_t ts)
 {
 	input_report_abs(dev, ABS_X, xyz[0]);
 	input_report_abs(dev, ABS_Y, xyz[1]);
@@ -475,13 +481,13 @@ static void kx022_input_report_xyz(struct input_dev *dev, int *xyz, ktime_t ts)
 	input_sync(dev);
 }
 
-static void kx022_strm_report_data(struct kx022_data *data)
+static void kx022a_strm_report_data(struct kx022a_data *data)
 {
 	int ret;
 	int xyz[3];
 	ktime_t ts;
 
-	ret = kx022_data_read_xyz(data, &xyz[0]);
+	ret = kx022a_data_read_xyz(data, &xyz[0]);
 
 	if (ret) {
 		dev_err(data->dev, "i2c read/write error\n");
@@ -491,9 +497,9 @@ static void kx022_strm_report_data(struct kx022_data *data)
 
 	ts = ktime_get_boottime();
 #ifdef CALIBRATE
-	kx022_data_calibrate_xyz(data, xyz);
+	kx022a_data_calibrate_xyz(data, xyz);
 #endif
-	kx022_input_report_xyz(data->accel_input_dev, &xyz[0], ts);
+	kx022a_input_report_xyz(data->accel_input_dev, &xyz[0], ts);
 }
 
 #define KX022_FIFO_SIZE_BYTES 256
@@ -503,7 +509,7 @@ static void kx022_strm_report_data(struct kx022_data *data)
 
 #define KX022_INPUT_DEV_EVENTS_NUM 120
 
-static void kx022_fifo_report_data(struct kx022_data *data)
+static void kx022a_fifo_report_data(struct kx022a_data *data)
 {
 	unsigned int fifo_bytes;
 	ktime_t interval;
@@ -539,15 +545,15 @@ static void kx022_fifo_report_data(struct kx022_data *data)
 
 	for (i = 0; i < num_samples; i++) {
 		data->fifo_last_ts = ktime_add(data->fifo_last_ts, interval);
-		kx022_convert_raw_data(data, &raw_xyz[i*3], &xyz[0]);
-	//	kx022_data_calibrate_xyz(data, xyz);
-		kx022_input_report_xyz(data->accel_input_dev, xyz, data->fifo_last_ts);
+		kx022a_convert_raw_data(data, &raw_xyz[i*3], &xyz[0]);
+	//	kx022a_data_calibrate_xyz(data, xyz);
+		kx022a_input_report_xyz(data->accel_input_dev, xyz, data->fifo_last_ts);
 	}
 }
 
-static irqreturn_t kx022_irq_thread(int irq, void *d)
+static irqreturn_t kx022a_irq_thread(int irq, void *d)
 {
-	struct kx022_data *data = d;
+	struct kx022a_data *data = d;
 	int status, ret;
 
 	ret = regmap_read(data->regmap, KX022_REG_INS2, &status);
@@ -555,12 +561,12 @@ static irqreturn_t kx022_irq_thread(int irq, void *d)
 		return IRQ_NONE;
 
 	if (status & KX022_MASK_INS2_DRDY)
-		kx022_strm_report_data(data);
+		kx022a_strm_report_data(data);
 
 	if (status & KX122_MASK_INS2_WMI) {
 		mutex_lock(&data->state_lock);
 		if (data->state & KX022_STATE_FIFO) {
-			kx022_fifo_report_data(data);
+			kx022a_fifo_report_data(data);
 		}
 		mutex_unlock(&data->state_lock);
 	}
@@ -568,18 +574,93 @@ static irqreturn_t kx022_irq_thread(int irq, void *d)
 	return IRQ_HANDLED;
 }
 
-static void kx022_clean_sysfs(void *d)
+static void kx022a_clean_sysfs(void *d)
 {
-	struct kx022_data *data = (struct kx022_data *)d;
+	struct kx022a_data *data = (struct kx022a_data *)d;
 
 	sysfs_remove_group(&data->accel_input_dev->dev.kobj,
-			   &kx022_accel_attribute_group);
+			   &kx022a_accel_attribute_group);
 }
 
-int kx022_probe_internal(struct device *dev, int irq, int input_bus)
+static int kx022a_turn_off(struct kx022a_data *data)
+{
+	return regmap_clear_bits(data->regmap, KX022_REG_CNTL, KX022_MASK_PC1);
+}
+
+static void kx022a_close(struct input_dev *idev)
+{
+	struct kx022a_data *data = input_get_drvdata(idev);
+
+	mutex_lock(&data->state_lock);
+	data->state &= KX022_STATE_RUNNING;
+	mutex_unlock(&data->state_lock);
+
+	kx022a_turn_off(data);
+}
+
+static int kx022a_prepare_irq(struct kx022a_data *data)
+{
+	static const int mask =	KX022_MASK_IEN1 | KX022_MASK_IPOL1 |
+				KX022_MASK_ITYP;
+	static const int val =	KX022_MASK_IEN1 | KX022_IPOL_LOW |
+				KX022_ITYP_LEVEL;
+	int ret;
+
+	ret = kx022a_fifo_enable(data);
+	if (ret)
+		return ret;
+
+	return regmap_update_bits(data->regmap, KX022_REG_INC1, mask, val);
+}
+
+static int kx022a_unprepare_irq(struct kx022a_data *data)
+{
+	return regmap_update_bits(data->regmap, KX022_REG_INC1, KX022_MASK_IEN1, 0);
+}
+
+static int kx022a_start(struct kx022a_data *data)
+{
+	int ret;
+
+	ret = kx022a_prepare_irq(data);
+	if (ret)
+		return ret;
+
+	ret = regmap_set_bits(data->regmap, KX022_REG_CNTL, KX022_MASK_PC1);
+	if (ret)
+		goto err_start;
+
+	return 0;
+
+err_start:
+	kx022a_unprepare_irq(data);
+
+	return ret;
+}
+
+static int kx022a_open(struct input_dev *idev)
+{
+	struct kx022a_data *data = input_get_drvdata(idev);
+	int ret;
+
+	mutex_lock(&data->state_lock);
+	data->state |= KX022_STATE_RUNNING;
+	mutex_unlock(&data->state_lock);
+
+	ret = kx022a_start(data);
+	if (ret) {
+		mutex_lock(&data->state_lock);
+		data->state &= ~KX022_STATE_RUNNING;
+		mutex_unlock(&data->state_lock);
+	}
+
+	return ret;
+}
+
+int kx022a_probe_internal(struct device *dev, int irq, int input_bus)
 {
 	struct regmap *regmap;
-	struct kx022_data *data;
+	struct kx022a_data *data;
 	unsigned int chip_id;
 	struct input_dev *id;
 	int ret;
@@ -614,9 +695,14 @@ int kx022_probe_internal(struct device *dev, int irq, int input_bus)
 	data->regmap = regmap;
 	data->dev = dev;
 
+	/* The sensor must be turned off for configuration */
+	ret = kx022a_turn_off(data);
+	if (ret)
+		return ret;
+
 	mutex_init(&data->state_lock);
 
-	ret = kx022_parse_dt(data);
+	ret = kx022a_parse_dt(data);
 	if (ret)
 		return ret;
 
@@ -630,6 +716,8 @@ int kx022_probe_internal(struct device *dev, int irq, int input_bus)
 	id->id.bustype = input_bus;
 	id->id.vendor = (int)"KION";
 	id->dev.parent = dev;
+	id->open = kx022a_open;
+	id->close = kx022a_close;
 	set_bit(EV_ABS, id->evbit);
 	input_set_abs_params(id, ABS_X, INT_MIN, INT_MAX,0,0);
 	input_set_abs_params(id, ABS_Y, INT_MIN, INT_MAX,0,0);
@@ -640,26 +728,32 @@ int kx022_probe_internal(struct device *dev, int irq, int input_bus)
 	input_set_drvdata(id, data);
 
 	ret = sysfs_create_group(&data->accel_input_dev->dev.kobj,
-					&kx022_accel_attribute_group);
+					&kx022a_accel_attribute_group);
 	if (ret) {
 		dev_err(data->dev, "accel sysfs create fail\n");
 		return ret;
 	}
-	ret = devm_add_action_or_reset(dev, &kx022_clean_sysfs, data);
+	ret = devm_add_action_or_reset(dev, &kx022a_clean_sysfs, data);
 	if (ret)
 		return ret;
 
+	ret = input_register_device(id);
+        if (ret) {
+                dev_err(dev, "Failed to register device\n");
+                return ret;
+        }
+
 	/* TODO: Clean sysfs upon failure */
 
-	return devm_request_threaded_irq(data->dev, irq, NULL, &kx022_irq_thread,
+	return devm_request_threaded_irq(data->dev, irq, NULL, &kx022a_irq_thread,
 				  IRQF_ONESHOT, "kx022", data);
 }
-EXPORT_SYMBOL_GPL(kx022_probe_internal);
+EXPORT_SYMBOL_GPL(kx022a_probe_internal);
 
 /*
-static const struct dev_pm_ops kx022_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(kx022_suspend, kx022_resume)
-	SET_RUNTIME_PM_OPS(kx022_runtime_suspend, kx022_runtime_resume, NULL)
+static const struct dev_pm_ops kx022a_pm_ops = {
+	SET_SYSTEM_SLEEP_PM_OPS(kx022a_suspend, kx022a_resume)
+	SET_RUNTIME_PM_OPS(kx022a_runtime_suspend, kx022a_runtime_resume, NULL)
 };
 */
 
