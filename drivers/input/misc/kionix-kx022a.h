@@ -11,10 +11,10 @@
 #include <linux/device.h>
 #include <linux/regmap.h>
 
-#define KX022_REG_WHO		GENMASK(3, 0)
+#define KX022_REG_WHO		0x0f
 #define KX022_ID		0xc8
 
-#define KX022_REG_CNTL		GENMASK(4, 3)
+#define KX022_REG_CNTL		0x18
 #define KX022_MASK_PC1		BIT(7)
 #define KX022_MASK_RES		BIT(6)
 #define KX022_MASK_DRDY		BIT(5)
@@ -52,13 +52,22 @@
 #define KX022_MASK_ODR		GENMASK(3, 0)
 #define KX022_FIFO_MAX_WMI_TH	41
 
+#define KX022_REG_INC1		0x1c
+#define KX022_MASK_IEN1		BIT(5)
+#define KX022_MASK_IPOL1	BIT(4)
+#define KX022_IPOL_LOW		0
+#define KX022_IPOL_HIGH		KX022_MASK_IPOL1
+#define KX022_MASK_ITYP		BIT(3)
+#define KX022_ITYP_PULSE	KX022_MASK_ITYP
+#define KX022_ITYP_LEVEL	0
+
 #define KX022_REG_INC4		0x1f
 #define KX022_MASK_WMI1		BIT(5)
 
 #define KX022_REG_SELF_TEST	0x60
 #define KX022_MAX_REGISTER	0x60
 
-int kx022_probe_internal(struct device *dev, int irq, int bus_type);
-extern const struct regmap_config kx022_regmap;
+int kx022a_probe_internal(struct device *dev, int irq, int bus_type);
+extern const struct regmap_config kx022a_regmap;
 
 #endif
