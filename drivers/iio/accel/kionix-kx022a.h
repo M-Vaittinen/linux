@@ -19,6 +19,7 @@
 #define KX022_MASK_RES		BIT(6)
 #define KX022_MASK_DRDY		BIT(5)
 #define KX022_MASK_GSEL		GENMASK(4, 3)
+#define KX022A_GSEL_SHIFT	3
 #define KX022_GSEL_2 		0x0
 #define KX022_GSEL_4		BIT(3)
 #define KX022_GSEL_8		BIT(4)
@@ -50,6 +51,7 @@
 #define KX022_REG_BUF_CLEAR	0x3e
 #define KX022_REG_BUF_READ	0x3f
 #define KX022_MASK_ODR		GENMASK(3, 0)
+#define KX022A_ODR_SHIFT	3
 #define KX022_FIFO_MAX_WMI_TH	41
 
 #define KX022_REG_INC1		0x1c
