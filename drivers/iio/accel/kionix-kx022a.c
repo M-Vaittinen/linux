@@ -9,6 +9,10 @@
 //#include <linux/hrtimer.h>
 //#include <linux/i2c.h>
 #include <linux/iio/iio.h>
+#include <linux/iio/sysfs.h>
+#include <linux/iio/trigger.h>
+#include <linux/iio/trigger_consumer.h>
+#include <linux/iio/triggered_buffer.h>
 #include <linux/interrupt.h>
 //#include <linux/kthread.h>
 #include <linux/module.h>
@@ -23,6 +27,9 @@
 
 /* TODO: Check what is correct value? */
 //#define KX022_DEV_EVENTS_NUM 120
+
+/* TODO: What is the corret amount of samples? */
+#define KX022A_FIFO_LENGTH 20
 
 /* Driver state bits */
 #define KX022_STATE_STANDBY 0
@@ -143,15 +150,16 @@ enum kx022a_trigger_id {
 	KX022A_TRIGGERS,
 };
 
-struct kx022a_trigger {
-	struct kx022a_data *data;
+#if 0
+struct bmc150_accel_trigger {
+	struct bmc150_accel_data *data;
 	struct iio_trigger *indio_trig;
-	int (*setup)(struct kx022a_trigger *t, bool state);
-//	int intr;
-//	bool enabled;
+	int (*setup)(struct bmc150_accel_trigger *t, bool state);
+	int intr;
+	bool enabled;
 };
 
-#if 0
+
 enum bmc150_accel_interrupt_id {
 	BMC150_ACCEL_INT_DATA_READY,
 	BMC150_ACCEL_INT_ANY_MOTION,
@@ -196,23 +204,36 @@ struct bmc150_accel_data {
 };
 #endif
 
+struct kx022a_trigger;
+struct kx022a_data;
+
+struct kx022a_trigger {
+	struct kx022a_data *data;
+	struct iio_trigger *indio_trig;
+	int (*setup)(struct kx022a_trigger *t, bool state);
+//	int intr;
+	bool enabled;
+};
+
 struct kx022a_data {
 	struct regmap *regmap;
 	struct regulator_bulk_data regulators[2];
 	struct kx022a_trigger triggers[KX022A_TRIGGERS];
 	struct device *dev;
-	struct input_dev *accel_input_dev;
 	unsigned int g_range;
-	struct mutex state_lock;
+	struct mutex mutex;
+	//struct mutex state_lock;
 	unsigned int state;
 	unsigned long req_sample_interval_ms;
 	unsigned long odr_interval_ms;
 
 	unsigned int max_latency; /* FIFO flush period in ms */
-	ktime_t fifo_last_ts;
+	//ktime_t fifo_last_ts;
+	int64_t timestamp, old_timestamp; /* Only used in hw fifo mode. */
 //	ktime_t fifo_last_read;
 
 	struct iio_mount_matrix orientation;
+	u8 /* fifo_mode,*/ watermark;
 /*
 	u8 x_idx;
 	u8 y_idx;
@@ -223,8 +244,18 @@ struct kx022a_data {
 */
 };
 
+/*
+struct kx022a_trigger {
+	struct kx022a_data *data;
+	struct iio_trigger *indio_trig;
+	int (*setup)(struct kx022a_trigger *t, bool state);
+	int intr;
+	bool enabled;
+};
+*/
+
 static const struct iio_mount_matrix *
-kxsd9_get_mount_matrix(const struct iio_dev *idev,
+kx022a_get_mount_matrix(const struct iio_dev *idev,
 		       const struct iio_chan_spec *chan)
 {
 	struct kx022a_data *data = iio_priv(idev);
@@ -293,6 +324,8 @@ static const struct iio_chan_spec kx022a_channels[] = {
 /**
  * kx022a_sysfs_get_max_latency - return fifo read latency
  */
+/**
+ * kx022a_sysfs_set_max_latency - set fifo read latency
 static ssize_t kx022a_sysfs_get_max_latency(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
@@ -301,9 +334,6 @@ static ssize_t kx022a_sysfs_get_max_latency(struct device *dev,
 	return sprintf(buf, "%u\n", data->max_latency);
 }
 
-/**
- * kx022a_sysfs_set_max_latency - set fifo read latency
- */
 static ssize_t kx022a_sysfs_set_max_latency(struct device *dev,
 				struct device_attribute *attr,
 				const char *buf, size_t len)
@@ -343,6 +373,7 @@ static struct attribute *kx022a_sysfs_attrs[] = {
 static struct attribute_group kx022a_accel_attribute_group = {
 	.attrs = kx022a_sysfs_attrs
 };
+ */
 
 static int kx022a_set_g_range(struct kx022a_data *data, unsigned int g_range)
 {
@@ -382,8 +413,8 @@ static int sanity_check_axis(u32 *axis)
 
 static int kx022a_parse_dt(struct kx022a_data *data)
 {
-	int ret, i;
-	u32 g_range, axis_order[3];
+	int ret;
+	u32 g_range/*, axis_order[3]*/;
 	struct fwnode_handle *fw = dev_fwnode(data->dev);
 
 	if (!fw) {
@@ -401,7 +432,9 @@ static int kx022a_parse_dt(struct kx022a_data *data)
 		g_range = 2000;
 	}
 
-	ret = fwnode_property_read_u32_array(fw, "kionix,xyz-axis-map", NULL, 0);
+/*
+ * TODO: See how orientation mapping is done in IIO.
+ * 	ret = fwnode_property_read_u32_array(fw, "kionix,xyz-axis-map", NULL, 0);
 	if (ret != 3) {
 		if (ret) {
 			dev_err(data->dev, "Bad axis map\n");
@@ -432,15 +465,19 @@ static int kx022a_parse_dt(struct kx022a_data *data)
 	data->invert_x = fwnode_property_present(fw, "kionix,invert-x-axis");
 	data->invert_y = fwnode_property_present(fw, "kionix,invert-y-axis");
 	data->invert_z = fwnode_property_present(fw, "kionix,invert-z-axis");
+*/
 
 	return kx022a_set_g_range(data, g_range);
 }
 
 static void kx022a_map_data(struct kx022a_data *data, int *raw_xyz, int *xyz)
 {
+/*
+ * TODO: See how orientatio mapping is done in IIO
 	xyz[0] = data->invert_x ? -raw_xyz[data->x_idx] : raw_xyz[data->x_idx];
 	xyz[1] = data->invert_y ? -raw_xyz[data->y_idx] : raw_xyz[data->y_idx];
 	xyz[2] = data->invert_z ? -raw_xyz[data->z_idx] : raw_xyz[data->z_idx];
+*/
 }
 
 static void kx022a_convert_raw_data(struct kx022a_data *data, s16 *raw_xyz,
@@ -489,8 +526,19 @@ static void kx122_data_calibrate_xyz(struct kx122_data *data, int *xyz)
  * slower ODRs. Slowest being 0.78 Hz
  */
 
-static IIO_CONST_ATTR_SAMP_FREQ_AVAIL(
-		"0.78 1.563 3.125 6.25 12.5 25 50 100 200");
+static IIO_CONST_ATTR_SAMP_FREQ_AVAIL("0.78 1.563 3.125 6.25 12.5 25 50 100 200");
+
+static struct attribute *kx022a_attributes[] = {
+	&iio_const_attr_sampling_frequency_available.dev_attr.attr,
+	NULL,
+};
+
+static const struct attribute_group kx022a_attrs_group = {
+	.attrs = kx022a_attributes,
+};
+
+
+
 /*
  * range is typically +-2g/4g/8g/16g, distributed over the amount of bits.
  * The scale table can be calculated using
@@ -514,7 +562,7 @@ struct kx022a_tuple {
 	int val2;
 };
 
-static const struct kx022a_tuple x022a_accel_samp_freq_table[] = {
+static const struct kx022a_tuple kx022a_accel_samp_freq_table[] = {
 	{0, 78}, {1, 563}, {3, 125}, {6, 25}, {12, 5}, {25, 0}, {50, 0},
 	 {100, 0}, {200, 0}
 };
@@ -600,6 +648,16 @@ static int kx022a_data_delay_set(struct kx022a_data *data, unsigned long delay)
 		KX022_MASK_ODR, i);
 }
 
+static int kx022a_turn_on(struct kx022a_data *data)
+{
+	return regmap_set_bits(data->regmap, KX022_REG_CNTL, KX022_MASK_PC1);
+}
+
+static int kx022a_turn_off(struct kx022a_data *data)
+{
+	return regmap_clear_bits(data->regmap, KX022_REG_CNTL, KX022_MASK_PC1);
+}
+
 static int kx022a_config_start(struct kx022a_data *data)
 {
 	int ret;
@@ -631,8 +689,8 @@ static int kx022a_write_raw(struct iio_dev *indio_dev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SAMP_FREQ:
-		ret = kx022a_find_tuple_index(&kx022a_accel_samp_freq_table,
-					      ARRAY_SIZE(x022a_accel_samp_freq_table),
+		ret = kx022a_find_tuple_index(&kx022a_accel_samp_freq_table[0],
+					      ARRAY_SIZE(kx022a_accel_samp_freq_table),
 					      val, val2);
 		/* Configure we found valid ODR */
 		if (ret >= 0) {
@@ -659,7 +717,6 @@ static int kx022a_write_raw(struct iio_dev *indio_dev,
 			kx022a_config_end(data);
 		}
 		return ret;
-	}
 	default:
 		ret = -EINVAL;
 	}
@@ -689,7 +746,7 @@ static int kx022a_fifo_enable(struct kx022a_data *data)
 	if (data->state & KX022_STATE_FIFO)
 		return 0;
 
-	mutex_lock(&data->state_lock);
+/*	mutex_lock(&data->state_lock); */
 	if (data->state & KX022_STATE_FIFO)
 		goto unlock_out;
 
@@ -717,7 +774,7 @@ static int kx022a_fifo_enable(struct kx022a_data *data)
 	/* NOTE, uses int1_irq */
 
 	/* timestamp when fifo started */
-	data->fifo_last_ts = ktime_get_boottime();
+//	data->fifo_last_ts = ktime_get_boottime();
 //	data->fifo_last_read =	data->fifo_last_ts;
 
 	data->state |= KX022_STATE_FIFO;
@@ -725,7 +782,7 @@ static int kx022a_fifo_enable(struct kx022a_data *data)
 			      KX022_MASK_WMI1);
 
 unlock_out:
-	mutex_unlock(&data->state_lock);
+/*	mutex_unlock(&data->state_lock); */
 
 	return ret;
 }
@@ -766,6 +823,7 @@ static void kx022a_strm_report_data(struct kx022a_data *data)
 
 //#define KX022_DEV_EVENTS_NUM 120
 
+#if 0
 static void kx022a_fifo_report_data(struct kx022a_data *data)
 {
 	unsigned int fifo_bytes;
@@ -807,7 +865,9 @@ static void kx022a_fifo_report_data(struct kx022a_data *data)
 		kx022a_input_report_xyz(data->accel_input_dev, xyz, data->fifo_last_ts);
 	}
 }
+#endif
 
+#if 0
 static irqreturn_t kx022a_irq_thread(int irq, void *d)
 {
 	struct kx022a_data *data = d;
@@ -838,17 +898,7 @@ static void kx022a_clean_sysfs(void *d)
 	sysfs_remove_group(&data->accel_input_dev->dev.kobj,
 			   &kx022a_accel_attribute_group);
 }
-
-static int kx022a_turn_on(struct kx022a_data *data)
-{
-	return regmap_set_bits(data->regmap, KX022_REG_CNTL, KX022_MASK_PC1);
-}
-
-static int kx022a_turn_off(struct kx022a_data *data)
-{
-	return regmap_clear_bits(data->regmap, KX022_REG_CNTL, KX022_MASK_PC1);
-}
-
+#endif
 #if 0
 static void kx022a_close(struct input_dev *idev)
 {
@@ -907,15 +957,16 @@ static int kx022a_get_axis(struct kx022a_data *data,
 			   int *val)
 {
 	__be16 raw_val;
-	u16 nval;
+	//u16 nval;
+	int ret;
 
 	ret = regmap_bulk_read(data->regmap, chan->address, &raw_val,
 			       sizeof(raw_val));
 	if (ret)
 		return ret;
 
-	nval = be16_to_cpu(raw_val);
-	*val = nval;
+	*val = be16_to_cpu(raw_val);
+	//*val = nval;
 
 	return IIO_VAL_INT;
 }
@@ -927,13 +978,12 @@ static int kx022a_read_raw(struct iio_dev *idev,
 	int ret = -EINVAL;
 	struct kx022a_data *data = iio_priv(idev);
 	unsigned int regval;
-	u16 nval;
 
 	//pm_runtime_get_sync(st->dev);
 
 	switch (mask) {
 	case IIO_CHAN_INFO_RAW:
-		if (iio_buffer_enabled(indio_dev)) {
+		if (iio_buffer_enabled(idev)) {
 			ret = -EBUSY;
 			goto error_ret;
 		}
@@ -957,7 +1007,7 @@ static int kx022a_read_raw(struct iio_dev *idev,
 
 		freq = &kx022a_accel_samp_freq_table[regval & KX022_MASK_ODR];
 
-		*val = freq->val1;
+		*val = freq->val;
 		*val2 = freq->val2;
 
 		break;
@@ -1009,14 +1059,145 @@ static int kx022a_set_watermark(struct iio_dev *indio_dev, unsigned val)
 	return 0;
 }
 
+static ssize_t kx022a_get_fifo_watermark(struct device *dev,
+					 struct device_attribute *attr,
+					 char *buf)
+{
+	struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+	struct kx022a_data *data = iio_priv(indio_dev);
+	int wm;
+
+	mutex_lock(&data->mutex);
+	wm = data->watermark;
+	mutex_unlock(&data->mutex);
+
+	return sprintf(buf, "%d\n", wm);
+}
+
+static IIO_CONST_ATTR(hwfifo_watermark_min, "1");
+static IIO_CONST_ATTR(hwfifo_watermark_max,
+		      __stringify(KX022A_FIFO_LENGTH));
+static IIO_DEVICE_ATTR(hwfifo_watermark, S_IRUGO,
+		       kx022a_get_fifo_watermark, NULL, 0);
+
+static const struct attribute *kx022a_fifo_attributes[] = {
+	&iio_const_attr_hwfifo_watermark_min.dev_attr.attr,
+	&iio_const_attr_hwfifo_watermark_max.dev_attr.attr,
+	&iio_dev_attr_hwfifo_watermark.dev_attr.attr,
+//	&iio_dev_attr_hwfifo_enabled.dev_attr.attr,
+	NULL,
+};
+
+/* TODO */
+static int __kx022a_fifo_flush(struct iio_dev *indio_dev,
+				     unsigned samples, bool irq)
+{
+#if 0
+	struct bmc150_accel_data *data = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(data->regmap);
+	int ret, i;
+	u8 count;
+	u16 buffer[BMC150_ACCEL_FIFO_LENGTH * 3];
+	int64_t tstamp;
+	uint64_t sample_period;
+	unsigned int val;
+
+	ret = regmap_read(data->regmap, BMC150_ACCEL_REG_FIFO_STATUS, &val);
+	if (ret < 0) {
+		dev_err(dev, "Error reading reg_fifo_status\n");
+		return ret;
+	}
+
+	count = val & 0x7F;
+
+	if (!count)
+		return 0;
+
+	/*
+	 * If we getting called from IRQ handler we know the stored timestamp is
+	 * fairly accurate for the last stored sample. Otherwise, if we are
+	 * called as a result of a read operation from userspace and hence
+	 * before the watermark interrupt was triggered, take a timestamp
+	 * now. We can fall anywhere in between two samples so the error in this
+	 * case is at most one sample period.
+	 */
+	if (!irq) {
+		data->old_timestamp = data->timestamp;
+		data->timestamp = iio_get_time_ns(indio_dev);
+	}
+
+	/*
+	 * Approximate timestamps for each of the sample based on the sampling
+	 * frequency, timestamp for last sample and number of samples.
+	 *
+	 * Note that we can't use the current bandwidth settings to compute the
+	 * sample period because the sample rate varies with the device
+	 * (e.g. between 31.70ms to 32.20ms for a bandwidth of 15.63HZ). That
+	 * small variation adds when we store a large number of samples and
+	 * creates significant jitter between the last and first samples in
+	 * different batches (e.g. 32ms vs 21ms).
+	 *
+	 * To avoid this issue we compute the actual sample period ourselves
+	 * based on the timestamp delta between the last two flush operations.
+	 */
+	sample_period = (data->timestamp - data->old_timestamp);
+	do_div(sample_period, count);
+	tstamp = data->timestamp - (count - 1) * sample_period;
+
+	if (samples && count > samples)
+		count = samples;
+
+	ret = bmc150_accel_fifo_transfer(data, (u8 *)buffer, count);
+	if (ret)
+		return ret;
+
+	/*
+	 * Ideally we want the IIO core to handle the demux when running in fifo
+	 * mode but not when running in triggered buffer mode. Unfortunately
+	 * this does not seem to be possible, so stick with driver demux for
+	 * now.
+	 */
+	for (i = 0; i < count; i++) {
+		int j, bit;
+
+		j = 0;
+		for_each_set_bit(bit, indio_dev->active_scan_mask,
+				 indio_dev->masklength)
+			memcpy(&data->scan.channels[j++], &buffer[i * 3 + bit],
+			       sizeof(data->scan.channels[0]));
+
+		iio_push_to_buffers_with_timestamp(indio_dev, &data->scan,
+						   tstamp);
+
+		tstamp += sample_period;
+	}
+
+	return count;
+#endif
+	return 0;
+}
+
+static int kx022a_fifo_flush(struct iio_dev *indio_dev, unsigned samples)
+{
+	struct kx022a_data *data = iio_priv(indio_dev);
+	int ret;
+
+	mutex_lock(&data->mutex);
+	/* TODO */
+	ret = __kx022a_fifo_flush(indio_dev, samples, false);
+	mutex_unlock(&data->mutex);
+
+	return ret;
+}
+
 static const struct iio_info kx022a_info = {
 	.read_raw = &kx022a_read_raw,
 	.write_raw = &kx022a_write_raw,
-/*	.attrs = &kxsd9_attribute_group, */
+	.attrs = &kx022a_attrs_group,
 
 	.validate_trigger	= kx022a_validate_trigger,
 	.hwfifo_set_watermark	= kx022a_set_watermark,
-	.hwfifo_flush_to_buffer	= bmc150_accel_fifo_flush,
+	.hwfifo_flush_to_buffer	= kx022a_fifo_flush,
 };
 
 static int kx022a_prepare_irq(struct kx022a_data *data)
@@ -1042,6 +1223,7 @@ static int kx022a_unprepare_irq(struct kx022a_data *data)
 static int kx022a_buffer_preenable(struct iio_dev *indio_dev)
 {
 	struct kx022a_data *data = iio_priv(indio_dev);
+	int ret;
 
 	/* PC1 to 0 */
 	ret = kx022a_turn_off(data);
@@ -1060,9 +1242,174 @@ static int kx022a_buffer_preenable(struct iio_dev *indio_dev)
 
 static const struct iio_buffer_setup_ops kx022a_buffer_ops = {
 	.preenable = kx022a_buffer_preenable,
-	.postenable = bmc150_accel_buffer_postenable,
-	.predisable = bmc150_accel_buffer_predisable,
-	.postdisable = bmc150_accel_buffer_postdisable,
+	/* TODO: Add these */
+//	.postenable = bmc150_accel_buffer_postenable,
+//	.predisable = bmc150_accel_buffer_predisable,
+//	.postdisable = bmc150_accel_buffer_postdisable,
+};
+
+static irqreturn_t kxo22a_trigger_handler(int irq, void *p)
+{
+	struct iio_poll_func *pf = p;
+	struct iio_dev *indio_dev = pf->indio_dev;
+//	struct kx022a_data *data = iio_priv(indio_dev);
+//	int ret;
+
+	/*
+	mutex_lock(&data->mutex);
+	ret = regmap_bulk_read(data->regmap, BMC150_ACCEL_REG_XOUT_L,
+			       data->buffer, AXIS_MAX * 2);
+	mutex_unlock(&data->mutex);
+	if (ret < 0)
+		goto err_read;
+
+	iio_push_to_buffers_with_timestamp(indio_dev, data->buffer,
+					   pf->timestamp);
+err_read:
+	*/
+	iio_trigger_notify_done(indio_dev->trig);
+
+	return IRQ_HANDLED;
+
+}
+
+/* Get timestamps and wake the thread if we need to read data */
+static irqreturn_t kx022a_irq_handler(int irq, void *private)
+{
+	struct iio_dev *indio_dev = private;
+	struct kx022a_data *data = iio_priv(indio_dev);
+	bool ack = false;
+	int i;
+
+	data->old_timestamp = data->timestamp;
+	data->timestamp = iio_get_time_ns(indio_dev);
+
+	for (i = 0; i < KX022A_TRIGGERS; i++) {
+		if (data->triggers[i].enabled) {
+			iio_trigger_poll(data->triggers[i].indio_trig);
+			ack = true;
+			break;
+		}
+	}
+
+//	if (/* data->ev_enable_state || data->fifo_mode)
+	return IRQ_WAKE_THREAD;
+
+/*
+	if (ack)
+		return IRQ_HANDLED;
+
+	return IRQ_NONE;
+*/
+}
+
+/*
+ * Read read the data from the fifo and fill IIO buffers */
+static irqreturn_t kx022a_irq_thread_handler(int irq, void *private)
+{
+	struct iio_dev *indio_dev = private;
+	struct kx022a_data *data = iio_priv(indio_dev);
+	struct device *dev = regmap_get_device(data->regmap);
+	bool ack = false;
+	int ret;
+
+	mutex_lock(&data->mutex);
+
+//	if (data->fifo_mode) {
+		ret = __kx022a_fifo_flush(indio_dev,
+					  KX022A_FIFO_LENGTH, true);
+		if (ret > 0)
+			ack = true;
+//	}
+/*
+	if (data->ev_enable_state) {
+		ret = bmc150_accel_handle_roc_event(indio_dev);
+		if (ret > 0)
+			ack = true;
+	}
+*/
+	if (ack) {
+/*
+ * TODO: Ack
+ * ret = regmap_write(data->regmap, BMC150_ACCEL_REG_INT_RST_LATCH,
+				   BMC150_ACCEL_INT_MODE_LATCH_INT |
+				   BMC150_ACCEL_INT_MODE_LATCH_RESET);
+		if (ret)
+			dev_err(dev, "Error writing reg_int_rst_latch\n");
+*/
+		ret = IRQ_HANDLED;
+	} else {
+		ret = IRQ_NONE;
+	}
+
+	mutex_unlock(&data->mutex);
+
+	return ret;
+}
+
+static void kx022a_trig_reen(struct iio_trigger *trig)
+{
+	struct kx022a_trigger *t = iio_trigger_get_drvdata(trig);
+	struct kx022a_data *data = t->data;
+	struct device *dev = regmap_get_device(data->regmap);
+	int ret;
+
+	/* new data interrupts don't need ack */
+//	if (t == &t->data->triggers[BMC150_ACCEL_TRIGGER_DATA_READY])
+//		return;
+
+	mutex_lock(&data->mutex);
+	/* clear any latched interrupt */
+	/* TODO */
+	ret = 0;
+/*	ret = regmap_write(data->regmap, BMC150_ACCEL_REG_INT_RST_LATCH,
+			   BMC150_ACCEL_INT_MODE_LATCH_INT |
+			   BMC150_ACCEL_INT_MODE_LATCH_RESET);
+*/
+	mutex_unlock(&data->mutex);
+	if (ret < 0)
+		dev_err(dev, "Error writing reg_int_rst_latch\n");
+}
+
+static int kx022a_trigger_set_state(struct iio_trigger *trig,
+				    bool state)
+{
+	struct kx022a_trigger *t = iio_trigger_get_drvdata(trig);
+	struct kx022a_data *data = t->data;
+	int ret;
+
+	mutex_lock(&data->mutex);
+
+	if (t->enabled == state) {
+		mutex_unlock(&data->mutex);
+		return 0;
+	}
+
+	if (t->setup) {
+		ret = t->setup(t, state);
+		if (ret < 0) {
+			mutex_unlock(&data->mutex);
+			return ret;
+		}
+	}
+/*
+ * 	TODO 
+	ret = kx022a_set_interrupt(data, t->intr, state);
+	if (ret < 0) {
+		mutex_unlock(&data->mutex);
+		return ret;
+	}
+*/
+	t->enabled = state;
+
+	mutex_unlock(&data->mutex);
+
+	return ret;
+}
+
+static const struct iio_trigger_ops kx022a_trigger_ops = {
+	.set_trigger_state = kx022a_trigger_set_state,
+	.reenable = kx022a_trig_reen,
 };
 
 int kx022a_probe_internal(struct device *dev, int irq, int input_bus)
@@ -1072,7 +1419,7 @@ int kx022a_probe_internal(struct device *dev, int irq, int input_bus)
 	unsigned int chip_id;
 	//struct input_dev *id;
 	struct iio_dev *idev;
-	int ret;
+	int ret, i;
 	static const char *regulator_names[] = {"io_vdd", "vdd"};
 
 	if (WARN_ON(!dev))
@@ -1095,30 +1442,10 @@ int kx022a_probe_internal(struct device *dev, int irq, int input_bus)
 	 * VDD   is the analog and digital domain voltage supply
 	 * IO_VDD is the digital I/O voltage supply
 	 */
-	for (i = 0; i < ARRAY_SIZE(regulator_names); i++) {
-		struct regulator *r;
 
-		r = devm_regulator_get_optional(dev, regulator_names[i]);
-		if (!IS_ERR(r)) {
-			ret = devm_add_action_or_reset(dev, &kx022a_regulator_disable, r);
-			if (ret)
-				return ret;
-		}
-			ret = regulator_enable(r);
-		} else
-			if (PTR_ERR(r) != -ENODEV)
-				return PTR_ERR(r);
-	}
-	if (ret)
-		return dev_err_probe(dev, ret, "failed to get regulators\n");
-
-	ret = regulator_bulk_enable(ARRAY_SIZE(data->regulators),
-				    data->regulators);
-	if (ret) {
-		dev_err(dev, "failed to enable regulators: %d\n", ret);
-		return ret;
-	}
-
+	ret = devm_regulator_bulk_get_enable_optional(dev, regulator_names);
+	if (ret && ret != -ENODEV)
+		return dev_err_probe(dev, ret, "failed to enable regulator\n");
 
 	ret = regmap_read(regmap, KX022_REG_WHO, &chip_id);
 	if (ret) {
@@ -1133,23 +1460,19 @@ int kx022a_probe_internal(struct device *dev, int irq, int input_bus)
 		return -EINVAL;
 	}
 
-/*
-	data = devm_kzalloc(dev, sizeof(*data), GFP_KERNEL);
-	if (!data)
-		return -ENOMEM;
-*/
 	data->regmap = regmap;
 	data->dev = dev;
 
-	indio_dev->channels = kx022a_channels;
-	indio_dev->num_channels = ARRAY_SIZE(kx022a_channels);
-	indio_dev->name = "kx022-accel";
-	indio_dev->info = &kx022a_info;
-	indio_dev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_HARDWARE;
-	indio_dev->available_scan_masks = kxsd9_scan_masks;
+	idev->channels = kx022a_channels;
+	idev->num_channels = ARRAY_SIZE(kx022a_channels);
+	idev->name = "kx022-accel";
+	idev->info = &kx022a_info;
+	idev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_HARDWARE;
+	/* TODO: Check the scan masks */
+//	idev->available_scan_masks = kxsd9_scan_masks;
 
 	/* Read the mounting matrix, if present */
-	ret = iio_read_mount_matrix(dev, &st->orientation);
+	ret = iio_read_mount_matrix(dev, &data->orientation);
 	if (ret)
 		return ret;
 
@@ -1158,19 +1481,44 @@ int kx022a_probe_internal(struct device *dev, int irq, int input_bus)
 	if (ret)
 		return ret;
 /*
-	mutex_init(&data->state_lock);
-
 	ret = kx022a_parse_dt(data);
 	if (ret)
 		return ret;
 */
 
-	ret = iio_triggered_buffer_setup_ext(indio_dev,
+	ret = iio_triggered_buffer_setup_ext(idev,
 					     &iio_pollfunc_store_time,
-					     bmc150_accel_trigger_handler,
+					     kxo22a_trigger_handler,
 					     IIO_BUFFER_DIRECTION_IN,
 					     &kx022a_buffer_ops,
-					     fifo_attrs);
+					     kx022a_fifo_attributes);
+
+/* TODO: Clean trigger setup. Remove arry if there is only 1 trigger. Call
+ * iio_trigger_unregister() upon failure */
+	for (i = 0; i < KX022A_TRIGGERS; i++) {
+		struct kx022a_trigger *t = &data->triggers[i];
+
+		t->indio_trig = devm_iio_trigger_alloc(dev,
+							kx022a_triggers[i].name,
+							idev->name,
+							iio_device_id(idev));
+		if (!t->indio_trig)
+			return -ENOMEM;
+
+		t->indio_trig->ops = &kx022a_trigger_ops;
+		t->data = data;
+		t->setup = kx022a_triggers[i].setup;
+		iio_trigger_set_drvdata(t->indio_trig, t);
+
+		ret = iio_trigger_register(t->indio_trig);
+		if (ret)
+			return ret;
+	}
+
+	ret = kx022a_turn_on(data);
+	if (ret)
+		return ret;
+
 #if 0
 	data->accel_input_dev = id;
 
@@ -1207,8 +1555,9 @@ int kx022a_probe_internal(struct device *dev, int irq, int input_bus)
 #endif
 	/* TODO: Clean sysfs upon failure */
 
-	return devm_request_threaded_irq(data->dev, irq, NULL, &kx022a_irq_thread,
-				  IRQF_ONESHOT, "kx022", data);
+	return devm_request_threaded_irq(data->dev, irq, kx022a_irq_handler,
+					 &kx022a_irq_thread_handler,
+					 IRQF_ONESHOT, "kx022", idev);
 }
 EXPORT_SYMBOL_GPL(kx022a_probe_internal);
 

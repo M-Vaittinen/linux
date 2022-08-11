@@ -31,6 +31,8 @@
 
 #define KX022_REG_XHP_L		0x0
 #define KX022_REG_XOUT_L	0x06
+#define KX022_REG_YOUT_L	0x08
+#define KX022_REG_ZOUT_L	0x0a
 //#define KX022_REG_ZOUT_H	0x0b
 #define KX022_REG_COTR		0x0c
 #define KX022_REG_TSCP		0x10
