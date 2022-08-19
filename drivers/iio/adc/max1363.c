@@ -169,7 +169,6 @@ struct max1363_state {
 	const struct max1363_chip_info	*chip_info;
 	const struct max1363_mode	*current_mode;
 	u32				requestedmask;
-	struct regulator		*reg;
 	struct mutex			lock;
 
 	/* Using monitor modes and buffer at the same time is
@@ -1603,15 +1602,7 @@ static int max1363_probe(struct i2c_client *client,
 	st = iio_priv(indio_dev);
 
 	mutex_init(&st->lock);
-	st->reg = devm_regulator_get(&client->dev, "vcc");
-	if (IS_ERR(st->reg))
-		return PTR_ERR(st->reg);
-
-	ret = regulator_enable(st->reg);
-	if (ret)
-		return ret;
-
-	ret = devm_add_action_or_reset(&client->dev, max1363_reg_disable, st->reg);
+	ret = devm_regulator_get_enable(&client->dev, "vcc");
 	if (ret)
 		return ret;
 
