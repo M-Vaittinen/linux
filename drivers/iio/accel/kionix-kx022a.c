@@ -264,6 +264,16 @@ kx022a_get_mount_matrix(const struct iio_dev *idev,
 }
 
 
+enum {
+	AXIS_X,
+	AXIS_Y,
+	AXIS_Z,
+	AXIS_MAX,
+};
+
+static const unsigned long kx022a_scan_masks[] = {
+					BIT(AXIS_X) | BIT(AXIS_Y) | BIT(AXIS_Z),
+					0};
 
 static const struct iio_chan_spec_ext_info kx022a_ext_info[] = {
 	IIO_MOUNT_MATRIX(IIO_SHARED_BY_TYPE, kx022a_get_mount_matrix),
@@ -1417,7 +1427,6 @@ int kx022a_probe_internal(struct device *dev, int irq, int input_bus)
 	struct regmap *regmap;
 	struct kx022a_data *data;
 	unsigned int chip_id;
-	//struct input_dev *id;
 	struct iio_dev *idev;
 	int ret, i;
 	static const char *regulator_names[] = {"io_vdd", "vdd"};
@@ -1469,7 +1478,7 @@ int kx022a_probe_internal(struct device *dev, int irq, int input_bus)
 	idev->info = &kx022a_info;
 	idev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_HARDWARE;
 	/* TODO: Check the scan masks */
-//	idev->available_scan_masks = kxsd9_scan_masks;
+	idev->available_scan_masks = kx022a_scan_masks;
 
 	/* Read the mounting matrix, if present */
 	ret = iio_read_mount_matrix(dev, &data->orientation);
