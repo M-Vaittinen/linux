@@ -6,15 +6,12 @@
 
 #include <linux/delay.h>
 #include <linux/gpio.h>
-//#include <linux/hrtimer.h>
-//#include <linux/i2c.h>
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 #include <linux/iio/trigger.h>
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
 #include <linux/interrupt.h>
-//#include <linux/kthread.h>
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
@@ -150,74 +147,17 @@ enum kx022a_trigger_id {
 	KX022A_TRIGGERS,
 };
 
-#if 0
-struct bmc150_accel_trigger {
-	struct bmc150_accel_data *data;
-	struct iio_trigger *indio_trig;
-	int (*setup)(struct bmc150_accel_trigger *t, bool state);
-	int intr;
-	bool enabled;
-};
-
-
-enum bmc150_accel_interrupt_id {
-	BMC150_ACCEL_INT_DATA_READY,
-	BMC150_ACCEL_INT_ANY_MOTION,
-	BMC150_ACCEL_INT_WATERMARK,
-	BMC150_ACCEL_INTERRUPTS,
-};
-
-enum bmc150_accel_trigger_id {
-	BMC150_ACCEL_TRIGGER_DATA_READY,
-	BMC150_ACCEL_TRIGGER_ANY_MOTION,
-	BMC150_ACCEL_TRIGGERS,
-};
-
-struct bmc150_accel_data {
-	struct regmap *regmap;
-	struct regulator_bulk_data regulators[2];
-	struct bmc150_accel_interrupt interrupts[BMC150_ACCEL_INTERRUPTS];
-	struct bmc150_accel_trigger triggers[BMC150_ACCEL_TRIGGERS];
-	struct mutex mutex;
-	u8 fifo_mode, watermark;
-	s16 buffer[8];
-	/*
-	 * Ensure there is sufficient space and correct alignment for
-	 * the timestamp if enabled
-	 */
-	struct {
-		__le16 channels[3];
-		s64 ts __aligned(8);
-	} scan;
-	u8 bw_bits;
-	u32 slope_dur;
-	u32 slope_thres;
-	u32 range;
-	int ev_enable_state;
-	int64_t timestamp, old_timestamp; /* Only used in hw fifo mode. */
-	const struct bmc150_accel_chip_info *chip_info;
-	enum bmc150_type type;
-	struct i2c_client *second_device;
-	void (*resume_callback)(struct device *dev);
-	struct delayed_work resume_work;
-	struct iio_mount_matrix orientation;
-};
-#endif
-
 struct kx022a_trigger;
 struct kx022a_data;
 
 struct kx022a_trigger {
 	struct kx022a_data *data;
 	struct iio_trigger *indio_trig;
-//	int (*setup)(struct kx022a_trigger *t, bool state);
-//	int intr;
 	bool enabled;
 	const char *name;
 };
 static const struct kx022a_trigger kx022a_triggers[KX022A_TRIGGERS] = {
 	{
-//		.intr = 0,
 		.name = "%sdata-rdy-dev%d",
 	}
 };
@@ -225,12 +165,10 @@ static const struct kx022a_trigger kx022a_triggers[KX022A_TRIGGERS] = {
 
 struct kx022a_data {
 	struct regmap *regmap;
-//	struct regulator_bulk_data regulators[2];
 	struct kx022a_trigger triggers[KX022A_TRIGGERS];
 	struct device *dev;
 	unsigned int g_range;
 	struct mutex mutex;
-	//struct mutex state_lock;
 	unsigned int state;
 	unsigned long req_sample_interval_ms;
 	unsigned long odr_interval_ms;
@@ -252,16 +190,6 @@ struct kx022a_data {
 */
 };
 
-/*
-struct kx022a_trigger {
-	struct kx022a_data *data;
-	struct iio_trigger *indio_trig;
-	int (*setup)(struct kx022a_trigger *t, bool state);
-	int intr;
-	bool enabled;
-};
-*/
-
 static const struct iio_mount_matrix *
 kx022a_get_mount_matrix(const struct iio_dev *idev,
 		       const struct iio_chan_spec *chan)
@@ -270,7 +198,6 @@ kx022a_get_mount_matrix(const struct iio_dev *idev,
 
 	return &data->orientation;
 }
-
 
 enum {
 	AXIS_X,
@@ -764,7 +691,6 @@ static int kx022a_fifo_enable(struct kx022a_data *data)
 	if (data->state & KX022_STATE_FIFO)
 		return 0;
 
-/*	mutex_lock(&data->state_lock); */
 	if (data->state & KX022_STATE_FIFO)
 		goto unlock_out;
 
@@ -975,7 +901,6 @@ static int kx022a_get_axis(struct kx022a_data *data,
 			   int *val)
 {
 	__be16 raw_val;
-	//u16 nval;
 	int ret;
 
 	ret = regmap_bulk_read(data->regmap, chan->address, &raw_val,
@@ -984,7 +909,6 @@ static int kx022a_get_axis(struct kx022a_data *data,
 		return ret;
 
 	*val = be16_to_cpu(raw_val);
-	//*val = nval;
 
 	return IIO_VAL_INT;
 }
@@ -1545,23 +1469,6 @@ int kx022a_probe_internal(struct device *dev, int irq)
 		return ret;
 
 #if 0
-	data->accel_input_dev = id;
-
-	id->name = "kx022-accel";
-	id->id.bustype = input_bus;
-	id->id.vendor = (int)"KION";
-	id->dev.parent = dev;
-	id->open = kx022a_open;
-	id->close = kx022a_close;
-	set_bit(EV_ABS, id->evbit);
-	input_set_abs_params(id, ABS_X, INT_MIN, INT_MAX,0,0);
-	input_set_abs_params(id, ABS_Y, INT_MIN, INT_MAX,0,0);
-	input_set_abs_params(id, ABS_Z, INT_MIN, INT_MAX,0,0);
-
-//	input_set_events_per_packet(id, KX022_DEV_EVENTS_NUM);
-
-	input_set_drvdata(id, data);
-
 	ret = sysfs_create_group(&data->accel_input_dev->dev.kobj,
 					&kx022a_accel_attribute_group);
 	if (ret) {
@@ -1571,12 +1478,6 @@ int kx022a_probe_internal(struct device *dev, int irq)
 	ret = devm_add_action_or_reset(dev, &kx022a_clean_sysfs, data);
 	if (ret)
 		return ret;
-
-	ret = input_register_device(id);
-        if (ret) {
-                dev_err(dev, "Failed to register device\n");
-                return ret;
-        }
 #endif
 	/* TODO: Clean sysfs upon failure */
 
