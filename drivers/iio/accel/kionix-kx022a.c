@@ -210,14 +210,22 @@ struct kx022a_data;
 struct kx022a_trigger {
 	struct kx022a_data *data;
 	struct iio_trigger *indio_trig;
-	int (*setup)(struct kx022a_trigger *t, bool state);
+//	int (*setup)(struct kx022a_trigger *t, bool state);
 //	int intr;
 	bool enabled;
+	const char *name;
 };
+static const struct kx022a_trigger kx022a_triggers[KX022A_TRIGGERS] = {
+	{
+//		.intr = 0,
+		.name = "%sdata-rdy-dev%d",
+	}
+};
+
 
 struct kx022a_data {
 	struct regmap *regmap;
-	struct regulator_bulk_data regulators[2];
+//	struct regulator_bulk_data regulators[2];
 	struct kx022a_trigger triggers[KX022A_TRIGGERS];
 	struct device *dev;
 	unsigned int g_range;
@@ -1394,7 +1402,12 @@ static int kx022a_trigger_set_state(struct iio_trigger *trig,
 		mutex_unlock(&data->mutex);
 		return 0;
 	}
-
+	/* TODO: Take data-ready in use here */
+	pr_info("YaY! I should now enable data-ready IRQ/trigger\n");
+/*
+ * unnecessarily complex. If we have only one trigger we can live with same
+ * setup procedure. No need to have a callback for it
+ *
 	if (t->setup) {
 		ret = t->setup(t, state);
 		if (ret < 0) {
@@ -1402,6 +1415,7 @@ static int kx022a_trigger_set_state(struct iio_trigger *trig,
 			return ret;
 		}
 	}
+*/
 /*
  * 	TODO 
 	ret = kx022a_set_interrupt(data, t->intr, state);
@@ -1452,7 +1466,8 @@ int kx022a_probe_internal(struct device *dev, int irq, int input_bus)
 	 * IO_VDD is the digital I/O voltage supply
 	 */
 
-	ret = devm_regulator_bulk_get_enable_optional(dev, regulator_names);
+	ret = devm_regulator_bulk_get_enable(dev, ARRAY_SIZE(regulator_names),
+					     regulator_names);
 	if (ret && ret != -ENODEV)
 		return dev_err_probe(dev, ret, "failed to enable regulator\n");
 
@@ -1516,7 +1531,8 @@ int kx022a_probe_internal(struct device *dev, int irq, int input_bus)
 
 		t->indio_trig->ops = &kx022a_trigger_ops;
 		t->data = data;
-		t->setup = kx022a_triggers[i].setup;
+/* No need for setup callabck, right? */
+//		t->setup = kx022a_triggers[i].setup;
 		iio_trigger_set_drvdata(t->indio_trig, t);
 
 		ret = iio_trigger_register(t->indio_trig);
