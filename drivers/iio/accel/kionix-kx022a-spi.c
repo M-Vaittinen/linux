@@ -4,10 +4,9 @@
 //
 // ROHM/KIONIX KX022 accelerometer driver
 
-#include <linux/module.h>
-#include <linux/input.h>
-#include <linux/regmap.h>
 #include <linux/interrupt.h>
+#include <linux/module.h>
+#include <linux/regmap.h>
 #include <linux/spi/spi.h>
 
 #include "kionix-kx022a.h"
@@ -28,7 +27,7 @@ static int kx022a_spi_probe(struct spi_device *spi)
 
 		return PTR_ERR(regmap);
 	}
-	return kx022a_probe_internal(dev, spi->irq, BUS_SPI);
+	return kx022a_probe_internal(dev, spi->irq);
 }
 
 static const struct of_device_id kx022a_of_match[] = {

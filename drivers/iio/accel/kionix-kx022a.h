@@ -71,7 +71,7 @@
 #define KX022_REG_SELF_TEST	0x60
 #define KX022_MAX_REGISTER	0x60
 
-int kx022a_probe_internal(struct device *dev, int irq, int bus_type);
+int kx022a_probe_internal(struct device *dev, int irq);
 extern const struct regmap_config kx022a_regmap;
 
 #endif

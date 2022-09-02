@@ -1436,7 +1436,7 @@ static const struct iio_trigger_ops kx022a_trigger_ops = {
 	.reenable = kx022a_trig_reen,
 };
 
-int kx022a_probe_internal(struct device *dev, int irq, int input_bus)
+int kx022a_probe_internal(struct device *dev, int irq)
 {
 	struct regmap *regmap;
 	struct kx022a_data *data;
