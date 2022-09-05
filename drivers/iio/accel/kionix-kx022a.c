@@ -674,11 +674,12 @@ static int kx022a_fifo_set_wmi(struct kx022a_data *data)
 {
 	u8 threshold;
 
+	threshold = data->watermark;
 	/* how many samples stored to FIFO before wmi */
-	if (data->max_latency / data->odr_interval_ms > KX022_FIFO_MAX_WMI_TH)
-		threshold = KX022_FIFO_MAX_WMI_TH;
-	else
-		threshold = data->max_latency / data->odr_interval_ms;
+//	if (data->max_latency / data->odr_interval_ms > KX022_FIFO_MAX_WMI_TH)
+//		threshold = KX022_FIFO_MAX_WMI_TH;
+//	else
+//		threshold = data->max_latency / data->odr_interval_ms;
 
 	return regmap_update_bits(data->regmap, KX022_REG_BUF_CNTL1,
 				 KX022_MASK_WM_TH, threshold);
@@ -691,8 +692,8 @@ static int kx022a_fifo_enable(struct kx022a_data *data)
 	if (data->state & KX022_STATE_FIFO)
 		return 0;
 
-	if (data->state & KX022_STATE_FIFO)
-		goto unlock_out;
+//	if (data->state & KX022_STATE_FIFO)
+//		goto unlock_out;
 
 	/* update sensor ODR */
 	/* ODR should be set via raw_write SAMPLE_FREQ(?) */
@@ -1166,6 +1167,8 @@ static int kx022a_buffer_preenable(struct iio_dev *indio_dev)
 {
 	struct kx022a_data *data = iio_priv(indio_dev);
 	int ret;
+
+	pr_info("kx022a_buffer_preenable() called\n");
 
 	/* PC1 to 0 */
 	ret = kx022a_turn_off(data);
