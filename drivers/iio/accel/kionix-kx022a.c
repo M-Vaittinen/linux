@@ -26,7 +26,8 @@
 //#define KX022_DEV_EVENTS_NUM 120
 
 /* TODO: What is the corret amount of samples? */
-#define KX022A_FIFO_LENGTH 20
+#define KX022A_FIFO_LENGTH 22
+#define KX022A_FIFO_LENGTH_STR "22"
 
 /* Driver state bits */
 #define KX022_STATE_STANDBY 0
@@ -91,8 +92,8 @@ static const struct regmap_range kx022a_read_only_ranges[] = {
 };
 
 static const struct regmap_access_table kx022a_ro_regs = {
-	.yes_ranges = &kx022a_read_only_ranges[0],
-	.n_yes_ranges = ARRAY_SIZE(kx022a_read_only_ranges),
+	.no_ranges = &kx022a_read_only_ranges[0],
+	.n_no_ranges = ARRAY_SIZE(kx022a_read_only_ranges),
 };
 
 static const struct regmap_range kx022a_write_only_ranges[] = {
@@ -112,8 +113,8 @@ static const struct regmap_range kx022a_write_only_ranges[] = {
 };
 
 static const struct regmap_access_table kx022a_wo_regs = {
-	.yes_ranges = &kx022a_write_only_ranges[0],
-	.n_yes_ranges = ARRAY_SIZE(kx022a_write_only_ranges),
+	.no_ranges = &kx022a_write_only_ranges[0],
+	.n_no_ranges = ARRAY_SIZE(kx022a_write_only_ranges),
 };
 
 static const struct regmap_range kx022a_noinc_read_ranges[] = {
@@ -132,8 +133,8 @@ const struct regmap_config kx022a_regmap = {
 	.reg_bits = 8,
 	.val_bits = 8,
 	.volatile_table = &kx022a_volatile_regs,
-	.wr_table = &kx022a_wo_regs,
-	.rd_table = &kx022a_ro_regs,
+	.rd_table = &kx022a_wo_regs,
+	.wr_table = &kx022a_ro_regs,
 	.rd_noinc_table = &kx022a_nir_regs,
 	.precious_table = &kx022a_precious_regs,
 	.max_register = KX022_MAX_REGISTER,
@@ -180,6 +181,12 @@ struct kx022a_data {
 
 	struct iio_mount_matrix orientation;
 	u8 /* fifo_mode,*/ watermark;
+	/* 3 x 16bit accel data + timestamp */
+	s16 buffer[8];
+	struct {
+		__le16 channels[3];
+		s64 ts __aligned(8);
+	} scan;
 /*
 	u8 x_idx;
 	u8 y_idx;
@@ -319,11 +326,12 @@ static struct attribute_group kx022a_accel_attribute_group = {
 	.attrs = kx022a_sysfs_attrs
 };
  */
-
+#if 0
 static int kx022a_set_g_range(struct kx022a_data *data, unsigned int g_range)
 {
 	int gsel;
 
+	pr_info("Set G-Range %d\n", g_range);
 	switch (g_range) {
 	case 2000:
 		gsel = KX022_GSEL_2;
@@ -345,7 +353,8 @@ static int kx022a_set_g_range(struct kx022a_data *data, unsigned int g_range)
 	return regmap_update_bits(data->regmap, KX022_REG_CNTL, KX022_MASK_GSEL,
 				  gsel);
 }
-
+#endif
+#if 0
 static int sanity_check_axis(u32 *axis)
 {
 	unsigned int i, chk = 0;
@@ -355,7 +364,8 @@ static int sanity_check_axis(u32 *axis)
 
 	return (chk != GENMASK(2, 0));
 }
-
+#endif
+#if 0
 static int kx022a_parse_dt(struct kx022a_data *data)
 {
 	int ret;
@@ -414,7 +424,9 @@ static int kx022a_parse_dt(struct kx022a_data *data)
 
 	return kx022a_set_g_range(data, g_range);
 }
+#endif
 
+#if 0
 static void kx022a_map_data(struct kx022a_data *data, int *raw_xyz, int *xyz)
 {
 /*
@@ -449,6 +461,7 @@ static int kx022a_data_read_xyz(struct kx022a_data *data, int *xyz)
 
 	return 0;
 }
+#endif
 
 #ifdef CALIBRATE
 static void kx122_data_calibrate_xyz(struct kx122_data *data, int *xyz)
@@ -508,8 +521,8 @@ struct kx022a_tuple {
 };
 
 static const struct kx022a_tuple kx022a_accel_samp_freq_table[] = {
-	{0, 78}, {1, 563}, {3, 125}, {6, 25}, {12, 5}, {25, 0}, {50, 0},
-	 {100, 0}, {200, 0}
+	{0, 780000}, {1, 563000}, {3, 125000}, {6, 250000}, {12, 500000},
+	{25, 0}, {50, 0}, {100, 0}, {200, 0}
 };
 
 /*
@@ -564,6 +577,7 @@ static const int delay_table kx022a_odr_delay_table[] = {
 	{ 1280,	KX132_1211_ODCNTL_OSA_1P563},
 	{ 2560, KX132_1211_ODCNTL_OSA_0P781},};
 */
+#if 0
 static int kx022a_data_delay_set(struct kx022a_data *data, unsigned long delay)
 {
 	unsigned long tmp = 5;
@@ -592,15 +606,28 @@ static int kx022a_data_delay_set(struct kx022a_data *data, unsigned long delay)
 	return regmap_update_bits(data->regmap, KX022_REG_ODCNTL,
 		KX022_MASK_ODR, i);
 }
+#endif
 
 static int kx022a_turn_on(struct kx022a_data *data)
 {
-	return regmap_set_bits(data->regmap, KX022_REG_CNTL, KX022_MASK_PC1);
+	int ret;
+
+	ret = regmap_set_bits(data->regmap, KX022_REG_CNTL, KX022_MASK_PC1);
+	if (ret)
+		dev_err(data->dev, "Turn ON fail %d\n", ret);
+
+	return ret;
 }
 
 static int kx022a_turn_off(struct kx022a_data *data)
 {
-	return regmap_clear_bits(data->regmap, KX022_REG_CNTL, KX022_MASK_PC1);
+	int ret;
+
+	ret = regmap_clear_bits(data->regmap, KX022_REG_CNTL, KX022_MASK_PC1);
+	if (ret)
+		dev_err(data->dev, "Turn OFF fail %d\n", ret);
+
+	return ret;
 }
 
 static int kx022a_config_start(struct kx022a_data *data)
@@ -634,11 +661,13 @@ static int kx022a_write_raw(struct iio_dev *indio_dev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SAMP_FREQ:
+		pr_info("Sample freq %d %d requested\n", val, val2);
 		ret = kx022a_find_tuple_index(&kx022a_accel_samp_freq_table[0],
 					      ARRAY_SIZE(kx022a_accel_samp_freq_table),
 					      val, val2);
 		/* Configure we found valid ODR */
 		if (ret >= 0) {
+			pr_info("YaY! Found ODR reg val 0x%x\n", ret);
 			ret = kx022a_config_start(data);
 			if (ret)
 				return ret;
@@ -646,14 +675,18 @@ static int kx022a_write_raw(struct iio_dev *indio_dev,
                 				 KX022_MASK_ODR, ret);
 			kx022a_config_end(data);
 		}
+		else
+			pr_info("Crap. No ODR for samp freq %d %d found\n", val, val2);
 		break;
 	case IIO_CHAN_INFO_SCALE:
+		pr_info("Scale %d %d requested\n", val, val2);
 		if (val)
 			return -EINVAL;
 
 		ret = kx022a_find_scale_regval(val2);
 		/* Configure if we found valid scale */
 		if (ret > 0) {
+			pr_info("YaY! Found SCALE reg val 0x%x\n", ret);
 			ret = kx022a_config_start(data);
 			if (ret)
 				return ret;
@@ -661,6 +694,8 @@ static int kx022a_write_raw(struct iio_dev *indio_dev,
                 				 KX022_MASK_GSEL, ret);
 			kx022a_config_end(data);
 		}
+		else
+			pr_info("Crap. No SCALE matching %d %d found\n", val, val2);
 		return ret;
 	default:
 		ret = -EINVAL;
@@ -674,6 +709,7 @@ static int kx022a_fifo_set_wmi(struct kx022a_data *data)
 {
 	u8 threshold;
 
+	pr_info("Setting threshold %d\n", data->watermark);
 	threshold = data->watermark;
 	/* how many samples stored to FIFO before wmi */
 //	if (data->max_latency / data->odr_interval_ms > KX022_FIFO_MAX_WMI_TH)
@@ -685,52 +721,6 @@ static int kx022a_fifo_set_wmi(struct kx022a_data *data)
 				 KX022_MASK_WM_TH, threshold);
 }
 
-static int kx022a_fifo_enable(struct kx022a_data *data)
-{
-	int ret = 0;
-
-	if (data->state & KX022_STATE_FIFO)
-		return 0;
-
-//	if (data->state & KX022_STATE_FIFO)
-//		goto unlock_out;
-
-	/* update sensor ODR */
-	/* ODR should be set via raw_write SAMPLE_FREQ(?) */
-//	ret = kx022a_data_delay_set(data, data->req_sample_interval_ms);
-//	if (ret < 0)
-//		goto unlock_out;
-
-	ret = kx022a_fifo_set_wmi(data);
-	if (ret < 0)
-		goto unlock_out;
-
-	/* Set watermark threshold */
-	if (ret)
-		goto unlock_out;
-
-	/* set FIFO buffer on at data res 16bit */
-	ret = regmap_update_bits(data->regmap, KX022_REG_BUF_CNTL2,
-				 KX022_MASK_BUFE | KX022_MASK_BRES,
-				 KX022_MASK_BUFE | KX022_MASK_BRES);
-	if (ret)
-		goto unlock_out;
-
-	/* NOTE, uses int1_irq */
-
-	/* timestamp when fifo started */
-//	data->fifo_last_ts = ktime_get_boottime();
-//	data->fifo_last_read =	data->fifo_last_ts;
-
-	data->state |= KX022_STATE_FIFO;
-	ret = regmap_set_bits(data->regmap, KX022_REG_INC4,
-			      KX022_MASK_WMI1);
-
-unlock_out:
-/*	mutex_unlock(&data->state_lock); */
-
-	return ret;
-}
 /*
 static void kx022a_input_report_xyz(struct input_dev *dev, int *xyz, ktime_t ts)
 {
@@ -908,8 +898,10 @@ static int kx022a_get_axis(struct kx022a_data *data,
 			       sizeof(raw_val));
 	if (ret)
 		return ret;
+	*val = raw_val;
 
-	*val = be16_to_cpu(raw_val);
+	pr_info("read 0x%x (le 0x%x)\n", val,  be16_to_cpu(raw_val));
+//	*val = be16_to_cpu(raw_val);
 
 	return IIO_VAL_INT;
 }
@@ -995,11 +987,28 @@ static int kx022a_set_watermark(struct iio_dev *indio_dev, unsigned val)
 	if (val > KX022A_FIFO_LENGTH)
 		val = KX022A_FIFO_LENGTH;
 
+	pr_info("Setting (caching) watermark to %d\n", val);
+
 	mutex_lock(&data->mutex);
 	data->watermark = val;
 	mutex_unlock(&data->mutex);
 
 	return 0;
+}
+
+static ssize_t kx022a_accel_get_fifo_state(struct device *dev,
+                                           struct device_attribute *attr,
+                                           char *buf)
+{
+        struct iio_dev *indio_dev = dev_to_iio_dev(dev);
+        struct kx022a_data *data = iio_priv(indio_dev);
+        bool state;
+
+        mutex_lock(&data->mutex);
+        state = data->state;
+        mutex_unlock(&data->mutex);
+
+        return sprintf(buf, "%d\n", state);
 }
 
 static ssize_t kx022a_get_fifo_watermark(struct device *dev,
@@ -1019,7 +1028,9 @@ static ssize_t kx022a_get_fifo_watermark(struct device *dev,
 
 static IIO_CONST_ATTR(hwfifo_watermark_min, "1");
 static IIO_CONST_ATTR(hwfifo_watermark_max,
-		      __stringify(KX022A_FIFO_LENGTH));
+		      KX022A_FIFO_LENGTH_STR);
+static IIO_DEVICE_ATTR(hwfifo_enabled, S_IRUGO, 
+                       kx022a_get_fifo_state, NULL, 0);
 static IIO_DEVICE_ATTR(hwfifo_watermark, S_IRUGO,
 		       kx022a_get_fifo_watermark, NULL, 0);
 
@@ -1027,7 +1038,7 @@ static const struct attribute *kx022a_fifo_attributes[] = {
 	&iio_const_attr_hwfifo_watermark_min.dev_attr.attr,
 	&iio_const_attr_hwfifo_watermark_max.dev_attr.attr,
 	&iio_dev_attr_hwfifo_watermark.dev_attr.attr,
-//	&iio_dev_attr_hwfifo_enabled.dev_attr.attr,
+	&iio_dev_attr_hwfifo_enabled.dev_attr.attr,
 	NULL,
 };
 
@@ -1117,7 +1128,7 @@ static int __kx022a_fifo_flush(struct iio_dev *indio_dev,
 
 	return count;
 #endif
-	return 0;
+	return 1;
 }
 
 static int kx022a_fifo_flush(struct iio_dev *indio_dev, unsigned samples)
@@ -1143,67 +1154,194 @@ static const struct iio_info kx022a_info = {
 	.hwfifo_flush_to_buffer	= kx022a_fifo_flush,
 };
 
-static int kx022a_prepare_irq(struct kx022a_data *data)
+/*
+static int kx022a_set_irq(struct kx022a_data *data, int mask, bool en)
 {
-	static const int mask =	KX022_MASK_IEN1 | KX022_MASK_IPOL1 |
-				KX022_MASK_ITYP;
-	static const int val =	KX022_MASK_IEN1 | KX022_IPOL_LOW |
-				KX022_ITYP_LEVEL;
+	if (en)
+		return regmap_set_bits(data->regmap, KX022_REG_INC3,
+				       KX022_MASK_WMI);
+
+	return regmap_clear_bits(data->regmap, KX022_REG_, KX022_MASK_DRDY);
+}
+static int kx022a_enable_wmi_irq(struct kx022a_data *data)
+{
+	return kx022a_set_irq(data, KX022_MASK_WMI, true);
+}
+
+static int kx022a_disable_wmi_irq(struct kx022a_data *data)
+{
+	return kx022a_set_irq(data, KX022_MASK_WMI, false);
+}
+*/
+static int kx022a_set_drdy_irq(struct kx022a_data *data, bool en)
+{
+	if (en)
+		return regmap_set_bits(data->regmap, KX022_REG_CNTL,
+				       KX022_MASK_DRDY);
+
+	return regmap_clear_bits(data->regmap, KX022_REG_CNTL, KX022_MASK_DRDY);
+}
+#if 0
+static int kx022a_enable_drdy_irq(struct kx022a_data *data)
+{
+	return kx022a_set_drdy_irq(data, true);
+}
+
+static int kx022a_disable_drdy_irq(struct kx022a_data *data)
+{
+	return kx022a_set_drdy_irq(data, false);
+}
+#endif
+
+static int kx022a_prepare_irq_pin(struct kx022a_data *data)
+{
+	/* Enable IRQ1 pin. Set polarity to active low */
+	int mask = KX022_MASK_IEN1 | KX022_MASK_IPOL1 |
+		   KX022_MASK_ITYP;
+	int val = KX022_MASK_IEN1 | KX022_IPOL_LOW |
+		  KX022_ITYP_LEVEL;
 	int ret;
 
+	/*
+
+	pr_info("Prepare IRQ called\n");
 	ret = kx022a_fifo_enable(data);
 	if (ret)
 		return ret;
+*/
+	ret = regmap_update_bits(data->regmap, KX022_REG_INC1, mask, val);
+	if (ret)
+		return ret;
 
-	return regmap_update_bits(data->regmap, KX022_REG_INC1, mask, val);
+	mask = KX022_MASK_INS2_DRDY | KX122_MASK_INS2_WMI;
+
+	return regmap_set_bits(data->regmap, KX022_REG_INC4, mask);
 }
 
+#if 0
 static int kx022a_unprepare_irq(struct kx022a_data *data)
 {
 	return regmap_update_bits(data->regmap, KX022_REG_INC1, KX022_MASK_IEN1, 0);
 }
+#endif
 
-static int kx022a_buffer_preenable(struct iio_dev *indio_dev)
+static int kx022a_fifo_disable(struct kx022a_data *data)
 {
-	struct kx022a_data *data = iio_priv(indio_dev);
-	int ret;
+	int ret = 0;
 
-	pr_info("kx022a_buffer_preenable() called\n");
-
+	mutex_lock(&data->mutex);
 	/* PC1 to 0 */
 	ret = kx022a_turn_off(data);
 	if (ret)
-		return ret;
+		goto unlock_out;
 
-	/* configure the IRQs. TODO: Should this be doene at trigger conf? */
-	ret = kx022a_prepare_irq(data);
+	ret = regmap_clear_bits(data->regmap, KX022_REG_INC4,
+			        KX022_MASK_WMI1);
+
+	/* disable buffer */
+	ret = regmap_clear_bits(data->regmap, KX022_REG_BUF_CNTL2,
+			      KX022_MASK_BUF_EN);
 	if (ret)
-		return ret;
+		goto unlock_out;
+
+	/* timestamp when fifo started */
+//	data->fifo_last_ts = ktime_get_boottime();
+//	data->fifo_last_read =	data->fifo_last_ts;
+
+	data->state &= (~KX022_STATE_FIFO);
+
+	ret = kx022a_turn_on(data);
+
+unlock_out:
+	mutex_unlock(&data->mutex);
+
+	return ret;
+
+}
+
+
+static int kx022a_buffer_predisable(struct iio_dev *indio_dev)
+{
+	struct kx022a_data *data = iio_priv(indio_dev);
+
+	pr_info("kx022a_buffer_predisable() called\n");
+
+	if (iio_device_get_current_mode(indio_dev) == INDIO_BUFFER_TRIGGERED)
+		return 0;
+
+	return kx022a_fifo_disable(data);
+}
+
+static int kx022a_fifo_enable(struct kx022a_data *data)
+{
+	int ret = 0;
+
+	mutex_lock(&data->mutex);
+	ret = kx022a_turn_off(data);
+	if (ret)
+		goto unlock_out;
+
+	/* Write WMI to HW */
+	ret = kx022a_fifo_set_wmi(data);
+	if (ret)
+		goto unlock_out;
+
+	/* Enable buffer */
+	ret = regmap_set_bits(data->regmap, KX022_REG_BUF_CNTL2,
+			      KX022_MASK_BUF_EN);
+	if (ret)
+		goto unlock_out;
+
+	data->state |= KX022_STATE_FIFO;
+	ret = regmap_set_bits(data->regmap, KX022_REG_INC4,
+			      KX022_MASK_WMI1);
+	if (ret)
+		goto unlock_out;
+
+	ret = kx022a_turn_on(data);
+
+unlock_out:
+	mutex_unlock(&data->mutex);
+
+	return ret;
+
+}
+
+static int kx022a_buffer_postenable(struct iio_dev *indio_dev)
+{
+	struct kx022a_data *data = iio_priv(indio_dev);
+
+	pr_info("kx022a_buffer_postenable() called\n");
+
+	/*
+	 * If we use triggers, then the IRQs should be handled by trigger
+	 * enable and buffer is not used but we just add results to buffer
+	 * when data-ready triggers.
+	 */
+	if (iio_device_get_current_mode(indio_dev) == INDIO_BUFFER_TRIGGERED)
+		return 0;
 
 	return kx022a_fifo_enable(data);
-
-//	return bmc150_accel_set_power_state(data, true);
 }
 
 static const struct iio_buffer_setup_ops kx022a_buffer_ops = {
-	.preenable = kx022a_buffer_preenable,
+	.postenable = kx022a_buffer_postenable,
 	/* TODO: Add these */
 //	.postenable = bmc150_accel_buffer_postenable,
 //	.predisable = bmc150_accel_buffer_predisable,
-//	.postdisable = bmc150_accel_buffer_postdisable,
+	.predisable = kx022a_buffer_predisable,
 };
 
-static irqreturn_t kxo22a_trigger_handler(int irq, void *p)
+static irqreturn_t kx022a_trigger_handler(int irq, void *p)
 {
 	struct iio_poll_func *pf = p;
 	struct iio_dev *indio_dev = pf->indio_dev;
-//	struct kx022a_data *data = iio_priv(indio_dev);
-//	int ret;
+	struct kx022a_data *data = iio_priv(indio_dev);
+	int ret;
 
-	/*
 	mutex_lock(&data->mutex);
-	ret = regmap_bulk_read(data->regmap, BMC150_ACCEL_REG_XOUT_L,
-			       data->buffer, AXIS_MAX * 2);
+
+	ret = regmap_bulk_read(data->regmap, KX022_REG_XOUT_L, data->buffer, 6);
 	mutex_unlock(&data->mutex);
 	if (ret < 0)
 		goto err_read;
@@ -1211,11 +1349,9 @@ static irqreturn_t kxo22a_trigger_handler(int irq, void *p)
 	iio_push_to_buffers_with_timestamp(indio_dev, data->buffer,
 					   pf->timestamp);
 err_read:
-	*/
 	iio_trigger_notify_done(indio_dev->trig);
 
 	return IRQ_HANDLED;
-
 }
 
 /* Get timestamps and wake the thread if we need to read data */
@@ -1237,15 +1373,13 @@ static irqreturn_t kx022a_irq_handler(int irq, void *private)
 		}
 	}
 
-//	if (/* data->ev_enable_state || data->fifo_mode)
-	return IRQ_WAKE_THREAD;
+	if (data->state & KX022_STATE_FIFO)
+		return IRQ_WAKE_THREAD;
 
-/*
 	if (ack)
 		return IRQ_HANDLED;
 
 	return IRQ_NONE;
-*/
 }
 
 /*
@@ -1254,44 +1388,34 @@ static irqreturn_t kx022a_irq_thread_handler(int irq, void *private)
 {
 	struct iio_dev *indio_dev = private;
 	struct kx022a_data *data = iio_priv(indio_dev);
-	struct device *dev = regmap_get_device(data->regmap);
 	bool ack = false;
 	int ret;
 
 	mutex_lock(&data->mutex);
 
-//	if (data->fifo_mode) {
+	if (data->state & KX022_STATE_FIFO) {
 		ret = __kx022a_fifo_flush(indio_dev,
 					  KX022A_FIFO_LENGTH, true);
 		if (ret > 0)
 			ack = true;
-//	}
-/*
-	if (data->ev_enable_state) {
-		ret = bmc150_accel_handle_roc_event(indio_dev);
-		if (ret > 0)
-			ack = true;
 	}
-*/
-	if (ack) {
 /*
- * TODO: Ack
- * ret = regmap_write(data->regmap, BMC150_ACCEL_REG_INT_RST_LATCH,
-				   BMC150_ACCEL_INT_MODE_LATCH_INT |
-				   BMC150_ACCEL_INT_MODE_LATCH_RESET);
-		if (ret)
-			dev_err(dev, "Error writing reg_int_rst_latch\n");
+ * 	WMI and data-ready IRQs are acked when results are read. If we add
+ * 	TILT/WAKE or other IRQs - then we may need to implement the acking
+ * 	(which is racy).
 */
+	if (ack)
 		ret = IRQ_HANDLED;
-	} else {
+	else
 		ret = IRQ_NONE;
-	}
 
 	mutex_unlock(&data->mutex);
 
 	return ret;
 }
-
+#if 0
+The data-ready is currently only trigger we use. It does not require
+acking of any sort.
 static void kx022a_trig_reen(struct iio_trigger *trig)
 {
 	struct kx022a_trigger *t = iio_trigger_get_drvdata(trig);
@@ -1315,22 +1439,33 @@ static void kx022a_trig_reen(struct iio_trigger *trig)
 	if (ret < 0)
 		dev_err(dev, "Error writing reg_int_rst_latch\n");
 }
+#endif
 
 static int kx022a_trigger_set_state(struct iio_trigger *trig,
 				    bool state)
 {
 	struct kx022a_trigger *t = iio_trigger_get_drvdata(trig);
 	struct kx022a_data *data = t->data;
-	int ret;
+	int ret = 0;
 
 	mutex_lock(&data->mutex);
 
-	if (t->enabled == state) {
-		mutex_unlock(&data->mutex);
-		return 0;
-	}
+	if (t->enabled == state)
+		goto unlock_out;
+
 	/* TODO: Take data-ready in use here */
-	pr_info("YaY! I should now enable data-ready IRQ/trigger\n");
+	pr_info("YaY! I now %s data-ready IRQ/trigger\n", (state)? "enable":"disable");
+
+	ret = kx022a_turn_off(data);
+	if (ret)
+		goto unlock_out;
+
+	ret = kx022a_set_drdy_irq(data, state);
+	if (ret)
+		goto unlock_out;
+
+	ret = kx022a_turn_on(data);
+
 /*
  * unnecessarily complex. If we have only one trigger we can live with same
  * setup procedure. No need to have a callback for it
@@ -1353,6 +1488,7 @@ static int kx022a_trigger_set_state(struct iio_trigger *trig,
 */
 	t->enabled = state;
 
+unlock_out:
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -1360,8 +1496,29 @@ static int kx022a_trigger_set_state(struct iio_trigger *trig,
 
 static const struct iio_trigger_ops kx022a_trigger_ops = {
 	.set_trigger_state = kx022a_trigger_set_state,
-	.reenable = kx022a_trig_reen,
+//	.reenable = kx022a_trig_reen,
 };
+
+static int kx022a_chip_init(struct kx022a_data *data)
+{
+	int ret;
+
+	/* set data res 16bit */
+	ret = regmap_set_bits(data->regmap, KX022_REG_BUF_CNTL2,
+			      KX022_MASK_BRES);
+	if (ret) {
+		dev_err(data->dev, "Failed to set data resolution\n");
+		return ret;
+	}
+
+	ret = kx022a_prepare_irq_pin(data);
+	if (ret) {
+		dev_err(data->dev, "Failed to configure IRQ pin\n");
+		return ret;
+	}
+
+	return 0;
+}
 
 int kx022a_probe_internal(struct device *dev, int irq)
 {
@@ -1371,6 +1528,8 @@ int kx022a_probe_internal(struct device *dev, int irq)
 	struct iio_dev *idev;
 	int ret, i;
 	static const char *regulator_names[] = {"io_vdd", "vdd"};
+
+	pr_info("MVA mod 1\n");
 
 	if (WARN_ON(!dev))
 		return -ENODEV;
@@ -1413,12 +1572,13 @@ int kx022a_probe_internal(struct device *dev, int irq)
 
 	data->regmap = regmap;
 	data->dev = dev;
+	mutex_init(&data->mutex);
 
 	idev->channels = kx022a_channels;
 	idev->num_channels = ARRAY_SIZE(kx022a_channels);
 	idev->name = "kx022-accel";
 	idev->info = &kx022a_info;
-	idev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_HARDWARE;
+	idev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_SOFTWARE;
 	/* TODO: Check the scan masks */
 	idev->available_scan_masks = kx022a_scan_masks;
 
@@ -1431,18 +1591,22 @@ int kx022a_probe_internal(struct device *dev, int irq)
 	ret = kx022a_turn_off(data);
 	if (ret)
 		return ret;
-/*
-	ret = kx022a_parse_dt(data);
+
+	udelay(100);
+
+	ret = kx022a_chip_init(data);
 	if (ret)
 		return ret;
-*/
 
 	ret = iio_triggered_buffer_setup_ext(idev,
 					     &iio_pollfunc_store_time,
-					     kxo22a_trigger_handler,
+					     kx022a_trigger_handler,
 					     IIO_BUFFER_DIRECTION_IN,
 					     &kx022a_buffer_ops,
 					     kx022a_fifo_attributes);
+
+	if (ret)
+		return dev_err_probe(data->dev, ret, "iio_triggered_buffer_setup_ext FAIL %d\n", ret);
 
 /* TODO: Clean trigger setup. Remove arry if there is only 1 trigger. Call
  * iio_trigger_unregister() upon failure */
@@ -1464,12 +1628,14 @@ int kx022a_probe_internal(struct device *dev, int irq)
 
 		ret = iio_trigger_register(t->indio_trig);
 		if (ret)
-			return ret;
+			return dev_err_probe(data->dev, ret, "Trigger %d reg failed\n", i);
 	}
 
 	ret = kx022a_turn_on(data);
 	if (ret)
 		return ret;
+
+	udelay(100);
 
 #if 0
 	ret = sysfs_create_group(&data->accel_input_dev->dev.kobj,
@@ -1484,9 +1650,17 @@ int kx022a_probe_internal(struct device *dev, int irq)
 #endif
 	/* TODO: Clean sysfs upon failure */
 
-	return devm_request_threaded_irq(data->dev, irq, kx022a_irq_handler,
+	ret = devm_request_threaded_irq(data->dev, irq, kx022a_irq_handler,
 					 &kx022a_irq_thread_handler,
 					 IRQF_ONESHOT, "kx022", idev);
+	if (ret)
+		return dev_err_probe(data->dev, ret, "Could not request IRQ\n");
+
+	ret = devm_iio_device_register(data->dev, idev);
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "Unable to register iio device\n");
+
+	return ret;
 }
 EXPORT_SYMBOL_GPL(kx022a_probe_internal);
 
