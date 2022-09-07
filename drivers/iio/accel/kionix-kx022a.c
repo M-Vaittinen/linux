@@ -26,8 +26,8 @@
 //#define KX022_DEV_EVENTS_NUM 120
 
 /* TODO: What is the corret amount of samples? */
-#define KX022A_FIFO_LENGTH 22
-#define KX022A_FIFO_LENGTH_STR "22"
+#define KX022A_FIFO_LENGTH 41
+#define KX022A_FIFO_LENGTH_STR "41"
 
 /* Driver state bits */
 #define KX022_STATE_STANDBY 0
@@ -157,14 +157,15 @@ struct kx022a_trigger {
 	bool enabled;
 	const char *name;
 };
+
 static const struct kx022a_trigger kx022a_triggers[KX022A_TRIGGERS] = {
 	{
 		.name = "%sdata-rdy-dev%d",
 	}
 };
 
-
 struct kx022a_data {
+	int irq;
 	struct regmap *regmap;
 	struct kx022a_trigger triggers[KX022A_TRIGGERS];
 	struct device *dev;
@@ -608,7 +609,7 @@ static int kx022a_data_delay_set(struct kx022a_data *data, unsigned long delay)
 }
 #endif
 
-static int kx022a_turn_on(struct kx022a_data *data)
+static int __kx022a_turn_on_unlocked(struct kx022a_data *data)
 {
 	int ret;
 
@@ -619,7 +620,7 @@ static int kx022a_turn_on(struct kx022a_data *data)
 	return ret;
 }
 
-static int kx022a_turn_off(struct kx022a_data *data)
+static int __kx022a_turn_off_unlocked(struct kx022a_data *data)
 {
 	int ret;
 
@@ -630,26 +631,32 @@ static int kx022a_turn_off(struct kx022a_data *data)
 	return ret;
 }
 
-static int kx022a_config_start(struct kx022a_data *data)
+static int kx022a_turn_off_lock(struct kx022a_data *data)
 {
 	int ret;
 
+	pr_info("LOCK %s()\n", __func__);
 	mutex_lock(&data->mutex);
-	ret = kx022a_turn_off(data);;
-	if (ret)
+	ret = __kx022a_turn_off_unlocked(data);;
+	if (ret) {
+		pr_info("UNLOCK %s()\n", __func__);
 		mutex_unlock(&data->mutex);
+	}
 
 	return ret;
 }
 
-static void kx022a_config_end(struct kx022a_data *data)
+static int kx022a_turn_on_unlock(struct kx022a_data *data)
 {
 	int ret;
 
-	ret = kx022a_turn_on(data);
+	ret = __kx022a_turn_on_unlocked(data);
 	if (ret)
 		dev_err(data->dev, "Accelerometer start failed\n");
+	pr_info("UNLOCK %s()\n", __func__);
 	mutex_unlock(&data->mutex);
+
+	return ret;
 }
 
 static int kx022a_write_raw(struct iio_dev *indio_dev,
@@ -667,13 +674,16 @@ static int kx022a_write_raw(struct iio_dev *indio_dev,
 					      val, val2);
 		/* Configure we found valid ODR */
 		if (ret >= 0) {
+			int odr = ret;
 			pr_info("YaY! Found ODR reg val 0x%x\n", ret);
-			ret = kx022a_config_start(data);
+			ret = kx022a_turn_off_lock(data);
 			if (ret)
 				return ret;
+			pr_info("writing REG 0x%x val 0x%x\n", KX022_REG_ODCNTL,
+				(int)(odr & KX022_MASK_ODR));
 			ret = regmap_update_bits(data->regmap, KX022_REG_ODCNTL,
-                				 KX022_MASK_ODR, ret);
-			kx022a_config_end(data);
+                				 KX022_MASK_ODR, odr);
+			kx022a_turn_on_unlock(data);
 		}
 		else
 			pr_info("Crap. No ODR for samp freq %d %d found\n", val, val2);
@@ -687,12 +697,12 @@ static int kx022a_write_raw(struct iio_dev *indio_dev,
 		/* Configure if we found valid scale */
 		if (ret > 0) {
 			pr_info("YaY! Found SCALE reg val 0x%x\n", ret);
-			ret = kx022a_config_start(data);
+			ret = kx022a_turn_off_lock(data);
 			if (ret)
 				return ret;
 			ret = regmap_update_bits(data->regmap, KX022_REG_CNTL,
                 				 KX022_MASK_GSEL, ret);
-			kx022a_config_end(data);
+			kx022a_turn_on_unlock(data);
 		}
 		else
 			pr_info("Crap. No SCALE matching %d %d found\n", val, val2);
@@ -703,7 +713,6 @@ static int kx022a_write_raw(struct iio_dev *indio_dev,
 
 	return ret;
 }
-
 
 static int kx022a_fifo_set_wmi(struct kx022a_data *data)
 {
@@ -757,6 +766,22 @@ static void kx022a_strm_report_data(struct kx022a_data *data)
 #define KX022_FIFO_MAX_SAMPLES (KX022_FIFO_SIZE_BYTES/KX022_FIFO_SAMPLES_SIZE_BYTES)
 
 //#define KX022_DEV_EVENTS_NUM 120
+
+static int kx022a_fifo_report_data(struct kx022a_data *data, void *buffer,
+				    int samples)
+{
+	int ret, fifo_bytes = samples * 3 * 2;
+
+	pr_info("Read %u samples, %u bytes from FIFO\n", samples, fifo_bytes);
+	ret = regmap_noinc_read(data->regmap, KX022_REG_BUF_READ,
+			       buffer, fifo_bytes);
+/*	ret = regmap_bulk_read(data->regmap, KX022_REG_BUF_READ,
+			       buffer, fifo_bytes);
+*/	if (ret < 0)
+		dev_err(data->dev, "FIFO read failed %d\n", ret);
+
+	return ret;
+}
 
 #if 0
 static void kx022a_fifo_report_data(struct kx022a_data *data)
@@ -891,7 +916,7 @@ static int kx022a_get_axis(struct kx022a_data *data,
 			   struct iio_chan_spec const *chan,
 			   int *val)
 {
-	__be16 raw_val;
+	u16 raw_val;
 	int ret;
 
 	ret = regmap_bulk_read(data->regmap, chan->address, &raw_val,
@@ -900,7 +925,7 @@ static int kx022a_get_axis(struct kx022a_data *data,
 		return ret;
 	*val = raw_val;
 
-	pr_info("read 0x%x (le 0x%x)\n", val,  be16_to_cpu(raw_val));
+	pr_info("read 0x%x (le 0x%x)\n", *val,  be16_to_cpu((__be16)raw_val));
 //	*val = be16_to_cpu(raw_val);
 
 	return IIO_VAL_INT;
@@ -989,14 +1014,16 @@ static int kx022a_set_watermark(struct iio_dev *indio_dev, unsigned val)
 
 	pr_info("Setting (caching) watermark to %d\n", val);
 
+	pr_info("LOCK %s()\n", __func__);
 	mutex_lock(&data->mutex);
 	data->watermark = val;
+	pr_info("UNLOCK %s()\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return 0;
 }
 
-static ssize_t kx022a_accel_get_fifo_state(struct device *dev,
+static ssize_t kx022a_get_fifo_state(struct device *dev,
                                            struct device_attribute *attr,
                                            char *buf)
 {
@@ -1004,8 +1031,10 @@ static ssize_t kx022a_accel_get_fifo_state(struct device *dev,
         struct kx022a_data *data = iio_priv(indio_dev);
         bool state;
 
+	pr_info("LOCK %s()\n", __func__);
         mutex_lock(&data->mutex);
         state = data->state;
+	pr_info("UNLOCK %s()\n", __func__);
         mutex_unlock(&data->mutex);
 
         return sprintf(buf, "%d\n", state);
@@ -1019,8 +1048,10 @@ static ssize_t kx022a_get_fifo_watermark(struct device *dev,
 	struct kx022a_data *data = iio_priv(indio_dev);
 	int wm;
 
+	pr_info("LOCK %s()\n", __func__);
 	mutex_lock(&data->mutex);
 	wm = data->watermark;
+	pr_info("UNLOCK %s()\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return sprintf(buf, "%d\n", wm);
@@ -1029,7 +1060,7 @@ static ssize_t kx022a_get_fifo_watermark(struct device *dev,
 static IIO_CONST_ATTR(hwfifo_watermark_min, "1");
 static IIO_CONST_ATTR(hwfifo_watermark_max,
 		      KX022A_FIFO_LENGTH_STR);
-static IIO_DEVICE_ATTR(hwfifo_enabled, S_IRUGO, 
+static IIO_DEVICE_ATTR(hwfifo_enabled, S_IRUGO,
                        kx022a_get_fifo_state, NULL, 0);
 static IIO_DEVICE_ATTR(hwfifo_watermark, S_IRUGO,
 		       kx022a_get_fifo_watermark, NULL, 0);
@@ -1046,24 +1077,26 @@ static const struct attribute *kx022a_fifo_attributes[] = {
 static int __kx022a_fifo_flush(struct iio_dev *indio_dev,
 				     unsigned samples, bool irq)
 {
-#if 0
-	struct bmc150_accel_data *data = iio_priv(indio_dev);
+	struct kx022a_data *data = iio_priv(indio_dev);
 	struct device *dev = regmap_get_device(data->regmap);
 	int ret, i;
-	u8 count;
-	u16 buffer[BMC150_ACCEL_FIFO_LENGTH * 3];
+	int count, fifo_bytes;
+	u16 buffer[KX022A_FIFO_LENGTH * 3];
 	int64_t tstamp;
 	uint64_t sample_period;
-	unsigned int val;
 
-	ret = regmap_read(data->regmap, BMC150_ACCEL_REG_FIFO_STATUS, &val);
+	ret = regmap_read(data->regmap, KX022_REG_BUF_STATUS_1, &fifo_bytes);
 	if (ret < 0) {
-		dev_err(dev, "Error reading reg_fifo_status\n");
+		dev_err(dev, "Error reading buffer status\n");
 		return ret;
 	}
+//	fifo_bytes = le32_to_cpu(fifo_bytes);
+	pr_info("Flushing %u bytes from fifo\n", fifo_bytes);
 
-	count = val & 0x7F;
+	if (fifo_bytes % 3 * 2)
+		dev_err(data->dev, "Bad FIFO alignment. Data may be corrupt\n");
 
+	count = fifo_bytes / (3 * 2);
 	if (!count)
 		return 0;
 
@@ -1101,7 +1134,7 @@ static int __kx022a_fifo_flush(struct iio_dev *indio_dev,
 	if (samples && count > samples)
 		count = samples;
 
-	ret = bmc150_accel_fifo_transfer(data, (u8 *)buffer, count);
+	ret = kx022a_fifo_report_data(data, buffer, count);
 	if (ret)
 		return ret;
 
@@ -1127,8 +1160,6 @@ static int __kx022a_fifo_flush(struct iio_dev *indio_dev,
 	}
 
 	return count;
-#endif
-	return 1;
 }
 
 static int kx022a_fifo_flush(struct iio_dev *indio_dev, unsigned samples)
@@ -1136,9 +1167,11 @@ static int kx022a_fifo_flush(struct iio_dev *indio_dev, unsigned samples)
 	struct kx022a_data *data = iio_priv(indio_dev);
 	int ret;
 
+	pr_info("LOCK %s()\n", __func__);
 	mutex_lock(&data->mutex);
 	/* TODO */
 	ret = __kx022a_fifo_flush(indio_dev, samples, false);
+	pr_info("UNLOCK %s()\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -1229,14 +1262,15 @@ static int kx022a_fifo_disable(struct kx022a_data *data)
 {
 	int ret = 0;
 
-	mutex_lock(&data->mutex);
 	/* PC1 to 0 */
-	ret = kx022a_turn_off(data);
+	ret = kx022a_turn_off_lock(data);
 	if (ret)
-		goto unlock_out;
+		return ret;
 
 	ret = regmap_clear_bits(data->regmap, KX022_REG_INC4,
 			        KX022_MASK_WMI1);
+	if (ret)
+		goto unlock_out;
 
 	/* disable buffer */
 	ret = regmap_clear_bits(data->regmap, KX022_REG_BUF_CNTL2,
@@ -1250,13 +1284,13 @@ static int kx022a_fifo_disable(struct kx022a_data *data)
 
 	data->state &= (~KX022_STATE_FIFO);
 
-	ret = kx022a_turn_on(data);
+	return kx022a_turn_on_unlock(data);
 
 unlock_out:
+	pr_info("UNLOCK %s()\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
-
 }
 
 
@@ -1266,8 +1300,10 @@ static int kx022a_buffer_predisable(struct iio_dev *indio_dev)
 
 	pr_info("kx022a_buffer_predisable() called\n");
 
-	if (iio_device_get_current_mode(indio_dev) == INDIO_BUFFER_TRIGGERED)
+	if (iio_device_get_current_mode(indio_dev) == INDIO_BUFFER_TRIGGERED) {
+		pr_info("Triggered mode => skip fifo_disable\n");
 		return 0;
+	}
 
 	return kx022a_fifo_disable(data);
 }
@@ -1276,10 +1312,9 @@ static int kx022a_fifo_enable(struct kx022a_data *data)
 {
 	int ret = 0;
 
-	mutex_lock(&data->mutex);
-	ret = kx022a_turn_off(data);
+	ret = kx022a_turn_off_lock(data);
 	if (ret)
-		goto unlock_out;
+		return ret;
 
 	/* Write WMI to HW */
 	ret = kx022a_fifo_set_wmi(data);
@@ -1298,13 +1333,13 @@ static int kx022a_fifo_enable(struct kx022a_data *data)
 	if (ret)
 		goto unlock_out;
 
-	ret = kx022a_turn_on(data);
+	return kx022a_turn_on_unlock(data);
 
 unlock_out:
+	pr_info("UNLOCK %s()\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
-
 }
 
 static int kx022a_buffer_postenable(struct iio_dev *indio_dev)
@@ -1318,8 +1353,10 @@ static int kx022a_buffer_postenable(struct iio_dev *indio_dev)
 	 * enable and buffer is not used but we just add results to buffer
 	 * when data-ready triggers.
 	 */
-	if (iio_device_get_current_mode(indio_dev) == INDIO_BUFFER_TRIGGERED)
+	if (iio_device_get_current_mode(indio_dev) == INDIO_BUFFER_TRIGGERED) {
+		pr_info("Triggered mode => skip fifo_enable\n");
 		return 0;
+	}
 
 	return kx022a_fifo_enable(data);
 }
@@ -1338,10 +1375,21 @@ static irqreturn_t kx022a_trigger_handler(int irq, void *p)
 	struct iio_dev *indio_dev = pf->indio_dev;
 	struct kx022a_data *data = iio_priv(indio_dev);
 	int ret;
+	static int tmp = 0;
 
+	if (!(tmp % 1000))
+		pr_info("Reading sample %d ts %lld\n", tmp + 1, (long long)pf->timestamp);
+
+	tmp++;
+
+	if (in_hardirq()) {
+		pr_info("Oh No. Trigger handler called in hardirq - context\n");
+		return IRQ_NONE;
+	}
+	pr_info("LOCK %s()\n", __func__);
 	mutex_lock(&data->mutex);
-
 	ret = regmap_bulk_read(data->regmap, KX022_REG_XOUT_L, data->buffer, 6);
+	pr_info("UNLOCK %s()\n", __func__);
 	mutex_unlock(&data->mutex);
 	if (ret < 0)
 		goto err_read;
@@ -1361,23 +1409,43 @@ static irqreturn_t kx022a_irq_handler(int irq, void *private)
 	struct kx022a_data *data = iio_priv(indio_dev);
 	bool ack = false;
 	int i;
+	static int foo 	 = 0;
 
 	data->old_timestamp = data->timestamp;
 	data->timestamp = iio_get_time_ns(indio_dev);
 
+	if (!(foo % 1000))
+		pr_info("IRQ handler invoked %d\n", foo + 1);
+
+	foo++;
+
 	for (i = 0; i < KX022A_TRIGGERS; i++) {
 		if (data->triggers[i].enabled) {
+			pr_info("triggering IIO trigger for drdy\n");
 			iio_trigger_poll(data->triggers[i].indio_trig);
 			ack = true;
 			break;
 		}
 	}
 
+	/* We need to disable the DRDY until data is read */
+//	if (ack || data->state & KX022_STATE_FIFO)
 	if (data->state & KX022_STATE_FIFO)
 		return IRQ_WAKE_THREAD;
 
-	if (ack)
+	if (ack) {
+		/*
+		 * The IRQ is not acked until data is read. We need to disable
+		 * the IRQ in order to schedule the trigger thread. Enabling
+		 * is done in reenable.
+		 *
+		 * It would be possible to set the IRQ to 50uS pulse. If we are
+		 * losing data due to the disabled IRQ we can evaluate the
+		 * option of using edge triggered IRQs with the pulse mode.
+		 */
+		disable_irq_nosync(irq);
 		return IRQ_HANDLED;
+	}
 
 	return IRQ_NONE;
 }
@@ -1391,6 +1459,7 @@ static irqreturn_t kx022a_irq_thread_handler(int irq, void *private)
 	bool ack = false;
 	int ret;
 
+	pr_info("LOCK %s()\n", __func__);
 	mutex_lock(&data->mutex);
 
 	if (data->state & KX022_STATE_FIFO) {
@@ -1398,7 +1467,12 @@ static irqreturn_t kx022a_irq_thread_handler(int irq, void *private)
 					  KX022A_FIFO_LENGTH, true);
 		if (ret > 0)
 			ack = true;
-	}
+	} /*else {
+		pr_info("disabling DRDY\n");
+		__kx022a_turn_off_unlocked(data);
+		kx022a_set_drdy_irq(data, false);
+		__kx022a_turn_on_unlocked(data);
+	}*/
 /*
  * 	WMI and data-ready IRQs are acked when results are read. If we add
  * 	TILT/WAKE or other IRQs - then we may need to implement the acking
@@ -1409,6 +1483,7 @@ static irqreturn_t kx022a_irq_thread_handler(int irq, void *private)
 	else
 		ret = IRQ_NONE;
 
+	pr_info("UNLOCK %s()\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -1448,6 +1523,7 @@ static int kx022a_trigger_set_state(struct iio_trigger *trig,
 	struct kx022a_data *data = t->data;
 	int ret = 0;
 
+	pr_info("LOCK %s()\n", __func__);
 	mutex_lock(&data->mutex);
 
 	if (t->enabled == state)
@@ -1456,15 +1532,18 @@ static int kx022a_trigger_set_state(struct iio_trigger *trig,
 	/* TODO: Take data-ready in use here */
 	pr_info("YaY! I now %s data-ready IRQ/trigger\n", (state)? "enable":"disable");
 
-	ret = kx022a_turn_off(data);
+	ret = __kx022a_turn_off_unlocked(data);
 	if (ret)
 		goto unlock_out;
 
+	t->enabled = state;
 	ret = kx022a_set_drdy_irq(data, state);
 	if (ret)
 		goto unlock_out;
 
-	ret = kx022a_turn_on(data);
+	pr_info("DRDY enabled - turning on\n");
+
+	ret = __kx022a_turn_on_unlocked(data);
 
 /*
  * unnecessarily complex. If we have only one trigger we can live with same
@@ -1486,23 +1565,61 @@ static int kx022a_trigger_set_state(struct iio_trigger *trig,
 		return ret;
 	}
 */
-	t->enabled = state;
 
 unlock_out:
+	pr_info("UNLOCK %s()\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
 }
+static void kx022a_trig_reen(struct iio_trigger *trig)
+{
+	struct kx022a_trigger *t = iio_trigger_get_drvdata(trig);
+	struct kx022a_data *data = t->data;
+
+	pr_info("Re-enabling DRDY\n");
+	enable_irq(data->irq);
+/*
+	__kx022a_turn_off_unlocked(data);
+	kx022a_set_drdy_irq(data, true);
+	__kx022a_turn_on_unlocked(data);
+*/
+}
 
 static const struct iio_trigger_ops kx022a_trigger_ops = {
 	.set_trigger_state = kx022a_trigger_set_state,
-//	.reenable = kx022a_trig_reen,
+	.reenable = kx022a_trig_reen,
 };
 
 static int kx022a_chip_init(struct kx022a_data *data)
 {
-	int ret;
+	u16 buffer[KX022A_FIFO_LENGTH * 3];
+	int ret, fifo_bytes, dummy;
 
+	/*
+	 * Disable IRQs because if the IRQs are left on (for example by
+	 * a shutdown which did not deactivate the accelerometer) we do
+	 * most probably end up flooding the system with unhandled IRQs
+	 * and get the line disabled from SOC side.
+	 */
+	ret = regmap_write(data->regmap, KX022_REG_INC4, 0);
+	if (ret) {
+		dev_err(data->dev, "Failed to init IRQ states\n");
+		return ret;
+	}
+
+	ret = kx022a_set_drdy_irq(data, false);
+	if (ret) {
+		dev_err(data->dev, "Failed to init DRDY\n");
+		return ret;
+	}
+
+	/* Clear any pending IRQs */
+	ret = regmap_read(data->regmap, KX022_REG_INT_REL, &dummy);
+	if (ret) {
+		dev_err(data->dev, "Failed to ACK IRQs\n");
+		return ret;
+	}
 	/* set data res 16bit */
 	ret = regmap_set_bits(data->regmap, KX022_REG_BUF_CNTL2,
 			      KX022_MASK_BRES);
@@ -1517,7 +1634,22 @@ static int kx022a_chip_init(struct kx022a_data *data)
 		return ret;
 	}
 
-	return 0;
+	/* disable buffer */
+	ret = regmap_clear_bits(data->regmap, KX022_REG_BUF_CNTL2,
+			      KX022_MASK_BUF_EN);
+	if (ret)
+		return ret;
+
+	/* Clean the old data from FIFO - this should also clear the WMI/BFI */
+	ret = regmap_read(data->regmap, KX022_REG_BUF_STATUS_1, &fifo_bytes);
+	if (ret < 0)
+		return ret;
+
+	if (fifo_bytes)
+		ret = regmap_noinc_read(data->regmap, KX022_REG_BUF_READ,
+				        buffer, fifo_bytes);
+
+	return ret;
 }
 
 int kx022a_probe_internal(struct device *dev, int irq)
@@ -1572,6 +1704,7 @@ int kx022a_probe_internal(struct device *dev, int irq)
 
 	data->regmap = regmap;
 	data->dev = dev;
+	data->irq = irq;
 	mutex_init(&data->mutex);
 
 	idev->channels = kx022a_channels;
@@ -1588,15 +1721,19 @@ int kx022a_probe_internal(struct device *dev, int irq)
 		return ret;
 
 	/* The sensor must be turned off for configuration */
-	ret = kx022a_turn_off(data);
+	ret = kx022a_turn_off_lock(data);
 	if (ret)
 		return ret;
-
-	udelay(100);
 
 	ret = kx022a_chip_init(data);
 	if (ret)
 		return ret;
+
+	ret = kx022a_turn_on_unlock(data);
+	if (ret)
+		return ret;
+
+	udelay(100);
 
 	ret = iio_triggered_buffer_setup_ext(idev,
 					     &iio_pollfunc_store_time,
@@ -1630,13 +1767,6 @@ int kx022a_probe_internal(struct device *dev, int irq)
 		if (ret)
 			return dev_err_probe(data->dev, ret, "Trigger %d reg failed\n", i);
 	}
-
-	ret = kx022a_turn_on(data);
-	if (ret)
-		return ret;
-
-	udelay(100);
-
 #if 0
 	ret = sysfs_create_group(&data->accel_input_dev->dev.kobj,
 					&kx022a_accel_attribute_group);
@@ -1649,16 +1779,15 @@ int kx022a_probe_internal(struct device *dev, int irq)
 		return ret;
 #endif
 	/* TODO: Clean sysfs upon failure */
+	ret = devm_iio_device_register(data->dev, idev);
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "Unable to register iio device\n");
 
 	ret = devm_request_threaded_irq(data->dev, irq, kx022a_irq_handler,
 					 &kx022a_irq_thread_handler,
 					 IRQF_ONESHOT, "kx022", idev);
 	if (ret)
 		return dev_err_probe(data->dev, ret, "Could not request IRQ\n");
-
-	ret = devm_iio_device_register(data->dev, idev);
-	if (ret < 0)
-		return dev_err_probe(dev, ret, "Unable to register iio device\n");
 
 	return ret;
 }
