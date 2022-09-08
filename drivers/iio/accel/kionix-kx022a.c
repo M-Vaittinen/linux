@@ -23,7 +23,6 @@
 #include "kionix-kx022a.h"
 
 #define KX022A_FIFO_LENGTH 41
-#define KX022A_FIFO_LENGTH_STR "41"
 
 /* Driver state bits */
 #define KX022_STATE_STANDBY 0
@@ -220,8 +219,8 @@ static const struct iio_chan_spec_ext_info kx022a_ext_info[] = {
 		.channel2 = IIO_MOD_##axis,				\
 		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),		\
 		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE) |	\
-					BIT(IIO_CHAN_INFO_SAMP_FREQ) |	\
-					BIT(IIO_CHAN_INFO_OFFSET),	\
+					BIT(IIO_CHAN_INFO_SAMP_FREQ) /*|	\
+					BIT(IIO_CHAN_INFO_OFFSET)*/,	\
 		.ext_info = kx022a_ext_info,				\
 		.address = KX022_REG_##axis##OUT_L,				\
 		.scan_index = index,					\
@@ -494,6 +493,7 @@ static int kx022a_get_axis(struct kx022a_data *data,
 
 	return IIO_VAL_INT;
 }
+//#define KX022A_ZERO_G_OFFSET -32768§
 
 static int kx022a_read_raw(struct iio_dev *idev,
 			   struct iio_chan_spec const *chan,
@@ -619,7 +619,7 @@ static ssize_t kx022a_get_fifo_watermark(struct device *dev,
 
 static IIO_CONST_ATTR(hwfifo_watermark_min, "1");
 static IIO_CONST_ATTR(hwfifo_watermark_max,
-		      KX022A_FIFO_LENGTH_STR);
+		      __stringify(KX022A_FIFO_LENGTH));
 static IIO_DEVICE_ATTR(hwfifo_enabled, S_IRUGO,
                        kx022a_get_fifo_state, NULL, 0);
 static IIO_DEVICE_ATTR(hwfifo_watermark, S_IRUGO,
