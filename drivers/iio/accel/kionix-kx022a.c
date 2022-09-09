@@ -23,6 +23,13 @@
 #include "kionix-kx022a.h"
 
 #define KX022A_FIFO_LENGTH 41
+/* 3 axis, 2 bytes of data for each of the axis */
+#define KX022_FIFO_SAMPLES_SIZE_BYTES 6
+#define KX022_FIFO_MAX_BYTES (KX022A_FIFO_LENGTH * KX022_FIFO_SAMPLES_SIZE_BYTES)
+
+#define MIN_ODR_INTERVAL_MS 5
+#define MAX_ODR_INTERVAL_MS 1280
+#define NUM_SUPPORTED_ODR 9
 
 enum {
 	KX022_STATE_SAMPLE,
@@ -294,10 +301,6 @@ void kx022a_reg2scale(unsigned int val, unsigned int *val1,
 	*val2 = kx022a_scale_table[val].val2;
 }
 
-#define MIN_ODR_INTERVAL_MS 5
-#define MAX_ODR_INTERVAL_MS 1280
-#define NUM_SUPPORTED_ODR 9
-
 static int __kx022a_turn_on_unlocked(struct kx022a_data *data)
 {
 	int ret;
@@ -324,13 +327,10 @@ static int kx022a_turn_off_lock(struct kx022a_data *data)
 {
 	int ret;
 
-	pr_info("LOCK %s()\n", __func__);
 	mutex_lock(&data->mutex);
 	ret = __kx022a_turn_off_unlocked(data);;
-	if (ret) {
-		pr_info("UNLOCK %s()\n", __func__);
+	if (ret)
 		mutex_unlock(&data->mutex);
-	}
 
 	return ret;
 }
@@ -342,7 +342,6 @@ static int kx022a_turn_on_unlock(struct kx022a_data *data)
 	ret = __kx022a_turn_on_unlocked(data);
 	if (ret)
 		dev_err(data->dev, "Accelerometer start failed\n");
-	pr_info("UNLOCK %s()\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -357,34 +356,28 @@ static int kx022a_write_raw(struct iio_dev *indio_dev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SAMP_FREQ:
-		pr_info("Sample freq %d %d requested\n", val, val2);
 		ret = kx022a_find_tuple_index(&kx022a_accel_samp_freq_table[0],
 					      ARRAY_SIZE(kx022a_accel_samp_freq_table),
 					      val, val2);
 		/* Configure we found valid ODR */
 		if (ret >= 0) {
 			int odr = ret;
-			pr_info("YaY! Found ODR reg val 0x%x\n", ret);
+
 			ret = kx022a_turn_off_lock(data);
 			if (ret)
 				return ret;
-			pr_info("writing REG 0x%x val 0x%x\n", KX022_REG_ODCNTL,
-				(int)(odr & KX022_MASK_ODR));
+
 			ret = regmap_update_bits(data->regmap, KX022_REG_ODCNTL,
                 				 KX022_MASK_ODR, odr);
 			kx022a_turn_on_unlock(data);
 		}
-		else
-			pr_info("Crap. No ODR for samp freq %d %d found\n", val, val2);
 		break;
 	case IIO_CHAN_INFO_SCALE:
-		pr_info("Scale %d %d requested\n", val, val2);
 		ret = kx022a_find_tuple_index(&kx022a_scale_table[0],
 					      ARRAY_SIZE(kx022a_scale_table),
 					      val, val2);
 		/* Configure if we found valid scale */
 		if (ret >= 0) {
-			pr_info("YaY! Found SCALE reg val 0x%x\n", ret);
 			ret = kx022a_turn_off_lock(data);
 			if (ret)
 				return ret;
@@ -394,8 +387,6 @@ static int kx022a_write_raw(struct iio_dev *indio_dev,
 						 ret << KX022A_GSEL_SHIFT);
 			kx022a_turn_on_unlock(data);
 		}
-		else
-			pr_info("Crap. No SCALE matching %d %d found\n", val, val2);
 		return ret;
 	default:
 		ret = -EINVAL;
@@ -408,15 +399,11 @@ static int kx022a_fifo_set_wmi(struct kx022a_data *data)
 {
 	u8 threshold;
 
-	pr_info("Setting threshold %d\n", data->watermark);
 	threshold = data->watermark;
 
 	return regmap_update_bits(data->regmap, KX022_REG_BUF_CNTL1,
 				 KX022_MASK_WM_TH, threshold);
 }
-
-/* 3 axis, 2 bytes of data for each of the axis */
-#define KX022_FIFO_SAMPLES_SIZE_BYTES 6
 
 static int kx022a_fifo_report_data(struct kx022a_data *data, void *buffer,
 				    int samples)
@@ -424,7 +411,6 @@ static int kx022a_fifo_report_data(struct kx022a_data *data, void *buffer,
 	int i;
 	int ret, fifo_bytes = samples * KX022_FIFO_SAMPLES_SIZE_BYTES;
 
-	pr_info("Read %u samples, %u bytes from FIFO\n", samples, fifo_bytes);
 	ret = regmap_noinc_read(data->regmap, KX022_REG_BUF_READ,
 			       buffer, fifo_bytes);
 	if (ret < 0)
@@ -530,12 +516,8 @@ static int kx022a_set_watermark(struct iio_dev *indio_dev, unsigned val)
 	if (val > KX022A_FIFO_LENGTH)
 		val = KX022A_FIFO_LENGTH;
 
-	pr_info("Setting (caching) watermark to %d\n", val);
-
-	pr_info("LOCK %s()\n", __func__);
 	mutex_lock(&data->mutex);
 	data->watermark = val;
-	pr_info("UNLOCK %s()\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return 0;
@@ -549,10 +531,8 @@ static ssize_t kx022a_get_fifo_state(struct device *dev,
         struct kx022a_data *data = iio_priv(indio_dev);
         bool state;
 
-	pr_info("LOCK %s()\n", __func__);
         mutex_lock(&data->mutex);
         state = data->state;
-	pr_info("UNLOCK %s()\n", __func__);
         mutex_unlock(&data->mutex);
 
         return sprintf(buf, "%d\n", state);
@@ -566,10 +546,8 @@ static ssize_t kx022a_get_fifo_watermark(struct device *dev,
 	struct kx022a_data *data = iio_priv(indio_dev);
 	int wm;
 
-	pr_info("LOCK %s()\n", __func__);
 	mutex_lock(&data->mutex);
 	wm = data->watermark;
-	pr_info("UNLOCK %s()\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return sprintf(buf, "%d\n", wm);
@@ -604,17 +582,17 @@ static int __kx022a_fifo_flush(struct iio_dev *indio_dev,
 	}
 
 	/* Let's not owerflow if we for some reason get bogus value from i2c */
-	if (fifo_bytes > ARRAY_SIZE(buffer)) {
+	if (fifo_bytes > KX022_FIFO_MAX_BYTES) {
 		dev_warn(data->dev, "Bad amount of data %u\n", fifo_bytes);
-		fifo_bytes = ARRAY_SIZE(buffer);
+		fifo_bytes = KX022_FIFO_MAX_BYTES;
 	}
 
 	pr_info("Flushing %u bytes from fifo\n", fifo_bytes);
 
-	if (fifo_bytes % 3 * 2)
+	if (fifo_bytes % KX022_FIFO_SAMPLES_SIZE_BYTES)
 		dev_err(data->dev, "Bad FIFO alignment. Data may be corrupt\n");
 
-	count = fifo_bytes / (3 * 2);
+	count = fifo_bytes / KX022_FIFO_SAMPLES_SIZE_BYTES;
 	if (!count)
 		return 0;
 
@@ -1028,9 +1006,9 @@ static int kx022a_chip_init(struct kx022a_data *data)
 		return ret;
 
 	/* Let's not owerflow if we for some reason get bogus value from i2c */
-	if (fifo_bytes > ARRAY_SIZE(buffer)) {
+	if (fifo_bytes > KX022_FIFO_MAX_BYTES) {
 		dev_warn(data->dev, "Bad amount of data %u\n", fifo_bytes);
-		fifo_bytes = ARRAY_SIZE(buffer);
+		fifo_bytes = KX022_FIFO_MAX_BYTES;
 	}
 
 	if (fifo_bytes)
