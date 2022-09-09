@@ -222,9 +222,12 @@ static const struct iio_chan_spec kx022a_channels[] = {
  * slower ODRs. Slowest being 0.78 Hz
  */
 static IIO_CONST_ATTR_SAMP_FREQ_AVAIL("0.78 1.563 3.125 6.25 12.5 25 50 100 200");
+static IIO_CONST_ATTR(scale_available,
+		      "598.550415 1197.10083 2394.20166 4788.40332");
 
 static struct attribute *kx022a_attributes[] = {
 	&iio_const_attr_sampling_frequency_available.dev_attr.attr,
+	&iio_const_attr_scale_available.dev_attr.attr,
 	NULL,
 };
 
@@ -232,6 +235,10 @@ static const struct attribute_group kx022a_attrs_group = {
 	.attrs = kx022a_attributes,
 };
 
+struct kx022a_tuple {
+	int val;
+	int val2;
+};
 /*
  * range is typically +-2g/4g/8g/16g, distributed over the amount of bits.
  * The scale table can be calculated using
@@ -244,16 +251,14 @@ static const struct attribute_group kx022a_attrs_group = {
  *	   +/-8G  - 2394.20166
  *	   +/-16G - 4788.40332
  */
-static const int kx022a_scale_table[] = {599, 1197, 2394, 4788};
+static const struct kx022a_tuple kx022a_scale_table[] = {
+	{ 598, 550415 }, { 1197, 100830 }, { 2394, 201660 }, { 4788, 403320 }
+};
 
 /*
  * ODR table. First value represents the integer portion of frequency (Hz), and
  * the second value is the decimal part. Eg, 0.78 Hz, 1.563 Hz, ...
  */
-struct kx022a_tuple {
-	int val;
-	int val2;
-};
 
 static const struct kx022a_tuple kx022a_accel_samp_freq_table[] = {
 	{0, 780000}, {1, 563000}, {3, 125000}, {6, 250000}, {12, 500000},
@@ -273,23 +278,20 @@ static int kx022a_find_tuple_index(const struct kx022a_tuple *tuples, int n,
 	return -EINVAL;
 }
 
-static int kx022a_reg2scale(unsigned int val)
+void kx022a_reg2freq(unsigned int val,  int *val1, int *val2)
+{
+	*val1 = kx022a_accel_samp_freq_table[val & KX022_MASK_ODR].val;
+	*val2 = kx022a_accel_samp_freq_table[val & KX022_MASK_ODR].val2;
+}
+
+void kx022a_reg2scale(unsigned int val, unsigned int *val1,
+			    unsigned int *val2)
 {
 	val &= KX022_MASK_GSEL;
 	val >>= KX022A_GSEL_SHIFT;
 
-	return kx022a_scale_table[val];
-}
-
-static int kx022a_find_scale_regval(int val)
-{
-	int i;
-
-	for (i = 0; i < ARRAY_SIZE(kx022a_scale_table); i++)
-		if (kx022a_scale_table[i] == val)
-			return i << KX022A_GSEL_SHIFT;
-
-	return -EINVAL;
+	*val1 = kx022a_scale_table[val].val;
+	*val2 = kx022a_scale_table[val].val2;
 }
 
 #define MIN_ODR_INTERVAL_MS 5
@@ -377,18 +379,19 @@ static int kx022a_write_raw(struct iio_dev *indio_dev,
 		break;
 	case IIO_CHAN_INFO_SCALE:
 		pr_info("Scale %d %d requested\n", val, val2);
-		if (val)
-			return -EINVAL;
-
-		ret = kx022a_find_scale_regval(val2);
+		ret = kx022a_find_tuple_index(&kx022a_scale_table[0],
+					      ARRAY_SIZE(kx022a_scale_table),
+					      val, val2);
 		/* Configure if we found valid scale */
-		if (ret > 0) {
+		if (ret >= 0) {
 			pr_info("YaY! Found SCALE reg val 0x%x\n", ret);
 			ret = kx022a_turn_off_lock(data);
 			if (ret)
 				return ret;
+
 			ret = regmap_update_bits(data->regmap, KX022_REG_CNTL,
-                				 KX022_MASK_GSEL, ret);
+                				 KX022_MASK_GSEL,
+						 ret << KX022A_GSEL_SHIFT);
 			kx022a_turn_on_unlock(data);
 		}
 		else
@@ -478,8 +481,6 @@ static int kx022a_read_raw(struct iio_dev *idev,
 		break;
 	case IIO_CHAN_INFO_SAMP_FREQ:
 	{
-		const struct kx022a_tuple *freq;
-
 		ret = regmap_read(data->regmap, KX022_REG_ODCNTL, &regval);
 		if (ret)
 			goto error_ret;
@@ -489,10 +490,8 @@ static int kx022a_read_raw(struct iio_dev *idev,
 			dev_err(data->dev, "Invalid ODR\n");
 			return -EINVAL;
 		}
-		freq = &kx022a_accel_samp_freq_table[regval & KX022_MASK_ODR];
 
-		*val = freq->val;
-		*val2 = freq->val2;
+		kx022a_reg2freq(regval, val, val2);
 
 		break;
 	}
@@ -501,7 +500,7 @@ static int kx022a_read_raw(struct iio_dev *idev,
 		if (ret < 0)
 			goto error_ret;
 
-		*val = kx022a_reg2scale(regval);
+		kx022a_reg2scale(regval, val, val2);
 
 		ret = IIO_VAL_INT_PLUS_MICRO;
 		break;
