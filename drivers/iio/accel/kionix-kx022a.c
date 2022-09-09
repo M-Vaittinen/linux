@@ -165,7 +165,6 @@ struct kx022a_data {
 
 	unsigned int max_latency; /* FIFO flush period in ms */
 	int64_t timestamp, old_timestamp; /* Only used in hw fifo mode. */
-//	ktime_t fifo_last_read;
 
 	struct iio_mount_matrix orientation;
 	u8 /* fifo_mode,*/ watermark;
@@ -175,14 +174,6 @@ struct kx022a_data {
 		__le16 channels[3];
 		s64 ts __aligned(8);
 	} scan;
-/*
-	u8 x_idx;
-	u8 y_idx;
-	u8 z_idx;
-	bool invert_x;
-	bool invert_y;
-	bool invert_z;
-*/
 };
 
 static const struct iio_mount_matrix *
@@ -207,7 +198,6 @@ static const unsigned long kx022a_scan_masks[] = {
 
 static const struct iio_chan_spec_ext_info kx022a_ext_info[] = {
 	IIO_MOUNT_MATRIX(IIO_SHARED_BY_TYPE, kx022a_get_mount_matrix),
-/* Would this be correct??	IIO_MOUNT_MATRIX(IIO_SHARED_BY_DIR, bmc150_accel_get_mount_matrix), */
 	{ },
 };
 
@@ -253,8 +243,6 @@ static void kx122_data_calibrate_xyz(struct kx122_data *data, int *xyz)
 #endif
 #define KX132_1211_ODCNTL_OSA_0P781
 
-
-
 /*
  * The sensor HW can support ODR up to 1600 Hz - which is beyond what most of
  * Linux CPUs can handle w/o dropping samples. Also, the low power mode is not
@@ -271,8 +259,6 @@ static struct attribute *kx022a_attributes[] = {
 static const struct attribute_group kx022a_attrs_group = {
 	.attrs = kx022a_attributes,
 };
-
-
 
 /*
  * range is typically +-2g/4g/8g/16g, distributed over the amount of bits.
@@ -527,6 +513,11 @@ static int kx022a_read_raw(struct iio_dev *idev,
 		if (ret)
 			goto error_ret;
 
+		if ((regval & KX022_MASK_ODR) >
+		    ARRAY_SIZE(kx022a_accel_samp_freq_table)) {
+			dev_err(data->dev, "Invalid ODR\n");
+			return -EINVAL;
+		}
 		freq = &kx022a_accel_samp_freq_table[regval & KX022_MASK_ODR];
 
 		*val = freq->val;
@@ -617,6 +608,8 @@ static ssize_t kx022a_get_fifo_watermark(struct device *dev,
 	return sprintf(buf, "%d\n", wm);
 }
 
+static IIO_CONST_ATTR(matti, "YES - MATTIMATTIMATTIMATTTI");
+static IIO_CONST_ATTR(vaittinen, "YES - VAITTINENVAITTINENVAITTINENVAITTINEN");
 static IIO_CONST_ATTR(hwfifo_watermark_min, "1");
 static IIO_CONST_ATTR(hwfifo_watermark_max,
 		      __stringify(KX022A_FIFO_LENGTH));
@@ -626,8 +619,10 @@ static IIO_DEVICE_ATTR(hwfifo_watermark, S_IRUGO,
 		       kx022a_get_fifo_watermark, NULL, 0);
 
 static const struct attribute *kx022a_fifo_attributes[] = {
+	&iio_const_attr_matti.dev_attr.attr,
 	&iio_const_attr_hwfifo_watermark_min.dev_attr.attr,
 	&iio_const_attr_hwfifo_watermark_max.dev_attr.attr,
+	&iio_const_attr_vaittinen.dev_attr.attr,
 	&iio_dev_attr_hwfifo_watermark.dev_attr.attr,
 	&iio_dev_attr_hwfifo_enabled.dev_attr.attr,
 	NULL,
@@ -649,6 +644,13 @@ static int __kx022a_fifo_flush(struct iio_dev *indio_dev,
 		dev_err(dev, "Error reading buffer status\n");
 		return ret;
 	}
+
+	/* Let's not owerflow if we for some reason get bogus value from i2c */
+	if (fifo_bytes > ARRAY_SIZE(buffer)) {
+		dev_warn(data->dev, "Bad amount of data\n");
+		fifo_bytes = ARRAY_SIZE(buffer);
+	}
+
 	pr_info("Flushing %u bytes from fifo\n", fifo_bytes);
 
 	if (fifo_bytes % 3 * 2)
@@ -1091,6 +1093,12 @@ static int kx022a_chip_init(struct kx022a_data *data)
 	ret = regmap_read(data->regmap, KX022_REG_BUF_STATUS_1, &fifo_bytes);
 	if (ret < 0)
 		return ret;
+
+	/* Let's not owerflow if we for some reason get bogus value from i2c */
+	if (fifo_bytes > ARRAY_SIZE(buffer)) {
+		dev_warn(data->dev, "Bad amount of data\n");
+		fifo_bytes = ARRAY_SIZE(buffer);
+	}
 
 	if (fifo_bytes)
 		ret = regmap_noinc_read(data->regmap, KX022_REG_BUF_READ,
