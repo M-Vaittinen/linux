@@ -566,9 +566,9 @@ static IIO_DEVICE_ATTR(hwfifo_enabled, 0444,
 static IIO_DEVICE_ATTR(hwfifo_watermark, 0444,
 		       kx022a_get_fifo_watermark, NULL, 0);
 
-static const struct attribute *kx022a_fifo_attributes[] = {
-	&iio_dev_attr_hwfifo_watermark.dev_attr.attr,
-	&iio_dev_attr_hwfifo_enabled.dev_attr.attr,
+static const struct iio_dev_attr *kx022a_fifo_attributes[] = {
+	&iio_dev_attr_hwfifo_watermark,
+	&iio_dev_attr_hwfifo_enabled,
 	NULL,
 };
 
