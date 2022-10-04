@@ -172,3 +172,49 @@
 &baseboard_eeprom {
 	vcc-supply = <&ldo4_reg>;
 };
+
+/* MVA Added: */
+&am33xx_pinmux {
+/*
+	spi1_pins_s0: pinmux_spi1_pins {
+		pinctrl-single,pins = <
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_ACLKX, PIN_OUTPUT, MUX_MODE3)	*/	/* mcasp0_aclkx.spi1_sclk */
+/*			AM33XX_PADCONF(AM335X_PIN_MCASP0_FSX, PIN_OUTPUT, MUX_MODE3)	*/	/* mcasp0_fsx.spi1_d0 */
+/*			AM33XX_PADCONF(AM335X_PIN_MCASP0_AXR0, PIN_INPUT_PULLDOWN, MUX_MODE3) */	/* mcasp0_axr0.spi1_d1 */
+/*			AM33XX_PADCONF(AM335X_PIN_MCASP0_AHCLKR, PIN_OUTPUT, MUX_MODE3)	*/	/* mcasp0_ahclkr.spi1_cs0 */
+/*		>;
+	};*/
+
+	spi1_pins_s0: spi1_pins_s0 {
+		pinctrl-single,pins = <
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_ACLKX, PIN_OUTPUT, MUX_MODE3)
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_FSX, PIN_OUTPUT, MUX_MODE3) /* D0 pin 29 SDI kxpin 7 */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_AXR0, PIN_INPUT_PULLUP, MUX_MODE3) /* D1 pin 30 SDO kxpin 9 */
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_AHCLKR, PIN_OUTPUT, MUX_MODE3) /* CS pin28, KXpin 2 */
+/*			0x190 0x33
+			0x194 0x33
+			0x198 0x13
+			0x19c 0x13 */
+>;
+	};
+
+};
+
+&spi1 {
+	status = "okay";
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi1_pins_s0>;
+
+	accel: accel@0 { /* the "test" defined as child of the i2c1 bus */
+		compatible = "kionix,kx022a";
+		reg = <0>;
+		/* spi-max-frequency = <4300000>; */
+		spi-max-frequency = <500000>;
+		/* GPIO 1_29 - (connector 8, pin 26) for irq */
+		interrupt-parent = <&gpio1>;
+		interrupts = <29 8>;
+		interrupt-names = "INT1";
+	};
+};
+
+
