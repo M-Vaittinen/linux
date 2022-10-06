@@ -187,10 +187,23 @@
 
 	spi1_pins_s0: spi1_pins_s0 {
 		pinctrl-single,pins = <
-			AM33XX_PADCONF(AM335X_PIN_MCASP0_ACLKX, PIN_OUTPUT, MUX_MODE3)
-			AM33XX_PADCONF(AM335X_PIN_MCASP0_FSX, PIN_OUTPUT, MUX_MODE3) /* D0 pin 29 SDI kxpin 7 */
-			AM33XX_PADCONF(AM335X_PIN_MCASP0_AXR0, PIN_INPUT_PULLUP, MUX_MODE3) /* D1 pin 30 SDO kxpin 9 */
-			AM33XX_PADCONF(AM335X_PIN_MCASP0_AHCLKR, PIN_OUTPUT, MUX_MODE3) /* CS pin28, KXpin 2 */
+/*
+ #define AM335X_PIN_SPI0_SCLK			0x950
+#define AM335X_PIN_SPI0_D0			0x954
+#define AM335X_PIN_SPI0_D1			0x958
+#define AM335X_PIN_SPI0_CS0			0x95c
+*/
+
+			AM33XX_PADCONF(AM335X_PIN_SPI0_SCLK, PIN_OUTPUT, MUX_MODE0) /* Pin 22, kxpin 3 */
+			AM33XX_PADCONF(AM335X_PIN_SPI0_D0, PIN_INPUT, MUX_MODE0) /* Pin 21, kxpin 9 */
+			AM33XX_PADCONF(AM335X_PIN_SPI0_D1, PIN_OUTPUT, MUX_MODE0) /* Pin 18, kxpin 7 */
+			AM33XX_PADCONF(AM335X_PIN_SPI0_CS0, PIN_OUTPUT, MUX_MODE0) /* Pin 17 , Kxpin 2 */
+/*
+			AM33XX_PADCONF(AM335X_PIN_MCASP0_ACLKX, PIN_OUTPUT, MUX_MODE3) */
+
+/*			AM33XX_PADCONF(AM335X_PIN_MCASP0_FSX, PIN_INPUT, MUX_MODE3) */ /* D0 MISO pin 29 SDO kxpin 9 */
+/*			AM33XX_PADCONF(AM335X_PIN_MCASP0_AXR0, PIN_OUTPUT, MUX_MODE3) */ /* D1 pin 30 SDI kxpin 7 */
+/*			AM33XX_PADCONF(AM335X_PIN_MCASP0_AHCLKR, PIN_OUTPUT, MUX_MODE3) */ /* CS pin28, KXpin 2 */
 /*			0x190 0x33
 			0x194 0x33
 			0x198 0x13
@@ -200,13 +213,13 @@
 
 };
 
-&spi1 {
+&spi0 {
 	status = "okay";
-	pinctrl-names = "default";
-	pinctrl-0 = <&spi1_pins_s0>;
 
 	accel: accel@0 { /* the "test" defined as child of the i2c1 bus */
 		compatible = "kionix,kx022a";
+	pinctrl-names = "default";
+	pinctrl-0 = <&spi1_pins_s0>;
 		reg = <0>;
 		/* spi-max-frequency = <4300000>; */
 		spi-max-frequency = <500000>;
