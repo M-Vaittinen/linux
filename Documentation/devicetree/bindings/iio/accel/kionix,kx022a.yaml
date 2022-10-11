@@ -27,11 +27,9 @@ properties:
 
   interrupt-names:
     minItems: 1
-    maxItems: 2
     items:
-      enum:
-        - INT1
-        - INT2
+      - enum: [INT1, INT2]
+      - const: INT2
 
   vdd-supply: true
   io-vdd-supply: true
@@ -39,6 +37,15 @@ properties:
   mount-matrix:
     description: |
       an optional 3x3 mounting rotation matrix.
+
+  kionix,fifo-enable:
+    type: boolean
+    description: |
+      Enable the hardware-fifo on sensor. Note that FIFO on KX022A may corrupt
+      if CPU is not able to read it fast enough to prevent FIFO from getting
+      full. If FIFO is filled-up, the amount of data reported to be stored in
+      the FIFO can get corrupt. On most systems using KX022A the FIFO should be
+      kept disabled.
 
 required:
   - compatible
