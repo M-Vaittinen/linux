@@ -14,8 +14,8 @@
 
 static int kx022a_i2c_probe(struct i2c_client *i2c)
 {
-	struct regmap *regmap;
 	struct device *dev = &i2c->dev;
+	struct regmap *regmap;
 
 	if (!i2c->irq) {
 		dev_err(dev, "No IRQ configured\n");
@@ -25,7 +25,6 @@ static int kx022a_i2c_probe(struct i2c_client *i2c)
 	regmap = devm_regmap_init_i2c(i2c, &kx022a_regmap);
 	if (IS_ERR(regmap)) {
 		dev_err(dev, "Failed to initialize Regmap\n");
-
 		return PTR_ERR(regmap);
 	}
 
@@ -45,9 +44,9 @@ static struct i2c_driver kx022a_i2c_driver = {
 	  },
 	.probe_new    = kx022a_i2c_probe,
 };
-
 module_i2c_driver(kx022a_i2c_driver);
 
 MODULE_DESCRIPTION("ROHM/Kionix KX022A accelerometer driver");
 MODULE_AUTHOR("Matti Vaittinen <matti.vaittinen@fi.rohmeurope.com>");
 MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS(KIONIX_ACCEL);

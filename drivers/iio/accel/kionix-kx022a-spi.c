@@ -25,9 +25,9 @@ static int kx022a_spi_probe(struct spi_device *spi)
 	regmap = devm_regmap_init_spi(spi, &kx022a_regmap);
 	if (IS_ERR(regmap)) {
 		dev_err(dev, "Failed to initialize Regmap\n");
-
 		return PTR_ERR(regmap);
 	}
+
 	return kx022a_probe_internal(dev);
 }
 
@@ -51,9 +51,9 @@ static struct spi_driver kx022a_spi_driver = {
 	.probe = kx022a_spi_probe,
 	.id_table = kx022a_id,
 };
-
 module_spi_driver(kx022a_spi_driver);
 
 MODULE_DESCRIPTION("ROHM/Kionix kx022A accelerometer driver");
 MODULE_AUTHOR("Matti Vaittinen <matti.vaittinen@fi.rohmeurope.com>");
 MODULE_LICENSE("GPL");
+MODULE_IMPORT_NS(KIONIX_ACCEL);

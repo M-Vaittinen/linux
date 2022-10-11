@@ -6,20 +6,21 @@
  */
 
 #include <linux/delay.h>
-#include <linux/gpio.h>
+#include <linux/interrupt.h>
+#include <linux/module.h>
+#include <linux/moduleparam.h>
+#include <linux/mutex.h>
+#include <linux/property.h>
+#include <linux/regmap.h>
+#include <linux/regulator/consumer.h>
+#include <linux/slab.h>
+#include <linux/units.h>
+
 #include <linux/iio/iio.h>
 #include <linux/iio/sysfs.h>
 #include <linux/iio/trigger.h>
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
-#include <linux/interrupt.h>
-#include <linux/module.h>
-#include <linux/moduleparam.h>
-#include <linux/mutex.h>
-#include <linux/regmap.h>
-#include <linux/regulator/consumer.h>
-#include <linux/slab.h>
-#include <linux/units.h>
 
 #include "kionix-kx022a.h"
 
@@ -27,17 +28,15 @@
  * Threshold for deciding our HW fifo is unrecoverably corrupt and should be
  * cleared
  */
-#define KXO22A_FIFO_ERR_THRESHOLD 10
-#define KX022A_FIFO_LENGTH 41
+#define KXO22A_FIFO_ERR_THRESHOLD		10
+#define KX022A_FIFO_LENGTH			41
+#define KX022A_SOFT_RESET_WAIT_TIME_US		(5 * USEC_PER_MSEC)
+#define KX022A_SOFT_RESET_TOTAL_WAIT_TIME_US	(500 * USEC_PER_MSEC)
+
 /* 3 axis, 2 bytes of data for each of the axis */
-#define KX022A_FIFO_SAMPLES_SIZE_BYTES 6
-#define KX022A_FIFO_MAX_BYTES (KX022A_FIFO_LENGTH *			\
-			       KX022A_FIFO_SAMPLES_SIZE_BYTES)
-
-#define KX022A_SOFT_RESET_WAIT_TIME_US (5 * KILO)
-#define KX022A_SOFT_RESET_TOTAL_WAIT_TIME_US (500 * KILO)
-
-static bool g_kx022a_use_buffer;
+#define KX022A_FIFO_SAMPLES_SIZE_BYTES		6
+#define KX022A_FIFO_MAX_BYTES					\
+	(KX022A_FIFO_LENGTH * KX022A_FIFO_SAMPLES_SIZE_BYTES)
 
 enum {
 	KX022A_STATE_SAMPLE,
@@ -145,9 +144,7 @@ const struct regmap_config kx022a_regmap = {
 	.max_register = KX022A_MAX_REGISTER,
 	.cache_type = REGCACHE_RBTREE,
 };
-EXPORT_SYMBOL_GPL(kx022a_regmap);
-
-struct kx022a_data;
+EXPORT_SYMBOL_NS_GPL(kx022a_regmap, KIONIX_ACCEL);
 
 struct kx022a_data {
 	int irq;
@@ -156,9 +153,16 @@ struct kx022a_data {
 	struct regmap *regmap;
 	struct iio_trigger *trig;
 	bool trigger_enabled;
+	bool allow_fifo;
 
 	struct device *dev;
 	unsigned int g_range;
+	/*
+	 * We want to prevent toggling the sensor stby/active state (PC1 bit)
+	 * in the middle of a configuration. Hence all config sequences are
+	 * protected by the lock. Additionally we want to protect the
+	 * data stored/retrieved from this structure from concurrent accesses.
+	 */
 	struct mutex mutex;
 	unsigned int state;
 
@@ -188,39 +192,39 @@ enum {
 	AXIS_X,
 	AXIS_Y,
 	AXIS_Z,
-	AXIS_MAX,
+	AXIS_MAX
 };
 
 static const unsigned long kx022a_scan_masks[] = {
-					BIT(AXIS_X) | BIT(AXIS_Y) | BIT(AXIS_Z),
-					0};
+	BIT(AXIS_X) | BIT(AXIS_Y) | BIT(AXIS_Z), 0
+};
 
 static const struct iio_chan_spec_ext_info kx022a_ext_info[] = {
 	IIO_MOUNT_MATRIX(IIO_SHARED_BY_TYPE, kx022a_get_mount_matrix),
-	{ },
+	{ }
 };
 
 #define KX022A_ACCEL_CHAN(axis, index)						\
-	{								\
-		.type = IIO_ACCEL,					\
-		.modified = 1,						\
-		.channel2 = IIO_MOD_##axis,				\
-		.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),		\
-		.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE) |	\
-					BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
-		.info_mask_shared_by_type_available =			\
-					BIT(IIO_CHAN_INFO_SCALE) |	\
-					BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
-		.ext_info = kx022a_ext_info,				\
-		.address = KX022A_REG_##axis##OUT_L,			\
-		.scan_index = index,					\
-		.scan_type = {                                          \
-			.sign = 's',					\
-			.realbits = 16,					\
-			.storagebits = 16,				\
-			.endianness = IIO_LE,				\
-		},							\
-	}
+{								\
+	.type = IIO_ACCEL,					\
+	.modified = 1,						\
+	.channel2 = IIO_MOD_##axis,				\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),		\
+	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE) |	\
+				BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
+	.info_mask_shared_by_type_available =			\
+				BIT(IIO_CHAN_INFO_SCALE) |	\
+				BIT(IIO_CHAN_INFO_SAMP_FREQ),	\
+	.ext_info = kx022a_ext_info,				\
+	.address = KX022A_REG_##axis##OUT_L,			\
+	.scan_index = index,					\
+	.scan_type = {                                          \
+		.sign = 's',					\
+		.realbits = 16,					\
+		.storagebits = 16,				\
+		.endianness = IIO_LE,				\
+	},							\
+}
 
 static const struct iio_chan_spec kx022a_channels[] = {
 	KX022A_ACCEL_CHAN(X, 0),
@@ -236,19 +240,28 @@ static const struct iio_chan_spec kx022a_channels[] = {
  * slower ODRs. Slowest being 0.78 Hz
  */
 static const int kx022a_accel_samp_freq_table[][2] = {
-	[0] = { 0, 780000 },
-	[1] = { 1, 563000 },
-	[2] = { 3, 125000 },
-	[3] = { 6, 250000 },
-	[4] = { 12, 500000 },
-	[5] = { 25, 0 },
-	[6] = { 50, 0 },
-	[7] = { 100, 0 },
-	[8] = { 200, 0 }
+	{ 0, 780000 },
+	{ 1, 563000 },
+	{ 3, 125000 },
+	{ 6, 250000 },
+	{ 12, 500000 },
+	{ 25, 0 },
+	{ 50, 0 },
+	{ 100, 0 },
+	{ 200, 0 }
 };
 
-static const unsigned int kx022a_odrs[] = { 1282051282, 639795266, 320 * MEGA,
-	 160 * MEGA, 80 * MEGA, 40 * MEGA, 20 * MEGA, 10 * MEGA, 5 * MEGA };
+static const unsigned int kx022a_odrs[] = {
+	1282051282,
+	639795266,
+	320 * MEGA,
+	160 * MEGA,
+	80 * MEGA,
+	40 * MEGA,
+	20 * MEGA,
+	10 * MEGA,
+	5 * MEGA
+};
 
 /*
  * range is typically +-2G/4G/8G/16G, distributed over the amount of bits.
@@ -263,10 +276,10 @@ static const unsigned int kx022a_odrs[] = { 1282051282, 639795266, 320 * MEGA,
  *	   +/-16G - 4788.40332
  */
 static const int kx022a_scale_table[][2] = {
-	[0] = { 598, 550415 },
-	[1] = { 1197, 100830 },
-	[2] = { 2394, 201660 },
-	[3] = { 4788, 403320 }
+	{ 598, 550415 },
+	{ 1197, 100830 },
+	{ 2394, 201660 },
+	{ 4788, 403320 }
 };
 
 static int kx022a_read_avail(struct iio_dev *indio_dev,
@@ -290,7 +303,7 @@ static int kx022a_read_avail(struct iio_dev *indio_dev,
 	}
 }
 
-#define KX022A_DEFAULT_PERIOD_NS (20 * MEGA)
+#define KX022A_DEFAULT_PERIOD_NS (20 * NSEC_PER_MSEC)
 
 static void kx022a_reg2freq(unsigned int val,  int *val1, int *val2)
 {
@@ -308,26 +321,23 @@ static void kx022a_reg2scale(unsigned int val, unsigned int *val1,
 	*val2 = kx022a_scale_table[val][1];
 }
 
-static int __kx022a_turn_on_unlocked(struct kx022a_data *data)
+static int kx022a_turn_on_off_unlocked(struct kx022a_data *data, bool on)
 {
 	int ret;
 
-	ret = regmap_set_bits(data->regmap, KX022A_REG_CNTL, KX022A_MASK_PC1);
+	if (on)
+		ret = regmap_set_bits(data->regmap, KX022A_REG_CNTL,
+				      KX022A_MASK_PC1);
+	else
+		ret = regmap_clear_bits(data->regmap, KX022A_REG_CNTL,
+					KX022A_MASK_PC1);
+
 	if (ret)
-		dev_err(data->dev, "Turn ON fail %d\n", ret);
+		dev_err(data->dev, "Turn %s fail %d\n", (on) ? "ON" : "OFF",
+			ret);
 
 	return ret;
-}
 
-static int __kx022a_turn_off_unlocked(struct kx022a_data *data)
-{
-	int ret;
-
-	ret = regmap_clear_bits(data->regmap, KX022A_REG_CNTL, KX022A_MASK_PC1);
-	if (ret)
-		dev_err(data->dev, "Turn OFF fail %d\n", ret);
-
-	return ret;
 }
 
 static int kx022a_turn_off_lock(struct kx022a_data *data)
@@ -335,7 +345,7 @@ static int kx022a_turn_off_lock(struct kx022a_data *data)
 	int ret;
 
 	mutex_lock(&data->mutex);
-	ret = __kx022a_turn_off_unlocked(data);
+	ret = kx022a_turn_on_off_unlocked(data, false);
 	if (ret)
 		mutex_unlock(&data->mutex);
 
@@ -346,7 +356,7 @@ static int kx022a_turn_on_unlock(struct kx022a_data *data)
 {
 	int ret;
 
-	ret = __kx022a_turn_on_unlocked(data);
+	ret = kx022a_turn_on_off_unlocked(data, true);
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -377,7 +387,7 @@ static int kx022a_write_raw(struct iio_dev *idev,
 	{
 		int n = ARRAY_SIZE(kx022a_accel_samp_freq_table);
 
-		while (n-- > 0)
+		while (n--)
 			if (val == kx022a_accel_samp_freq_table[n][0] &&
 			    kx022a_accel_samp_freq_table[n][1] == val2)
 				break;
@@ -421,6 +431,7 @@ static int kx022a_write_raw(struct iio_dev *idev,
 	}
 	default:
 		ret = -EINVAL;
+		break;
 	}
 
 unlock_out:
@@ -511,10 +522,10 @@ static int kx022a_validate_trigger(struct iio_dev *idev,
 {
 	struct kx022a_data *data = iio_priv(idev);
 
-	if (data->trig == trig)
-		return 0;
+	if (data->trig != trig)
+		return -EINVAL;
 
-	return -EINVAL;
+	return 0;
 }
 
 static int kx022a_set_watermark(struct iio_dev *idev, unsigned int val)
@@ -580,7 +591,7 @@ static int kx022a_drop_fifo_contents(struct kx022a_data *data)
 	 */
 	data->timestamp = 0;
 
-	return regmap_write(data->regmap, KX022A_REG_BUF_CLEAR, 0xff);
+	return regmap_write(data->regmap, KX022A_REG_BUF_CLEAR, 0x0);
 }
 
 static int __kx022a_fifo_flush(struct iio_dev *idev, unsigned int samples,
@@ -596,7 +607,7 @@ static int __kx022a_fifo_flush(struct iio_dev *idev, unsigned int samples,
 	static int err_ctr;
 
 	ret = regmap_read(data->regmap, KX022A_REG_BUF_STATUS_1, &fifo_bytes);
-	if (ret < 0) {
+	if (ret) {
 		dev_err(dev, "Error reading buffer status\n");
 		return ret;
 	}
@@ -623,9 +634,9 @@ static int __kx022a_fifo_flush(struct iio_dev *idev, unsigned int samples,
 	}
 
 	if (err_ctr > KXO22A_FIFO_ERR_THRESHOLD) {
-		__kx022a_turn_off_unlocked(data);
+		kx022a_turn_on_off_unlocked(data, false);
 		kx022a_drop_fifo_contents(data);
-		__kx022a_turn_on_unlocked(data);
+		kx022a_turn_on_off_unlocked(data, true);
 
 		err_ctr = 0;
 
@@ -661,7 +672,7 @@ static int __kx022a_fifo_flush(struct iio_dev *idev, unsigned int samples,
 	 * based on the timestamp delta between the last two flush operations.
 	 */
 	if (data->old_timestamp) {
-		sample_period = (data->timestamp - data->old_timestamp);
+		sample_period = data->timestamp - data->old_timestamp;
 		do_div(sample_period, count);
 	} else {
 		sample_period = data->odr_ns;
@@ -746,7 +757,7 @@ static int kx022a_prepare_irq_pin(struct kx022a_data *data)
 		return ret;
 
 	/* We enable WMI to IRQ pin only at buffer_enable */
-	mask = KX022A_MASK_INS2_DRDY /*| KX122_MASK_INS2_WMI */;
+	mask = KX022A_MASK_INS2_DRDY;
 
 	return regmap_set_bits(data->regmap, data->ien_reg, mask);
 }
@@ -845,11 +856,11 @@ static int kx022a_buffer_postenable(struct iio_dev *idev)
 	 * somewhere near 20 samples (HI-RES) to have magnitude of 10 sec
 	 * safety-margin.
 	 */
-	if (!g_kx022a_use_buffer) {
+	if (!data->allow_fifo) {
 		dev_err(data->dev, "Neither trigger set nor hw-fifo enabled\n");
-
 		return -EINVAL;
 	}
+
 	return kx022a_fifo_enable(data);
 }
 
@@ -932,7 +943,7 @@ static int kx022a_trigger_set_state(struct iio_trigger *trig,
 	if (data->trigger_enabled == state)
 		goto unlock_out;
 
-	ret = __kx022a_turn_off_unlocked(data);
+	ret = kx022a_turn_on_off_unlocked(data, false);
 	if (ret)
 		goto unlock_out;
 
@@ -941,7 +952,7 @@ static int kx022a_trigger_set_state(struct iio_trigger *trig,
 	if (ret)
 		goto unlock_out;
 
-	ret = __kx022a_turn_on_unlocked(data);
+	ret = kx022a_turn_on_off_unlocked(data, true);
 
 unlock_out:
 	mutex_unlock(&data->mutex);
@@ -1000,18 +1011,18 @@ int kx022a_probe_internal(struct device *dev)
 	static const char * const regulator_names[] = {"io-vdd", "vdd"};
 	struct iio_trigger *indio_trig;
 	struct kx022a_data *data;
+	struct fwnode_handle *fw;
 	struct regmap *regmap;
 	unsigned int chip_id;
 	struct iio_dev *idev;
 	int ret, irq;
 
-	if (WARN_ON(!dev))
+	if (!dev)
 		return -ENODEV;
 
 	regmap = dev_get_regmap(dev, NULL);
 	if (!regmap) {
 		dev_err(dev, "no regmap\n");
-
 		return -EINVAL;
 	}
 
@@ -1031,28 +1042,32 @@ int kx022a_probe_internal(struct device *dev)
 		return dev_err_probe(dev, ret, "failed to enable regulator\n");
 
 	ret = regmap_read(regmap, KX022A_REG_WHO, &chip_id);
-	if (ret) {
-		dev_err_probe(dev, ret, "Failed to access sensor\n");
-		return ret;
-	}
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to access sensor\n");
 
 	if (chip_id != KX022A_ID) {
 		dev_err(dev, "unsupported device 0x%x\n", chip_id);
 		return -EINVAL;
 	}
 
-	irq = fwnode_irq_get_byname(dev_fwnode(dev), "INT1");
+	fw = dev_fwnode(dev);
+	if (!fw)
+		return -ENODEV;
+
+	irq = fwnode_irq_get_byname(fw, "INT1");
 	if (irq > 0) {
 		data->inc_reg = KX022A_REG_INC1;
 		data->ien_reg = KX022A_REG_INC4;
 	} else {
 		irq = fwnode_irq_get_byname(dev_fwnode(dev), "INT2");
-		if (irq < 0)
+		if (irq <= 0)
 			return dev_err_probe(dev, irq, "No suitable IRQ\n");
 
 		data->inc_reg = KX022A_REG_INC5;
 		data->ien_reg = KX022A_REG_INC6;
 	}
+
+	data->allow_fifo = fwnode_property_read_bool(fw, "kionix,fifo-enable");
 
 	data->regmap = regmap;
 	data->dev = dev;
@@ -1119,19 +1134,16 @@ int kx022a_probe_internal(struct device *dev)
 		return dev_err_probe(dev, ret,
 				     "Unable to register iio device\n");
 
+	/* TODO: Check the name */
 	ret = devm_request_threaded_irq(data->dev, irq, kx022a_irq_handler,
 					&kx022a_irq_thread_handler,
-					IRQF_ONESHOT, "kx022", idev);
+					IRQF_ONESHOT, dev_name(data->dev), idev);
 	if (ret)
 		return dev_err_probe(data->dev, ret, "Could not request IRQ\n");
 
 	return ret;
 }
-EXPORT_SYMBOL_GPL(kx022a_probe_internal);
-
-module_param(g_kx022a_use_buffer, bool, 0);
-MODULE_PARM_DESC(g_kx022a_use_buffer,
-		 "Buffer samples. Use at own risk. Fifo must not overflow");
+EXPORT_SYMBOL_NS_GPL(kx022a_probe_internal, KIONIX_ACCEL);
 
 MODULE_DESCRIPTION("ROHM/Kionix KX022A accelerometer driver");
 MODULE_AUTHOR("Matti Vaittinen <matti.vaittinen@fi.rohmeurope.com>");
