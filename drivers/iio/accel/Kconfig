@@ -414,7 +414,7 @@ config IIO_KX022A
 
 config IIO_KX022A_SPI
 	tristate "Kionix KX022A tri-axis digital accelerometer"
-	depends on I2C
+	depends on SPI
 	select IIO_KX022A
 	select REGMAP_SPI
 	help
