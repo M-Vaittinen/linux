@@ -26,7 +26,7 @@
 
 /*
  * Threshold for deciding our HW fifo is unrecoverably corrupt and should be
- * cleared
+ * cleared.
  */
 #define KXO22A_FIFO_ERR_THRESHOLD		10
 #define KX022A_FIFO_LENGTH			41
@@ -147,16 +147,22 @@ const struct regmap_config kx022a_regmap = {
 EXPORT_SYMBOL_NS_GPL(kx022a_regmap, KIONIX_ACCEL);
 
 struct kx022a_data {
+	struct regmap *regmap;
+	struct iio_trigger *trig;
+	struct device *dev;
+	struct iio_mount_matrix orientation;
+	int64_t timestamp, old_timestamp;
+
 	int irq;
 	int inc_reg;
 	int ien_reg;
-	struct regmap *regmap;
-	struct iio_trigger *trig;
+
+	unsigned int g_range;
+	unsigned int state;
+	unsigned int odr_ns;
+
 	bool trigger_enabled;
 	bool allow_fifo;
-
-	struct device *dev;
-	unsigned int g_range;
 	/*
 	 * We want to prevent toggling the sensor stby/active state (PC1 bit)
 	 * in the middle of a configuration. Hence all config sequences are
@@ -164,13 +170,8 @@ struct kx022a_data {
 	 * data stored/retrieved from this structure from concurrent accesses.
 	 */
 	struct mutex mutex;
-	unsigned int state;
-
-	int64_t timestamp, old_timestamp;
-	unsigned int odr_ns;
-
-	struct iio_mount_matrix orientation;
 	u8 watermark;
+
 	/* 3 x 16bit accel data + timestamp */
 	s16 buffer[8] __aligned(IIO_DMA_MINALIGN);
 	struct {
@@ -234,10 +235,10 @@ static const struct iio_chan_spec kx022a_channels[] = {
 };
 
 /*
- * The sensor HW can support ODR up to 1600 Hz - which is beyond what most of
- * Linux CPUs can handle w/o dropping samples. Also, the low power mode is not
- * available for higher sample rates. Thus the driver only supports 200 Hz and
- * slower ODRs. Slowest being 0.78 Hz
+ * The sensor HW can support ODR up to 1600 Hz, which is beyond what most of the
+ * Linux CPUs can handle without dropping samples. Also, the low power mode is
+ * not available for higher sample rates. Thus, the driver only supports 200 Hz
+ * and slower ODRs. The slowest is 0.78 Hz.
  */
 static const int kx022a_accel_samp_freq_table[][2] = {
 	{ 0, 780000 },
@@ -367,7 +368,7 @@ static int kx022a_write_raw(struct iio_dev *idev,
 			    int val, int val2, long mask)
 {
 	struct kx022a_data *data = iio_priv(idev);
-	int ret;
+	int ret, n;
 
 	/*
 	 * We should not allow changing scale or frequency when FIFO is running
@@ -384,8 +385,7 @@ static int kx022a_write_raw(struct iio_dev *idev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SAMP_FREQ:
-	{
-		int n = ARRAY_SIZE(kx022a_accel_samp_freq_table);
+		n = ARRAY_SIZE(kx022a_accel_samp_freq_table);
 
 		while (n--)
 			if (val == kx022a_accel_samp_freq_table[n][0] &&
@@ -405,10 +405,8 @@ static int kx022a_write_raw(struct iio_dev *idev,
 		data->odr_ns = kx022a_odrs[n];
 		kx022a_turn_on_unlock(data);
 		break;
-	}
 	case IIO_CHAN_INFO_SCALE:
-	{
-		int n = ARRAY_SIZE(kx022a_scale_table);
+		n = ARRAY_SIZE(kx022a_scale_table);
 
 		while (n-- > 0)
 			if (val == kx022a_scale_table[n][0] &&
@@ -428,7 +426,6 @@ static int kx022a_write_raw(struct iio_dev *idev,
 					 n << KX022A_GSEL_SHIFT);
 		kx022a_turn_on_unlock(data);
 		break;
-	}
 	default:
 		ret = -EINVAL;
 		break;
@@ -542,9 +539,9 @@ static int kx022a_set_watermark(struct iio_dev *idev, unsigned int val)
 	return 0;
 }
 
-static ssize_t kx022a_get_fifo_state(struct device *dev,
-				     struct device_attribute *attr,
-				     char *buf)
+static ssize_t hwfifo_enabled_show(struct device *dev,
+				   struct device_attribute *attr,
+				   char *buf)
 {
 	struct iio_dev *idev = dev_to_iio_dev(dev);
 	struct kx022a_data *data = iio_priv(idev);
@@ -557,9 +554,9 @@ static ssize_t kx022a_get_fifo_state(struct device *dev,
 	return sprintf(buf, "%d\n", state);
 }
 
-static ssize_t kx022a_get_fifo_watermark(struct device *dev,
-					 struct device_attribute *attr,
-					 char *buf)
+static ssize_t hwfifo_watermark_show(struct device *dev,
+				     struct device_attribute *attr,
+				     char *buf)
 {
 	struct iio_dev *idev = dev_to_iio_dev(dev);
 	struct kx022a_data *data = iio_priv(idev);
@@ -572,22 +569,20 @@ static ssize_t kx022a_get_fifo_watermark(struct device *dev,
 	return sprintf(buf, "%d\n", wm);
 }
 
-static IIO_DEVICE_ATTR(hwfifo_enabled, 0444,
-		       kx022a_get_fifo_state, NULL, 0);
-static IIO_DEVICE_ATTR(hwfifo_watermark, 0444,
-		       kx022a_get_fifo_watermark, NULL, 0);
+static IIO_DEVICE_ATTR_RO(hwfifo_enabled, 0);
+static IIO_DEVICE_ATTR_RO(hwfifo_watermark, 0);
 
 static const struct attribute *kx022a_fifo_attributes[] = {
 	&iio_dev_attr_hwfifo_watermark.dev_attr.attr,
 	&iio_dev_attr_hwfifo_enabled.dev_attr.attr,
-	NULL,
+	NULL
 };
 
 static int kx022a_drop_fifo_contents(struct kx022a_data *data)
 {
 	/*
 	 * We must clear the old time-stamp to avoid computing the timestamps
-	 * based on samples acquired when buffer was last enabled
+	 * based on samples acquired when buffer was last enabled.
 	 */
 	data->timestamp = 0;
 
@@ -804,7 +799,7 @@ static int kx022a_buffer_predisable(struct iio_dev *idev)
 
 static int kx022a_fifo_enable(struct kx022a_data *data)
 {
-	int ret = 0;
+	int ret;
 
 	ret = kx022a_turn_off_lock(data);
 	if (ret)
@@ -1033,8 +1028,8 @@ int kx022a_probe_internal(struct device *dev)
 	data = iio_priv(idev);
 
 	/*
-	 * VDD is the analog and digital domain voltage supply
-	 * IO_VDD is the digital I/O voltage supply
+	 * VDD is the analog and digital domain voltage supply and
+	 * IO_VDD is the digital I/O voltage supply.
 	 */
 	ret = devm_regulator_bulk_get_enable(dev, ARRAY_SIZE(regulator_names),
 					     regulator_names);
