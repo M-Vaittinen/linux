@@ -1001,6 +1001,67 @@ static int kx022a_chip_init(struct kx022a_data *data)
 	return kx022a_prepare_irq_pin(data);
 }
 
+void test(struct kx022a_data *data)
+{
+	int i, ret;
+	int smp_lvl = 0;
+	int fifo_bytes;
+	u16 buffer[KX022A_FIFO_LENGTH * 3];
+
+	ret = kx022a_turn_on_off_unlocked(data, false);
+	ret = regmap_update_bits(data->regmap, KX022A_REG_ODCNTL,
+				 KX022A_MASK_ODR, 1);
+	ret = kx022a_turn_on_off_unlocked(data, true);
+
+	ret = kx022a_fifo_enable(data);
+
+	for (i = 0; smp_lvl < 0xff; i++) {
+		ret = regmap_read(data->regmap, KX022A_REG_BUF_STATUS_1,
+				  &smp_lvl);
+		pr_info("%d: smp_lv = %d\n", i, smp_lvl);
+		msleep(1000);
+	}
+
+	pr_info("Sleep a lil more...\n");
+		msleep(1000);
+		msleep(1000);
+		msleep(1000);
+		msleep(1000);
+		msleep(1000);
+	pr_info("...Wake up)\n";
+	ret = kx022a_turn_on_off_unlocked(data, false);
+	if (ret)
+		return ret;
+
+	ret = regmap_clear_bits(data->regmap, data->ien_reg,
+				KX022A_MASK_WMI);
+	if (ret)
+		pr_err("failed to clear WMI IRQ\n");
+
+	ret = regmap_clear_bits(data->regmap, KX022A_REG_BUF_CNTL2,
+				KX022A_MASK_BUF_EN);
+
+	if (ret)
+		pr_err("failed to clear disable buffer\n");
+
+	fifo_bytes = 41 * KX022A_FIFO_SAMPLES_SIZE_BYTES;
+	pr_info("Buffer disabled - reading %u B from BUF\n", fifo_bytes);
+
+	ret = regmap_noinc_read(data->regmap, KX022A_REG_BUF_READ,
+				buffer, fifo_bytes);
+	if (ret)
+		return ret;
+
+	ret = regmap_read(data->regmap, KX022A_REG_BUF_STATUS_1,
+			  &smp_lvl);
+	pr_info("%d: smp_lv = %d\n", i, smp_lvl);
+
+	pr_info("Turning on again\n");
+	ret = kx022a_turn_on_off_unlocked(data, true);
+
+}
+
+
 int kx022a_probe_internal(struct device *dev)
 {
 	static const char * const regulator_names[] = {"io-vdd", "vdd"};
@@ -1098,6 +1159,9 @@ int kx022a_probe_internal(struct device *dev)
 		return ret;
 
 	udelay(100);
+
+	test();
+
 	ret = devm_iio_triggered_buffer_setup_ext(dev, idev,
 						  &iio_pollfunc_store_time,
 						  kx022a_trigger_handler,
