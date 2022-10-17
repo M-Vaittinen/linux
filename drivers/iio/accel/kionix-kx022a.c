@@ -1028,10 +1028,10 @@ void test(struct kx022a_data *data)
 		msleep(1000);
 		msleep(1000);
 		msleep(1000);
-	pr_info("...Wake up)\n";
+	pr_info("...Wake up\n");
 	ret = kx022a_turn_on_off_unlocked(data, false);
 	if (ret)
-		return ret;
+		return;
 
 	ret = regmap_clear_bits(data->regmap, data->ien_reg,
 				KX022A_MASK_WMI);
@@ -1049,8 +1049,10 @@ void test(struct kx022a_data *data)
 
 	ret = regmap_noinc_read(data->regmap, KX022A_REG_BUF_READ,
 				buffer, fifo_bytes);
-	if (ret)
-		return ret;
+	if (ret) {
+		pr_err("Read fail\n");
+		return;
+	}
 
 	ret = regmap_read(data->regmap, KX022A_REG_BUF_STATUS_1,
 			  &smp_lvl);
@@ -1160,7 +1162,7 @@ int kx022a_probe_internal(struct device *dev)
 
 	udelay(100);
 
-	test();
+	test(data);
 
 	ret = devm_iio_triggered_buffer_setup_ext(dev, idev,
 						  &iio_pollfunc_store_time,
