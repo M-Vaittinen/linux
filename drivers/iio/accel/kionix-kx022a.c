@@ -1003,11 +1003,15 @@ static int kx022a_chip_init(struct kx022a_data *data)
 
 void test(struct kx022a_data *data)
 {
-	int i, ret;
+	int i, ret, loop;
 	int smp_lvl = 0;
+	int tgt_level;
 	int fifo_bytes;
 	u16 buffer[KX022A_FIFO_LENGTH * 3];
 
+
+for (loop = 0; loop < 2; loop++)
+{
 	ret = kx022a_turn_on_off_unlocked(data, false);
 	ret = regmap_update_bits(data->regmap, KX022A_REG_ODCNTL,
 				 KX022A_MASK_ODR, 1);
@@ -1015,13 +1019,18 @@ void test(struct kx022a_data *data)
 
 	ret = kx022a_fifo_enable(data);
 
-	for (i = 0; smp_lvl < 0xff; i++) {
+	if (loop)
+		tgt_level = 0xff;
+	else
+		tgt_level = 100;
+	for (i = 0; smp_lvl < tgt_level; i++) {
 		ret = regmap_read(data->regmap, KX022A_REG_BUF_STATUS_1,
 				  &smp_lvl);
 		pr_info("%d: smp_lv = %d\n", i, smp_lvl);
 		msleep(1000);
 	}
 
+	if (loop) {
 	pr_info("Sleep a lil more...\n");
 		msleep(1000);
 		msleep(1000);
@@ -1029,23 +1038,32 @@ void test(struct kx022a_data *data)
 		msleep(1000);
 		msleep(1000);
 	pr_info("...Wake up\n");
+	}
+	if (loop) {
 	ret = kx022a_turn_on_off_unlocked(data, false);
 	if (ret)
 		return;
 
+//	pr_info("Skip disabling WMI\n");
 	ret = regmap_clear_bits(data->regmap, data->ien_reg,
 				KX022A_MASK_WMI);
 	if (ret)
 		pr_err("failed to clear WMI IRQ\n");
 
+	pr_info("Disabling buffer\n");
 	ret = regmap_clear_bits(data->regmap, KX022A_REG_BUF_CNTL2,
 				KX022A_MASK_BUF_EN);
 
 	if (ret)
 		pr_err("failed to clear disable buffer\n");
 
+	pr_info("Enabling PC1 for FIFO read...\n");
+	ret = kx022a_turn_on_off_unlocked(data, true);
+	} else {
+		pr_info("For first round I skip toggling PC1 or BUFE or WMI\n");
+	}
 	fifo_bytes = 41 * KX022A_FIFO_SAMPLES_SIZE_BYTES;
-	pr_info("Buffer disabled - reading %u B from BUF\n", fifo_bytes);
+	pr_info("Reading %u B from BUF\n", fifo_bytes);
 
 	ret = regmap_noinc_read(data->regmap, KX022A_REG_BUF_READ,
 				buffer, fifo_bytes);
@@ -1057,7 +1075,7 @@ void test(struct kx022a_data *data)
 	ret = regmap_read(data->regmap, KX022A_REG_BUF_STATUS_1,
 			  &smp_lvl);
 	pr_info("%d: smp_lv = %d\n", i, smp_lvl);
-
+}
 	pr_info("Turning on again\n");
 	ret = kx022a_turn_on_off_unlocked(data, true);
 
