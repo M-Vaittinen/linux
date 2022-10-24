@@ -1047,9 +1047,6 @@ int kx022a_probe_internal(struct device *dev)
 	if (irq > 0) {
 		data->inc_reg = KX022A_REG_INC1;
 		data->ien_reg = KX022A_REG_INC4;
-
-		if (fwnode_irq_get_byname(fwnode, "INT2") > 0)
-			dev_warn(dev, "Only one IRQ supported\n");
 	} else {
 		irq = fwnode_irq_get_byname(fwnode, "INT2");
 		if (irq <= 0)
