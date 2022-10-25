@@ -1508,7 +1508,7 @@ static int bd96801_walk_regulator_dt(struct device *dev, struct regmap *regmap,
 			if (of_property_read_bool(np, "rohm,keep-on-shdn")) {
 				ret = regmap_set_bits(regmap,
 						      BD96801_ALWAYS_ON_REG,
-						      1 << data->id);
+						      1 << data[i].desc.id);
 				if (ret) {
 					dev_err(dev,
 						"failed to set %s always-on\n",
