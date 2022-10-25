@@ -1511,7 +1511,7 @@ static int bd96801_walk_regulator_dt(struct device *dev, struct regmap *regmap,
 						      1 << data->id);
 				if (ret) {
 					dev_err(dev,
-						"failed to set &s always-on\n",
+						"failed to set %s always-on\n",
 						data[i].desc.name);
 					of_node_put(np);
 					of_node_put(nproot);
