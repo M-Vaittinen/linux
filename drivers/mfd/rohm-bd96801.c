@@ -139,7 +139,6 @@ static struct mfd_cell bd96801_mfd_cells[] = {
 
 static const struct regmap_range bd96801_volatile_ranges[] = {
 	/* Status regs */
-	regmap_reg_range(BD96801_REG_PWR_CTRL, BD96801_REG_PWR_CTRL),
 	regmap_reg_range(BD96801_REG_WD_FEED, BD96801_REG_WD_FAILCOUNT),
 	regmap_reg_range(BD96801_REG_WD_ASK, BD96801_REG_WD_ASK),
 	regmap_reg_range(BD96801_REG_WD_STATUS, BD96801_REG_WD_STATUS),
