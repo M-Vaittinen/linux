@@ -1209,6 +1209,23 @@ static int bd96801_disable_regmap(struct regulator_dev *rdev)
 	return regulator_disable_regmap(rdev);
 }
 
+/*
+ * Latest data-sheet says LDO voltages can only be changed in STBY(?)
+ * I think the original limitation was that the LDO must not be enabled
+ * when voltage is changed..
+ */
+static int bd96801_regulator_set_voltage_sel_restricted(struct regulator_dev *rdev,
+							unsigned int sel)
+{
+	int stby;
+
+	stby = bd96801_in_stby(rdev->regmap);
+	if (stby)
+		return -EBUSY;
+
+	return rohm_regulator_set_voltage_sel_restricted(rdev, sel);
+}
+
 static const struct regulator_ops bd96801_ldo_table_ops = {
 	.enable = bd96801_enable_regmap,
 	.disable = bd96801_disable_regmap,
@@ -1242,7 +1259,7 @@ static const struct regulator_ops bd96801_ldo_ops = {
 	.disable = regulator_disable_regmap,
 	.is_enabled = regulator_is_enabled_regmap,
 	.list_voltage = regulator_list_voltage_linear_range,
-	.set_voltage_sel = rohm_regulator_set_voltage_sel_restricted,
+	.set_voltage_sel = bd96801_regulator_set_voltage_sel_restricted,
 	.get_voltage_sel = regulator_get_voltage_sel_regmap,
 	.set_over_voltage_protection = bd96801_set_ovp,
 	.set_under_voltage_protection = bd96801_set_uvp,
