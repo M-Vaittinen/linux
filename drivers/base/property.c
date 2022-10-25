@@ -964,7 +964,7 @@ EXPORT_SYMBOL(fwnode_irq_get);
  */
 int fwnode_irq_get_byname(const struct fwnode_handle *fwnode, const char *name)
 {
-	int index;
+	int index, ret;
 
 	if (!name)
 		return -EINVAL;
@@ -973,7 +973,12 @@ int fwnode_irq_get_byname(const struct fwnode_handle *fwnode, const char *name)
 	if (index < 0)
 		return index;
 
-	return fwnode_irq_get(fwnode, index);
+	ret = fwnode_irq_get(fwnode, index);
+
+	if (!ret)
+		return -EINVAL;
+
+	return ret;
 }
 EXPORT_SYMBOL(fwnode_irq_get_byname);
 
