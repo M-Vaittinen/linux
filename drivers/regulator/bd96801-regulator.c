@@ -69,6 +69,7 @@ enum {
 	BD96801_NUM_PROT,
 };
 
+#define BD96801_ALWAYS_ON_REG		0x3c
 #define BD96801_REG_ENABLE		0x0b
 #define BD96801_BUCK1_EN_MASK		BIT(0)
 #define BD96801_BUCK2_EN_MASK		BIT(1)
@@ -1501,7 +1502,22 @@ static int bd96801_walk_regulator_dt(struct device *dev, struct regmap *regmap,
 					data[i].desc.name);
 				of_node_put(np);
 				of_node_put(nproot);
+
 				return ret;
+			}
+			if (of_property_read_bool(np, "rohm,keep-on-shdn")) {
+				ret = regmap_set_bits(regmap,
+						      BD96801_ALWAYS_ON_REG,
+						      1 << data->id);
+				if (ret) {
+					dev_err(dev,
+						"failed to set &s always-on\n",
+						data[i].desc.name);
+					of_node_put(np);
+					of_node_put(nproot);
+
+					return ret;
+				}
 			}
 		}
 	of_node_put(nproot);
