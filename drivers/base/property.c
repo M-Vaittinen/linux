@@ -1011,7 +1011,7 @@ EXPORT_SYMBOL(fwnode_irq_get);
  */
 int fwnode_irq_get_byname(const struct fwnode_handle *fwnode, const char *name)
 {
-	int index;
+	int index, ret;
 
 	if (!name)
 		return -EINVAL;
@@ -1020,7 +1020,12 @@ int fwnode_irq_get_byname(const struct fwnode_handle *fwnode, const char *name)
 	if (index < 0)
 		return index;
 
-	return fwnode_irq_get(fwnode, index);
+	ret = fwnode_irq_get(fwnode, index);
+	/* We treat mapping errors as invalid case */
+	if (ret == 0)
+		return -EINVAL;
+
+	return ret;
 }
 EXPORT_SYMBOL(fwnode_irq_get_byname);
 
