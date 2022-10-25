@@ -97,7 +97,7 @@ enum {
 #define BD96801_BUCK_INT_VOUT_MASK	0xff
 
 #define BD96801_BUCK_VOLTS		256
-#define BD96801_LDO_VOLTS		128
+#define BD96801_LDO_VOLTS		256
 
 #define BD96801_OVP_MASK		0x03
 #define BD96801_MASK_BUCK1_OVP_SHIFT	0x00
@@ -169,7 +169,7 @@ static const struct linear_range bd96801_buck_init_volts[] = {
 
 static const struct linear_range bd96801_ldo_int_volts[] = {
 	REGULATOR_LINEAR_RANGE(300000, 0x00, 0x78, 25000),
-	REGULATOR_LINEAR_RANGE(3300000, 0x79, 0x7f, 0),
+	REGULATOR_LINEAR_RANGE(3300000, 0x79, 0xff, 0),
 };
 
 #define BD96801_LDO_SD_VOLT_MASK	0x1
