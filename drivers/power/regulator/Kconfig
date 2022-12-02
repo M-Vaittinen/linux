@@ -1,3 +1,9 @@
+config DM_REGULATOR_VOLTAGE_RANGE
+	bool
+
+config SPL_DM_REGULATOR_VOLTAGE_RANGE
+	bool
+
 config DM_REGULATOR
 	bool "Enable Driver Model for REGULATOR drivers (UCLASS_REGULATOR)"
 	depends on DM
@@ -42,6 +48,24 @@ config REGULATOR_AS3722
 	  driver implements enable/disable for step-down bucks and LDOs,
 	  but does not yet support change voltages. Currently this must be
 	  done using direct register writes to the PMIC.
+
+config DM_REGULATOR_BD2659
+	bool "Enable Driver Model for ROHM BD2659 regulators"
+	depends on DM_REGULATOR && DM_PMIC_BD2659
+	select DM_REGULATOR_VOLTAGE_RANGE
+	help
+	This config enables implementation of driver-model regulator uclass
+	features for regulators on ROHM BD2659 PMIC.
+	BD2659 contains 4 bucks. The driver implements get/set api for
+	value and enable.
+
+config SPL_DM_REGULATOR_BD2659
+	bool "Enable Driver Model for ROHM BD2659 regulators in SPL"
+	depends on DM_REGULATOR_BD2659 && SPL
+	select SPL_DM_REGULATOR_VOLTAGE_RANGE
+	help
+	This config enables implementation of driver-model regulator uclass
+	features for regulators on ROHM BD2659 in SPL.
 
 config DM_REGULATOR_BD71837
 	bool "Enable Driver Model for ROHM BD71837/BD71847 regulators"
