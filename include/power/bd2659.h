@@ -8,6 +8,8 @@
 #define BD2659_VENDOR_ROHM		0x1f
 #define BD2659_REV_KNOWN		0xa1
 
+#define BD2659_VSEL_DEFAULT		0x5
+
 enum {
 	BD2659_BUCK0_ID			= 0,
 	BD2659_BUCK1_ID,
