@@ -9,12 +9,12 @@
 #include <dm.h>
 #include <log.h>
 #include <linux/bitops.h>
-#include <power/bd71837.h>
+#include <power/bd2659.h>
 #include <power/pmic.h>
 #include <power/regulator.h>
 
 /**
- * struct bd71837_vrange - describe linear range of voltages
+ * struct bd2659_vrange - describe linear range of voltages
  *
  * @min_volt:	smallest voltage in range
  * @step:	how much voltage changes at each selector step
@@ -66,13 +66,13 @@ struct bd2659_plat {
 { .name = (_name), .ranges = (_range),  .numranges = ARRAY_SIZE(_range), }
 
 static struct bd2659_vrange buck012_vranges[] = {
-	BD_RANGE(500000, 5000, 1, 0xab, 0),
-	BD_RANGE(1350000, 0, 0xac, 0xff, 0),
+	BD_RANGE(500000, 5000, 1, 0xab),
+	BD_RANGE(1350000, 0, 0xac, 0xff),
 };
 
 static struct bd2659_vrange buck3_vranges[] = {
-	BD_RANGE(700000, 10000, 0, 0x3c, 0),
-	BD_RANGE(1300000, 0, 0x3d, 0x3f, 0),
+	BD_RANGE(700000, 10000, 0, 0x3c),
+	BD_RANGE(1300000, 0, 0x3d, 0x3f),
 };
 
 /*
@@ -83,13 +83,13 @@ static struct bd2659_vrange buck3_vranges[] = {
  */
 
 static struct bd2659_plat bd2659_reg_data[] = {
-	BD_DATA("BUCK0", &buck012_vranges),
-	BD_DATA("BUCK1", &buck012_vranges),
-	BD_DATA("BUCK2", &buck012_vranges),
-	BD_DATA("BUCK3", &buck3_vranges),
+	BD_DATA("BUCK0", &buck012_vranges[0]),
+	BD_DATA("BUCK1", &buck012_vranges[0]),
+	BD_DATA("BUCK2", &buck012_vranges[0]),
+	BD_DATA("BUCK3", &buck3_vranges[0]),
 };
 
-static int vrange_find_value(struct bd71837_vrange *r, unsigned int sel,
+static int vrange_find_value(struct bd2659_vrange *r, unsigned int sel,
 			     unsigned int *val)
 {
 	if (!val || sel < r->min_sel || sel > r->max_sel)
@@ -99,7 +99,7 @@ static int vrange_find_value(struct bd71837_vrange *r, unsigned int sel,
 	return 0;
 }
 
-static int vrange_find_selector(struct bd71837_vrange *r, int val,
+static int vrange_find_selector(struct bd2659_vrange *r, int val,
 				unsigned int *sel)
 {
 	int ret = -EINVAL;
@@ -168,7 +168,7 @@ static int bd2659_set_value(struct udevice *dev, int uvolt)
 	struct bd2659_plat *plat = dev_get_plat(dev);
 	int reg = TO_BUCKx_REG(BD2659_BUCK0_VID_S0,  plat->id);
 	unsigned int sel;
-	unsigned int range;
+//	unsigned int range;
 	int i, enable;
 	int found = 0;
 
@@ -213,7 +213,7 @@ static int bd2659_regulator_probe(struct udevice *dev)
 	struct bd2659_plat *plat = dev_get_plat(dev);
 	struct dm_regulator_uclass_plat *uc_pdata;
 	int data_amnt = BD2659_REGULATOR_AMOUNT;
-	int i, ret, rev, vendor;
+	int i, rev, vendor;
 	struct udevice *parent;
 
 	parent = dev_get_parent(dev);
