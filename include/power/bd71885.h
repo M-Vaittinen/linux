@@ -1,17 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /* Copyright (C) 2022 ROHM Semiconductors */
 
-#ifndef BD718XX_H_
-#define BD718XX_H_
+#ifndef BD71885_H_
+#define BD71885_H_
 
-#define BD718XX_REGULATOR_DRIVER "bd718x7_regulator"
-
-enum {
-	ROHM_CHIP_TYPE_BD71837 = 0,
-	ROHM_CHIP_TYPE_BD71847,
-	ROHM_CHIP_TYPE_BD70528,
-	ROHM_CHIP_TYPE_AMOUNT
-};
+#define BD71885_REGULATOR_DRIVER "bd71885_regulator"
 
 enum {
 	BD718XX_REV			= 0x00,
@@ -61,10 +54,9 @@ enum {
 	BD718XX_IN_MON			= 0x2c,
 	BD718XX_POW_STATE		= 0x2d,
 	BD718XX_OUT32K			= 0x2e,
-	BD718XX_REGLOCK			= 0x2f,
 	BD718XX_MUXSW_EN		= 0x30,
 	BD718XX_REG_OTPVER		= 0xff,
-	BD718XX_MAX_REGISTER		= 0x100,
+	BD71885_MAX_REGISTER		= 0xa8,
 };
 
 #define BD718XX_REGLOCK_PWRSEQ		0x1
