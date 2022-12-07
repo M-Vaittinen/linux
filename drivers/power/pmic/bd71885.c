@@ -54,10 +54,191 @@ static const struct udevice_id bd71885_ids[] = {
 };
 
 U_BOOT_DRIVER(pmic_bd71885) = {
-	.name = "bd71885 pmic",
+	.name = "bd71885_pmic",
 	.id = UCLASS_PMIC,
 	.of_match = bd71885_ids,
 	.bind = bd71885_bind,
 	.probe = bd71885_probe,
 	.ops = &bd71885_ops,
 };
+
+
+/* *********************** Commands ************************/
+
+#include <command.h>
+
+static struct udevice *currdev;
+
+static int failure(int ret)
+{
+	printf("Error: %d (%s)\n", ret, errno_str(ret));
+
+	return CMD_RET_FAILURE;
+}
+
+
+
+static void print_boot_reas(int reg)
+{
+	static const char * const reason[] = {
+		"Power-on button press",
+		"Cold-boot flag",
+		"RTC_ALM0",
+		"",
+		"",
+		"",
+		"BTMP WARN",
+		"Cold-reset flag",
+	};
+	int i;
+
+	if (!(reg & BD71885_BOOTSRC_MASK))
+		printf("No boot-up reason indicated by BOOTSRC_1\n");
+	else
+		printf("Reasons stored for previous boot-up:\n");
+
+	for (i = 0; i < 8; i++)
+		if ((1 << i) & reg & BD71885_BOOTSRC_MASK)
+			printf("- %s\n", reason[i]);
+}
+
+static void print_reset_reas(int reg)
+{
+	static const char * const reason[] = {
+		"power-button long-press",
+		"watchdog",
+		"SW-reset request",
+		"Thermal Shutdown",
+		"Vsys UVLO or OVP",
+		"EXTEN_OUT communication failure",
+		"VR-Fault",
+		"FAULT_B assertion",
+	};
+	int i;
+
+	if (!reg)
+		printf("No reset reason indicated by RESETSRC_1\n");
+	else
+		printf("Reasons stored for previous reset:\n");
+
+	for (i = 0; i < 8; i++)
+		if ((1 << i) & reg)
+			printf("- %s\n", reason[i]);
+}
+
+static int print_faulty_vr(void)
+{
+	int buck, ldo, i;
+
+	buck = pmic_reg_read(currdev, BD71885_RESETSRC2);
+	if (buck)
+		return buck;
+
+	for (i = 0; i < 8; i++)
+		if (!(buck & (1 << i)))
+			printf("\tBUCK%d OK\n", i + 1);
+		else
+			printf("\tBUCK%d FAULTY\n", i + 1);
+
+	ldo = pmic_reg_read(currdev, BD71885_RESETSRC3);
+	if (ldo)
+		return ldo;
+
+	for (i = 0; i < 4; i++)
+		if (!(ldo & (1 << i)))
+			printf("\tLDO%d OK\n", i + 1);
+		else
+			printf("\tLDO%d FAULTY\n", i + 1);
+
+	return 0;
+}
+
+static int get_dev(void)
+{
+	char *name = "bd71885_pmic";
+	int ret;
+
+	if (!currdev) {
+		ret = pmic_get(name, &currdev);
+		if (ret) {
+			printf("Can't get PMIC: %s!\n", name);
+			return ret;
+		}
+
+		printf("dev: %d @ %s\n", dev_seq(currdev), currdev->name);
+	}
+
+	return 0;
+}
+
+/* Get the reset reason */
+static int do_rr(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
+{
+	int ret;
+
+	ret = get_dev();
+	if (ret)
+		return failure(ret);
+
+	ret = pmic_reg_read(currdev, BD71885_RESETSRC1);
+	if (ret < 0)
+		return failure(ret);
+
+	print_reset_reas(ret);
+	if (ret & BD71885_VR_FAULT)
+		ret = print_faulty_vr();
+
+	if (ret)
+		return failure(ret);
+
+	return CMD_RET_SUCCESS;
+}
+
+/* Get the power-on reason */
+static int do_pr(struct cmd_tbl *cmdtp, int flag, int argc,
+		   char *const argv[])
+{
+	int ret;
+
+	ret = get_dev();
+	if (ret)
+		return failure(ret);
+
+	ret = pmic_reg_read(currdev, BD71885_BOOTSRC);
+	if (ret < 0)
+		return failure(ret);
+
+	print_boot_reas(ret);
+
+	return CMD_RET_SUCCESS;
+}
+
+static struct cmd_tbl subcmd[] = {
+	U_BOOT_CMD_MKENT(rr, 1, 1, do_rr, "", ""),
+	U_BOOT_CMD_MKENT(pr, 1, 1, do_pr, "", ""),
+};
+
+static int do_bd71885(struct cmd_tbl *cmdtp, int flag, int argc,
+		   char *const argv[])
+{
+	struct cmd_tbl *cmd;
+
+	argc--;
+	argv++;
+
+	cmd = find_cmd_tbl(argv[0], subcmd, ARRAY_SIZE(subcmd));
+	if (cmd == NULL || argc > cmd->maxargs)
+		return CMD_RET_USAGE;
+
+	return cmd->cmd(cmdtp, flag, argc, argv);
+}
+
+U_BOOT_CMD(bd71885, CONFIG_SYS_MAXARGS, 1, do_bd71885,
+	"BD71885 sub-system",
+	"rr	            - show previous reset reason\n"
+	"pmic dev [name]    - show or [set] operating PMIC device\n"
+	"pmic dump          - dump registers\n"
+	"pmic read address  - read byte of register at address\n"
+	"pmic write address - write byte to register at address\n"
+);
+
