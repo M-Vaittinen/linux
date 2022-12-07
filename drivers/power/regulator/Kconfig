@@ -1,3 +1,9 @@
+config DM_REGULATOR_VOLTAGE_RANGE
+	bool
+
+config SPL_DM_REGULATOR_VOLTAGE_RANGE
+	bool
+
 config DM_REGULATOR
 	bool "Enable Driver Model for REGULATOR drivers (UCLASS_REGULATOR)"
 	depends on DM
@@ -46,6 +52,7 @@ config REGULATOR_AS3722
 config DM_REGULATOR_BD2659
 	bool "Enable Driver Model for ROHM BD2659 regulators"
 	depends on DM_REGULATOR && DM_PMIC_BD2659
+	select DM_REGULATOR_VOLTAGE_RANGE
 	help
 	This config enables implementation of driver-model regulator uclass
 	features for regulators on ROHM BD2659 PMIC.
@@ -55,6 +62,7 @@ config DM_REGULATOR_BD2659
 config SPL_DM_REGULATOR_BD2659
 	bool "Enable Driver Model for ROHM BD2659 regulators in SPL"
 	depends on DM_REGULATOR_BD2659 && SPL
+	select SPL_DM_REGULATOR_VOLTAGE_RANGE
 	help
 	This config enables implementation of driver-model regulator uclass
 	features for regulators on ROHM BD2659 in SPL.

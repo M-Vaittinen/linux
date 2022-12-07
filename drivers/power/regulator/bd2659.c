@@ -12,23 +12,7 @@
 #include <power/bd2659.h>
 #include <power/pmic.h>
 #include <power/regulator.h>
-
-/**
- * struct bd2659_vrange - describe linear range of voltages
- *
- * @min_volt:	smallest voltage in range
- * @step:	how much voltage changes at each selector step
- * @min_sel:	smallest selector in the range
- * @max_sel:	maximum selector in the range
- * @rangeval:	register value used to select this range if selectible
- *		ranges are supported
- */
-struct bd2659_vrange {
-	unsigned int	min_volt;
-	unsigned int	step;
-	u8		min_sel;
-	u8		max_sel;
-};
+#include <power/voltage_range.h>
 
 /**
  * struct bd2659_plat - describe regulator control registers
@@ -41,46 +25,31 @@ struct bd2659_vrange {
  * @ranges:	pointer to ranges of regulator voltages and matching register
  *		values
  * @numranges:	number of voltage ranges pointed by ranges
- * @rangemask:	mask for selecting used ranges if multiple ranges are supported
  * @sel_mask:	bit to toggle in order to transfer the register control to SW
  * @dvs:	whether the voltage can be changed when regulator is enabled
  */
 struct bd2659_plat {
 	const char		*name;
 	int			id;
-	struct bd2659_vrange	*ranges;
+	struct regulator_vrange	*ranges;
 	unsigned int		numranges;
-	u8			rangemask;
 	u8			sel_mask;
 	u8			vsel_cache;
 	bool			dvs;
 };
 
-#define BD_RANGE(_min, _vstep, _sel_low, _sel_hi) \
-{ \
-	.min_volt = (_min), .step = (_vstep), .min_sel = (_sel_low), \
-	.max_sel = (_sel_hi), \
-}
-
 #define BD_DATA(_name, _range) \
 { .name = (_name), .ranges = (_range),  .numranges = ARRAY_SIZE(_range), }
 
-static struct bd2659_vrange buck012_vranges[] = {
+static struct regulator_vrange buck012_vranges[] = {
 	BD_RANGE(500000, 5000, 1, 0xab),
 	BD_RANGE(1350000, 0, 0xac, 0xff),
 };
 
-static struct bd2659_vrange buck3_vranges[] = {
+static struct regulator_vrange buck3_vranges[] = {
 	BD_RANGE(700000, 10000, 0, 0x3c),
 	BD_RANGE(1300000, 0, 0x3d, 0x3f),
 };
-
-/*
- * We use enable mask 'HW_STATE_CONTROL' to indicate that this regulator
- * must not be enabled or disabled by SW. The typical use-case for BD71837
- * is powering NXP i.MX8. In this use-case we (for now) only allow control
- * for BUCK3 and BUCK4 which are not boot critical.
- */
 
 static struct bd2659_plat bd2659_reg_data[] = {
 	BD_DATA("BUCK0", &buck012_vranges[0]),
@@ -88,35 +57,6 @@ static struct bd2659_plat bd2659_reg_data[] = {
 	BD_DATA("BUCK2", &buck012_vranges[0]),
 	BD_DATA("BUCK3", &buck3_vranges[0]),
 };
-
-static int vrange_find_value(struct bd2659_vrange *r, unsigned int sel,
-			     unsigned int *val)
-{
-	if (!val || sel < r->min_sel || sel > r->max_sel)
-		return -EINVAL;
-
-	*val = r->min_volt + r->step * (sel - r->min_sel);
-	return 0;
-}
-
-static int vrange_find_selector(struct bd2659_vrange *r, int val,
-				unsigned int *sel)
-{
-	int ret = -EINVAL;
-	int num_vals = r->max_sel - r->min_sel + 1;
-
-	if (val >= r->min_volt &&
-	    val <= r->min_volt + r->step * (num_vals - 1)) {
-		if (r->step) {
-			*sel = r->min_sel + ((val - r->min_volt) / r->step);
-			ret = 0;
-		} else {
-			*sel = r->min_sel;
-			ret = 0;
-		}
-	}
-	return ret;
-}
 
 static int bd2659_get_enable(struct udevice *dev)
 {
@@ -152,7 +92,7 @@ static int bd2659_get_value(struct udevice *dev)
 	int i;
 
 	for (i = 0; i < plat->numranges; i++) {
-		struct bd2659_vrange *r = &plat->ranges[i];
+		struct regulator_vrange *r = &plat->ranges[i];
 
 		if (!vrange_find_value(r, plat->vsel_cache, &tmp))
 			return tmp;
@@ -168,12 +108,11 @@ static int bd2659_set_value(struct udevice *dev, int uvolt)
 	struct bd2659_plat *plat = dev_get_plat(dev);
 	int reg = TO_BUCKx_REG(BD2659_BUCK0_VID_S0,  plat->id);
 	unsigned int sel;
-//	unsigned int range;
 	int i, enable;
 	int found = 0;
 
 	for (i = 0; i < plat->numranges; i++) {
-		struct bd2659_vrange *r = &plat->ranges[i];
+		struct regulator_vrange *r = &plat->ranges[i];
 
 		found = !vrange_find_selector(r, uvolt, &sel);
 		if (found) {
