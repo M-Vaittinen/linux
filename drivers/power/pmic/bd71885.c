@@ -35,6 +35,46 @@ static int bd71885_reg_count(struct udevice *dev)
 	return BD71885_MAX_REGISTER - 1;
 }
 
+static int bd718xx_init_press_duration(struct udevice *ud)
+{
+	struct device* dev = bd718xx->chip.dev;
+	uint short_press_ms, long_press_ms;
+	uint short_press_value, long_press_value;
+	int ret;
+
+		/* TODO: Compare BD71837 and BS71885 spec and fix addresses/values.
+		 * Convert to uBoot code
+		 */
+	ret =  dev_read_u32u(ud, "rohm,short-press-ms", &short_press_ms)
+	if (!ret) {
+		short_press_value = min(15u, (short_press_ms + 250) / 500);
+		ret = regmap_update_bits(bd718xx->chip.regmap,
+					 BD718XX_REG_PWRONCONFIG0,
+					 BD718XX_PWRBTN_PRESS_DURATION_MASK,
+					 short_press_value);
+		if (ret) {
+			dev_err(dev, "Failed to init pwron short press\n");
+			return ret;
+		}
+	}
+
+	ret = of_property_read_u32(dev->of_node, "rohm,long-press-ms",
+				      &long_press_ms);
+	if (!ret) {
+		long_press_value = min(15u, (long_press_ms + 500) / 1000);
+		ret = regmap_update_bits(bd718xx->chip.regmap,
+					 BD718XX_REG_PWRONCONFIG1,
+					 BD718XX_PWRBTN_PRESS_DURATION_MASK,
+					 long_press_value);
+		if (ret) {
+			dev_err(dev, "Failed to init pwron long press\n");
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 static int bd71885_probe(struct udevice *dev)
 {
 	debug("%s: '%s' probed\n", __func__, dev->name);
