@@ -155,7 +155,8 @@ static int print_faulty_vr(void)
 
 static int get_dev(void)
 {
-	char *name = "bd71885_pmic";
+//	char *name = "bd71885_pmic";
+	char *name = "pmic@4b";
 	int ret;
 
 	if (!currdev) {
@@ -235,10 +236,7 @@ static int do_bd71885(struct cmd_tbl *cmdtp, int flag, int argc,
 
 U_BOOT_CMD(bd71885, CONFIG_SYS_MAXARGS, 1, do_bd71885,
 	"BD71885 sub-system",
-	"rr	            - show previous reset reason\n"
-	"pmic dev [name]    - show or [set] operating PMIC device\n"
-	"pmic dump          - dump registers\n"
-	"pmic read address  - read byte of register at address\n"
-	"pmic write address - write byte to register at address\n"
+	"bd71885 rr - show previous reset reason\n"
+	"bd71885 pr - show previous power-on reason\n"
 );
 
