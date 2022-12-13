@@ -274,6 +274,36 @@ static int do_rr(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
 	return CMD_RET_SUCCESS;
 }
 
+static int do_hibernate(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
+{
+	int ret;
+
+	ret = get_dev();
+	if (ret)
+		return failure(ret);
+
+	/*
+	 * This will effectively be cutting the power from the SOC. Calling code
+	 * must have done the SOC specific preparations - which may include
+	 * finishing writings, gating clocks, resets and so on to prevent data
+	 * loss or HW damage
+	 *
+	 * INTLDO, RTC, Die temperature monitor, and Analog UVLO are powered
+	 * during the HBNT State.
+	 */
+	printf("WARNING: PMIC going to hibernate - waiting for a turn-on event\n");
+
+	ret = pmic_clrsetbits(currdev, BD71885_REG_PS_CTRL_1, BD71885_HIBERNATE_MASK,
+			      BD71885_HIBERNATE_MASK);
+	if (ret < 0)
+		return failure(ret);
+
+	for (;;)
+		;
+
+	return CMD_RET_SUCCESS;
+}
+
 /* Get the power-on reason */
 static int do_pr(struct cmd_tbl *cmdtp, int flag, int argc,
 		   char *const argv[])
@@ -293,9 +323,149 @@ static int do_pr(struct cmd_tbl *cmdtp, int flag, int argc,
 	return CMD_RET_SUCCESS;
 }
 
+#define is_idle(reg) (((reg) & BD71885_STATE_MASK) == BD71885_STATE_IDLE)
+#define is_shdn(reg) (((reg) & BD71885_STATE_MASK) == BD71885_STATE_SHDN)
+#define is_emerg(reg) (((reg) & BD71885_STATE_MASK) == BD71885_STATE_EMERG)
+#define is_dead(reg) (((reg) & BD71885_STATE_MASK) == BD71885_STATE_DEAD)
+#define is_otp(reg) (((reg) & BD71885_STATE_MASK) == BD71885_STATE_OTP)
+#define is_hbnt(reg) (((reg) & BD71885_STATE_MASK) == BD71885_STATE_HBNT)
+#define is_run(reg) (((reg) & BD71885_STATE_MASK) == BD71885_STATE_RUN)
+#define is_idle(reg) (((reg) & BD71885_STATE_MASK) == BD71885_STATE_IDLE)
+#define is_suspend(reg) (((reg) & BD71885_STATE_MASK) == BD71885_STATE_SUSPEND)
+
+static const char *state2txt(int reg)
+{
+	switch(reg & BD71885_STATE_MASK) {
+	case BD71885_STATE_SHDN:
+		return "SHUTDOWN";
+	case BD71885_STATE_EMERG:
+		return "EMERGENCY";
+	case BD71885_STATE_DEAD:
+		return "DEAD";
+	case BD71885_STATE_OTP:
+		return "OTP-LOAD";
+	case BD71885_STATE_HBNT:
+		return "HIBERNATE";
+	case BD71885_STATE_RUN:
+		return "RUN";
+	case BD71885_STATE_IDLE:
+		return "IDLE";
+	case BD71885_STATE_SUSPEND:
+		return "SUSPEND";
+	default:
+		break;
+	}
+
+	return "UNKNOWN";
+}
+
+static int gpio_set(int pin, int state)
+{
+	/* SOC specific code to toggle the GPIO pin */
+	return 0;
+}
+
+static int do_set_state(struct cmd_tbl *cmdtp, int flag, int argc,
+		   char *const argv[])
+{
+	char *state;
+	int ret;
+
+	ret = get_dev();
+	if (ret)
+		return failure(ret);
+
+	if (argc != 2)
+		return CMD_RET_USAGE;
+
+	state = argv[1];
+
+	ret = pmic_reg_read(currdev, BD71885_POWER_STATE);
+	if (ret < 0)
+		return failure(ret);
+
+	if (!strcmp(state, "suspend")) {
+		if (is_suspend(ret))
+			return CMD_RET_SUCCESS;
+
+		printf("PMIC going to SUSPEND\n");
+		gpio_set(SUSPEND_GPIO_PIN, GPIO_HIGH);
+	} else if (!strcmp(state, "idle")) {
+		if (is_idle(ret))
+			return CMD_RET_SUCCESS;
+
+		if (is_run(ret) || is_suspend(ret)) {
+			printf("PMIC %s => IDLE\n", state2txt(ret));
+			/* Set IDLE mode */
+			ret = pmic_clrsetbits(currdev, BD71885_REG_PS_CTRL_1,
+					      BD71885_IDLE_MASK, BD71885_IDLE_MASK);
+			if (is_suspend(ret))
+				gpio_set(SUSPEND_GPIO_PIN, GPIO_LOW);
+		} else {
+			printf("Don't know how to transfer '%s' => IDLE\n",
+			       state2txt(ret));
+			ret = -EINVAL;
+		}
+	} else if (!strcmp(state, "run")) {
+		if (is_run(ret))
+			return CMD_RET_SUCCESS;
+
+		if (is_idle(ret) || is_suspend(ret)) {
+			printf("PMIC %s => RUN\n", state2txt(ret));
+			/* Clear IDLE mode */
+			ret = pmic_clrsetbits(currdev, BD71885_REG_PS_CTRL_1,
+					      BD71885_IDLE_MASK, 0);
+			if (is_suspend(ret))
+				gpio_set(SUSPEND_GPIO_PIN, GPIO_LOW);
+		} else {
+			printf("Don't know how to transfer '%s' => RUN\n",
+			       state2txt(ret));
+			ret = -EINVAL;
+		}
+	} else {
+		printf("Unkown state '%s'. Valid ones are run, idle, suspend\n",
+		       state);
+		ret = -EINVAL;
+	}
+
+	if (ret)
+		return failure(ret);
+
+	return CMD_RET_SUCCESS;
+}
+
+void print_power_state(int reg)
+{
+	const char *state;
+
+	state = state2txt(reg);
+	printf("Current power-state %s\n", state);
+}
+
+static int do_get_state(struct cmd_tbl *cmdtp, int flag, int argc,
+		   char *const argv[])
+{
+	int ret;
+
+	ret = get_dev();
+	if (ret)
+		return failure(ret);
+
+	ret = pmic_reg_read(currdev, BD71885_POWER_STATE);
+	if (ret < 0)
+		return failure(ret);
+
+	print_power_state(ret);
+
+	return CMD_RET_SUCCESS;
+}
+
 static struct cmd_tbl subcmd[] = {
 	U_BOOT_CMD_MKENT(rr, 1, 1, do_rr, "", ""),
 	U_BOOT_CMD_MKENT(pr, 1, 1, do_pr, "", ""),
+	U_BOOT_CMD_MKENT(hibernate, 1, 1, do_hibernate, "", ""),
+	U_BOOT_CMD_MKENT(get_state, 1, 1, do_get_state, "", ""),
+	U_BOOT_CMD_MKENT(set_state, 2, 1, do_set_state, "", ""),
 };
 
 static int do_bd71885(struct cmd_tbl *cmdtp, int flag, int argc,
@@ -317,5 +487,6 @@ U_BOOT_CMD(bd71885, CONFIG_SYS_MAXARGS, 1, do_bd71885,
 	"BD71885 sub-system",
 	"bd71885 rr - show previous reset reason\n"
 	"bd71885 pr - show previous power-on reason\n"
+	"bd71885 hibernate - tranfer to HBNT state - MAY DAMAGE HW\n"
 );
 

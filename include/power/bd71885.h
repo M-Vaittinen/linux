@@ -6,6 +6,13 @@
 
 #include <linux/bitops.h>
 
+/* Soc specific way of defining GPIO pin connected to the PMIC SUSPEND pin */
+#define SUSPEND_GPIO_PIN	0x0
+/* Soc specific way of setting GPIO pin HIGH... */
+#define GPIO_HIGH		0x1
+/*... or LOW */
+#define GPIO_LOW		0x0
+
 /*
  * The BD71885 has an OTP option to enable the HIGH voltage range for LDO1 and
  * LDO3. If this OTP variant is used, please enable the below definitions
@@ -28,12 +35,29 @@
 #define BD71885_VR_FAULT BIT(6)
 
 enum {
+	BD71885_STATE_SHDN,
+	BD71885_STATE_EMERG,
+	BD71885_STATE_DEAD,
+	BD71885_STATE_OTP,
+	BD71885_STATE_HBNT,
+	BD71885_STATE_RUN,
+	BD71885_STATE_IDLE,
+	BD71885_STATE_SUSPEND,
+};
+#define BD71885_STATE_MASK 0x07
+
+/* PS_CTRL masks */
+#define BD71885_HIBERNATE_MASK		BIT(0)
+#define BD71885_IDLE_MASK		BIT(1)
+enum {
 	BD71885_PROD_ID			= 0x00,
 	BD71885_VENDOR			= 0x01,
 	BD71885_BOOTSRC			= 0x05,
 	BD71885_RESETSRC1		= 0x06,
 	BD71885_RESETSRC2		= 0x07,
 	BD71885_RESETSRC3		= 0x08,
+	BD71885_POWER_STATE		= 0x09,
+	BD71885_REG_PS_CTRL_1		= 0x0b,
 	BD71885_BUCK1_ON		= 0x11,
 	BD71885_BUCK2_ON		= 0x17,
 	BD71885_BUCK3_ON		= 0x1d,
@@ -50,5 +74,6 @@ enum {
 	BD71885_REG_PBTNCONFIG		= 0x8b,
 	BD71885_MAX_REGISTER		= 0xa8,
 };
+
 
 #endif
