@@ -19,9 +19,12 @@
 		compatible = "rohm,bd71885";
 		reg = <0x4b>;
 		/* GPIO 1_29 - (connector 8, pin 26) for irq */
-		interrupt-parent = <&gpio1>;
+/*		interrupt-parent = <&gpio1>; */
 /*		interrupts = <29 GPIO_ACTIVE_LOW>; */
-		interrupts = <29 8>;
+/*		interrupts = <29 8>; */
+		rohm,short-press-ms = <30>;
+		rohm,mid-press-ms = <1000>;
+		rohm,long-press-ms = <5000>;
 
 		regulators {
 			buck1: BUCK1 {
@@ -78,7 +81,7 @@
 				regulator-min-microvolt = <800000>;
 				regulator-max-microvolt = <1400000>;
 			};
-	
+
 /* LDO1nd LDO2 are enabled by HW when PMIC turns from READY to SNVS state */
 			ldo1: LDO1 {
 				regulator-name = "ldo1";
@@ -114,8 +117,6 @@
 
 		};
 	};
-
-
 };
 
 &cpu0_opp_table {

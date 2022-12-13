@@ -25,54 +25,78 @@ static const struct pmic_child_info pmic_children_info[] = {
 	{ },
 };
 
+#define BD71885_SHORT_PRESS_MASK	(BIT(0) | BIT(1))
+#define BD71885_MID_PRESS_MASK		(BIT(2) | BIT(3))
+#define BD71885_LONG_PRESS_MASK		(BIT(4) | BIT(5)) 
+
+static int bd718xx_init_press_duration(struct udevice *ud)
+{
+	uint short_press_ms, long_press_ms, mid_press_ms;
+	/* Press durations in mS */
+	static uint short_durations[] = { 16, 30, 60, 120 };
+	static uint mid_durations[] = { 500, 1000, 4000, 8000 };
+	static uint long_durations[] = { 1000, 5000, 10000, 15000 };
+	int ret, i;
+
+	ret =  dev_read_u32u(ud, "rohm,short-press-ms", &short_press_ms);
+	if (!ret) {
+		for (i = 0; i < ARRAY_SIZE(short_durations); i++) {
+			if (short_durations[i] == short_press_ms) {
+				ret = pmic_clrsetbits(ud, BD71885_REG_PBTNCONFIG, BD71885_SHORT_PRESS_MASK, i);
+				if (ret)
+					return ret;
+				break;
+			}
+		}
+		if (i == ARRAY_SIZE(short_durations))
+			pr_err("Bad short-press duration %d\n", short_press_ms);
+	}
+
+	ret = dev_read_u32u(ud, "rohm,mid-press-ms", &mid_press_ms);
+	if (!ret) {
+		for (i = 0; i < ARRAY_SIZE(mid_durations); i++) {
+			if (mid_durations[i] == mid_press_ms) {
+				ret = pmic_clrsetbits(ud, BD71885_REG_PBTNCONFIG, BD71885_MID_PRESS_MASK, i << 2);
+				if (ret)
+					return ret;
+				break;
+			}
+		}
+		if (i == ARRAY_SIZE(mid_durations))
+			pr_err("Bad mid-press duration %d\n", mid_press_ms);
+	}
+
+	ret = dev_read_u32u(ud, "rohm,long-press-ms", &long_press_ms);
+	if (!ret) {
+		for (i = 0; i < ARRAY_SIZE(long_durations); i++) {
+			if (long_durations[i] == long_press_ms) {
+				ret = pmic_clrsetbits(ud, BD71885_REG_PBTNCONFIG, BD71885_LONG_PRESS_MASK, i << 4);
+				if (ret)
+					return ret;
+				break;
+			}
+		}
+		if (i == ARRAY_SIZE(long_durations))
+			pr_err("Bad long-press duration %d\n", long_press_ms);
+	}
+
+	return 0;
+}
+
 static int bd71885_bind(struct udevice *dev)
 {
-	return bdxxxx_bind(dev, pmic_children_info);
+	int ret;
+
+	ret = bdxxxx_bind(dev, pmic_children_info);
+	if (ret)
+		return ret;
+
+	return bd718xx_init_press_duration(dev);
 }
 
 static int bd71885_reg_count(struct udevice *dev)
 {
 	return BD71885_MAX_REGISTER - 1;
-}
-
-static int bd718xx_init_press_duration(struct udevice *ud)
-{
-	struct device* dev = bd718xx->chip.dev;
-	uint short_press_ms, long_press_ms;
-	uint short_press_value, long_press_value;
-	int ret;
-
-		/* TODO: Compare BD71837 and BS71885 spec and fix addresses/values.
-		 * Convert to uBoot code
-		 */
-	ret =  dev_read_u32u(ud, "rohm,short-press-ms", &short_press_ms)
-	if (!ret) {
-		short_press_value = min(15u, (short_press_ms + 250) / 500);
-		ret = regmap_update_bits(bd718xx->chip.regmap,
-					 BD718XX_REG_PWRONCONFIG0,
-					 BD718XX_PWRBTN_PRESS_DURATION_MASK,
-					 short_press_value);
-		if (ret) {
-			dev_err(dev, "Failed to init pwron short press\n");
-			return ret;
-		}
-	}
-
-	ret = of_property_read_u32(dev->of_node, "rohm,long-press-ms",
-				      &long_press_ms);
-	if (!ret) {
-		long_press_value = min(15u, (long_press_ms + 500) / 1000);
-		ret = regmap_update_bits(bd718xx->chip.regmap,
-					 BD718XX_REG_PWRONCONFIG1,
-					 BD718XX_PWRBTN_PRESS_DURATION_MASK,
-					 long_press_value);
-		if (ret) {
-			dev_err(dev, "Failed to init pwron long press\n");
-			return ret;
-		}
-	}
-
-	return 0;
 }
 
 static int bd71885_probe(struct udevice *dev)
@@ -193,6 +217,21 @@ static int print_faulty_vr(void)
 	return 0;
 }
 
+/*
+ * This function just hard-codes the BD71885 PMIC dt node-name and seeks
+ * the udev based on this. It really is not the way to go - but as this
+ * code is only used as a referene for SCF code building a nice u-boot
+ * specific way of obtaining the device does not warrant the effort.
+ *
+ * TODO: Revise  this if the u-boot driver is ever to be sent upstream.
+ * We could probably do:
+ *	for (ret = uclass_first_device(UCLASS_PMIC, &dev); dev;
+ *	     ret = uclass_next_device(&dev)) {
+ *
+ * and see if the driver is bd71885 driver. That should work for one piece
+ * of BD71885 at a time. We could also allow user to specify the device to
+ * access (similar to the pmic/regulator commands).
+ */
 static int get_dev(void)
 {
 //	char *name = "bd71885_pmic";
