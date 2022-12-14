@@ -25,73 +25,28 @@ static const struct pmic_child_info pmic_children_info[] = {
 	{ },
 };
 
-#define BD71885_SHORT_PRESS_MASK	(BIT(0) | BIT(1))
-#define BD71885_MID_PRESS_MASK		(BIT(2) | BIT(3))
-#define BD71885_LONG_PRESS_MASK		(BIT(4) | BIT(5)) 
-
-static int bd718xx_init_press_duration(struct udevice *ud)
-{
-	uint short_press_ms, long_press_ms, mid_press_ms;
-	/* Press durations in mS */
-	static uint short_durations[] = { 16, 30, 60, 120 };
-	static uint mid_durations[] = { 500, 1000, 4000, 8000 };
-	static uint long_durations[] = { 1000, 5000, 10000, 15000 };
-	int ret, i;
-
-	ret =  dev_read_u32u(ud, "rohm,short-press-ms", &short_press_ms);
-	if (!ret) {
-		for (i = 0; i < ARRAY_SIZE(short_durations); i++) {
-			if (short_durations[i] == short_press_ms) {
-				ret = pmic_clrsetbits(ud, BD71885_REG_PBTNCONFIG, BD71885_SHORT_PRESS_MASK, i);
-				if (ret)
-					return ret;
-				break;
-			}
-		}
-		if (i == ARRAY_SIZE(short_durations))
-			pr_err("Bad short-press duration %d\n", short_press_ms);
-	}
-
-	ret = dev_read_u32u(ud, "rohm,mid-press-ms", &mid_press_ms);
-	if (!ret) {
-		for (i = 0; i < ARRAY_SIZE(mid_durations); i++) {
-			if (mid_durations[i] == mid_press_ms) {
-				ret = pmic_clrsetbits(ud, BD71885_REG_PBTNCONFIG, BD71885_MID_PRESS_MASK, i << 2);
-				if (ret)
-					return ret;
-				break;
-			}
-		}
-		if (i == ARRAY_SIZE(mid_durations))
-			pr_err("Bad mid-press duration %d\n", mid_press_ms);
-	}
-
-	ret = dev_read_u32u(ud, "rohm,long-press-ms", &long_press_ms);
-	if (!ret) {
-		for (i = 0; i < ARRAY_SIZE(long_durations); i++) {
-			if (long_durations[i] == long_press_ms) {
-				ret = pmic_clrsetbits(ud, BD71885_REG_PBTNCONFIG, BD71885_LONG_PRESS_MASK, i << 4);
-				if (ret)
-					return ret;
-				break;
-			}
-		}
-		if (i == ARRAY_SIZE(long_durations))
-			pr_err("Bad long-press duration %d\n", long_press_ms);
-	}
-
-	return 0;
-}
-
-static int bd71885_bind(struct udevice *dev)
+#if 0
+static int tmp_update_bits(struct udevice *ud, uint reg, uint mask, uint val)
 {
 	int ret;
+	uint8_t valb;
 
-	ret = bdxxxx_bind(dev, pmic_children_info);
+	printf("in tmp_update_bits: ud = %p\n", ud);
+	ret = bdxxxx_read(ud, reg, &valb, 1);
 	if (ret)
 		return ret;
 
-	return bd718xx_init_press_duration(dev);
+	valb &= ~((u8)mask);
+	valb |= (u8)(val & mask);
+
+	return bdxxxx_write(ud, reg, &valb, 1);
+}
+#endif
+
+static int bd71885_bind(struct udevice *dev)
+{
+
+	return bdxxxx_bind(dev, pmic_children_info);
 }
 
 static int bd71885_reg_count(struct udevice *dev)
@@ -102,6 +57,7 @@ static int bd71885_reg_count(struct udevice *dev)
 static int bd71885_probe(struct udevice *dev)
 {
 	debug("%s: '%s' probed\n", __func__, dev->name);
+	printf("%s: '%s' probed\n", __func__, dev->name);
 
 	return 0;
 }
@@ -140,7 +96,75 @@ static int failure(int ret)
 	return CMD_RET_FAILURE;
 }
 
+#define BD71885_SHORT_PRESS_MASK	(BIT(0) | BIT(1))
+#define BD71885_MID_PRESS_MASK		(BIT(2) | BIT(3))
+#define BD71885_LONG_PRESS_MASK		(BIT(4) | BIT(5)) 
 
+static int bd718xx_init_press_duration(struct udevice *ud)
+{
+	uint short_press_ms, long_press_ms, mid_press_ms;
+	/* Press durations in mS */
+	static uint short_durations[] = { 16, 30, 60, 120 };
+	static uint mid_durations[] = { 500, 1000, 4000, 8000 };
+	static uint long_durations[] = { 1000, 5000, 10000, 15000 };
+	int ret, i;
+
+	ret =  dev_read_u32u(ud, "rohm,short-press-ms", &short_press_ms);
+	if (!ret) {
+		printf("Found rohm,short-press-ms %d\n", short_press_ms);
+		for (i = 0; i < ARRAY_SIZE(short_durations); i++) {
+			if (short_durations[i] == short_press_ms) {
+				printf("writing %u to 0x%x\n", i, BD71885_REG_PBTNCONFIG);
+				ret = pmic_clrsetbits(ud, BD71885_REG_PBTNCONFIG, BD71885_SHORT_PRESS_MASK, i);
+				if (ret) {
+					printf("Writing short_press failed %d\n", ret);
+					return ret;
+				}
+				break;
+			}
+		}
+		if (i == ARRAY_SIZE(short_durations))
+			pr_err("Bad short-press duration %d\n", short_press_ms);
+	}
+
+	ret = dev_read_u32u(ud, "rohm,mid-press-ms", &mid_press_ms);
+	if (!ret) {
+		printf("Found rohm,mid-press-ms %d\n", mid_press_ms);
+		for (i = 0; i < ARRAY_SIZE(mid_durations); i++) {
+			if (mid_durations[i] == mid_press_ms) {
+				printf("writing %u to 0x%x\n", i << 2, BD71885_REG_PBTNCONFIG);
+				ret = pmic_clrsetbits(ud, BD71885_REG_PBTNCONFIG, BD71885_MID_PRESS_MASK, i << 2);
+				if (ret) {
+					printf("Writing mid_press failed %d\n", ret);
+					return ret;
+				}
+				break;
+			}
+		}
+		if (i == ARRAY_SIZE(mid_durations))
+			pr_err("Bad mid-press duration %d\n", mid_press_ms);
+	}
+
+	ret = dev_read_u32u(ud, "rohm,long-press-ms", &long_press_ms);
+	if (!ret) {
+		printf("Found rohm,long-press-ms %d\n", long_press_ms);
+		for (i = 0; i < ARRAY_SIZE(long_durations); i++) {
+			if (long_durations[i] == long_press_ms) {
+				printf("writing %u to 0x%x\n", i << 4, BD71885_REG_PBTNCONFIG);
+				ret = pmic_clrsetbits(ud, BD71885_REG_PBTNCONFIG, BD71885_LONG_PRESS_MASK, i << 4);
+				if (ret) {
+					printf("Writing long_press failed %d\n", ret);
+					return ret;
+				}
+				break;
+			}
+		}
+		if (i == ARRAY_SIZE(long_durations))
+			pr_err("Bad long-press duration %d\n", long_press_ms);
+	}
+
+	return 0;
+}
 
 static void print_boot_reas(int reg)
 {
@@ -249,6 +273,23 @@ static int get_dev(void)
 	}
 
 	return 0;
+}
+
+static int do_dt_init(struct cmd_tbl *cmdtp, int flag, int argc, char *const argv[])
+{
+	int ret;
+
+	ret = get_dev();
+	if (ret)
+		return failure(ret);
+
+	ret = bd718xx_init_press_duration(currdev);
+	if (ret) {
+		printf("Failed to configure power-button (%d)\n", ret);
+		return failure(ret);
+	}
+
+	return CMD_RET_SUCCESS;
 }
 
 /* Get the reset reason */
@@ -461,6 +502,7 @@ static int do_get_state(struct cmd_tbl *cmdtp, int flag, int argc,
 }
 
 static struct cmd_tbl subcmd[] = {
+	U_BOOT_CMD_MKENT(dt_init, 1, 1, do_dt_init, "", ""),
 	U_BOOT_CMD_MKENT(rr, 1, 1, do_rr, "", ""),
 	U_BOOT_CMD_MKENT(pr, 1, 1, do_pr, "", ""),
 	U_BOOT_CMD_MKENT(hibernate, 1, 1, do_hibernate, "", ""),
@@ -488,5 +530,8 @@ U_BOOT_CMD(bd71885, CONFIG_SYS_MAXARGS, 1, do_bd71885,
 	"bd71885 rr - show previous reset reason\n"
 	"bd71885 pr - show previous power-on reason\n"
 	"bd71885 hibernate - tranfer to HBNT state - MAY DAMAGE HW\n"
+	"bd71885 get_state - read current power-state\n"
+	"bd71885 set_state <state>- set power-state, suspend, idle, run\n"
+	"bd71885 dt_init - initialize PMIC based on DT values\n"
 );
 
