@@ -576,6 +576,43 @@ static int start_adc_accum(void)
 	return set_adc_accum(1);
 }
 
+static int do_adc_state(struct cmd_tbl *cmdtp, int flag, int argc,
+			char *const argv[])
+{
+	char *state;
+	int ret;
+
+	ret = get_dev();
+	if (ret)
+		return failure(ret);
+
+	if (argc == 1) {
+		if (get_adc_accum())
+			printf("ADC ACCUM is started\n");
+		else
+			printf("ADC ACCUM is stopped\n");
+
+		return CMD_RET_SUCCESS;
+	}
+
+	if (argc != 2)
+		return CMD_RET_USAGE;
+
+	state = argv[1];
+
+	if (!strcmp(state, "start"))
+		ret = start_adc_accum();
+	else if (!strcmp(state, "stop"))
+		ret = stop_adc_accum();
+	else
+		return CMD_RET_USAGE;
+
+	if (ret)
+		return failure(ret);
+
+	return CMD_RET_SUCCESS;
+}
+
 static int __get_adc_source(void)
 {
 	int ret;
@@ -764,8 +801,9 @@ static struct cmd_tbl subcmd[] = {
 	U_BOOT_CMD_MKENT(hibernate, 1, 1, do_hibernate, "", ""),
 	U_BOOT_CMD_MKENT(get_state, 1, 1, do_get_state, "", ""),
 	U_BOOT_CMD_MKENT(set_state, 2, 1, do_set_state, "", ""),
-	U_BOOT_CMD_MKENT(DC_SOURCE, 2, 1, do_adc_source, "", ""),
-	U_BOOT_CMD_MKENT(DC_SOURCE, 2, 1, do_adc_vol_source, "", ""),
+	U_BOOT_CMD_MKENT(adc_state, 2, 1, do_adc_state, "", ""),
+	U_BOOT_CMD_MKENT(adc_source, 2, 1, do_adc_source, "", ""),
+	U_BOOT_CMD_MKENT(adc_vol_source, 2, 1, do_adc_vol_source, "", ""),
 };
 
 static int do_bd71885(struct cmd_tbl *cmdtp, int flag, int argc,
@@ -791,6 +829,7 @@ U_BOOT_CMD(bd71885, CONFIG_SYS_MAXARGS, 1, do_bd71885,
 	"bd71885 get_state - read current power-state\n"
 	"bd71885 set_state <state>- set power-state (suspend, idle, run)\n"
 	"bd71885 dt_init - initialize PMIC based on DT values\n"
+	"bd71885 adc_state - get or set ADC accum state (start, stop)\n"
 	"bd71885 adc_source - get or set ADC accum source (voltage, current, power)\n"
 	"bd71885 adc_vol_source - get or set ADC accum voltage source\n"
 );
