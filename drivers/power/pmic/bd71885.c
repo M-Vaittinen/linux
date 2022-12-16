@@ -501,6 +501,262 @@ static int do_get_state(struct cmd_tbl *cmdtp, int flag, int argc,
 	return CMD_RET_SUCCESS;
 }
 
+#define BD71885_ADC_CTRL_1 		0x6b
+#define BD71885_ADC_ACCUM_KICK		0x70
+#define BD71885_ADC_ACCUM_SRC 		(BIT(5) | BIT(4))
+#define BD71885_ADC_ACCUM_VOL_SRC 	0x0f
+#define BD71885_ADC_ACCUM_SRC_SIFT	4
+
+#define BD71885_ADC_ACCUM_STOP BIT(1)
+#define BD71885_ADC_ACCUM_START BIT(0)
+
+#define ADC_SRC_VOLTAGE			0
+static int __get_adc_vol_source(void)
+{
+	int ret;
+
+	ret = pmic_reg_read(currdev, BD71885_ADC_CTRL_1);
+	if (ret < 0)
+		return ret;
+
+	ret &= BD71885_ADC_ACCUM_VOL_SRC;
+
+	if (ret >= 0x0f) {
+		printf("Bad ADC accum voltage source %d\n", ret);
+
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
+
+static int get_adc_accum(void)
+{
+	int ret;
+
+	ret = pmic_reg_read(currdev, BD71885_ADC_ACCUM_KICK);
+
+	if (ret < 0) {
+		printf("Could not get ADC ACCUM state\n");
+
+		return 0;
+	}
+
+	return ret & BD71885_ADC_ACCUM_START;
+}
+
+
+static int set_adc_accum(bool enable)
+{
+	if (enable)
+		return pmic_reg_write(currdev, BD71885_ADC_ACCUM_KICK, BD71885_ADC_ACCUM_START);
+
+	return pmic_reg_write(currdev, BD71885_ADC_ACCUM_KICK, BD71885_ADC_ACCUM_STOP);
+}
+
+static int stop_adc_accum(void)
+{
+	int ret;
+
+	ret = set_adc_accum(0);
+
+	if (ret)
+		return ret;
+
+	/* Ensure ADC is stopped prior returning */
+	while (get_adc_accum())
+		;
+
+	return ret;
+}
+
+static int start_adc_accum(void)
+{
+	return set_adc_accum(1);
+}
+
+static int __get_adc_source(void)
+{
+	int ret;
+
+	ret = pmic_reg_read(currdev, BD71885_ADC_CTRL_1);
+	if (ret < 0)
+		return ret;
+
+	ret &= BD71885_ADC_ACCUM_SRC;
+	ret >>= BD71885_ADC_ACCUM_SRC_SIFT;
+
+	if (ret >= 3) {
+		printf("Bad ADC accum source %d\n", ret);
+
+		return -EINVAL;
+	}
+
+	return ret;
+}
+
+static int get_adc_source(void)
+{
+	static const char * const src[] = { "voltage", "current", "power" };
+	int ret;
+
+	ret = __get_adc_source();
+	if (ret < 0)
+		return failure(ret);
+
+	printf("ADC accumulator set to count '%s'\n", src[ret]);
+
+	return CMD_RET_SUCCESS;
+}
+
+static int do_adc_source(struct cmd_tbl *cmdtp, int flag, int argc,
+			 char *const argv[])
+{
+	char *src;
+	int ret, reg;
+	int started;
+
+	ret = get_dev();
+	if (ret)
+		return failure(ret);
+
+	if (argc == 1)
+		return get_adc_source();
+
+	if (argc != 2)
+		return CMD_RET_USAGE;
+
+	src = argv[1];
+
+	if (!strcmp(src, "voltage")) {
+		reg = 0;
+	} else if (!strcmp(src, "current")) {
+		reg = 1 << BD71885_ADC_ACCUM_SRC_SIFT;
+	} else if (!strcmp(src, "power")) {
+		reg = 2 << BD71885_ADC_ACCUM_SRC_SIFT;
+	} else {
+		printf("Unsupported ADC accum source\n");
+
+		return CMD_RET_USAGE;
+	}
+
+	started = get_adc_accum();
+	if (started) {
+		ret = stop_adc_accum();
+
+		if (ret)
+			return failure(ret);
+	}
+
+	ret = pmic_clrsetbits(currdev, BD71885_ADC_CTRL_1,
+			      BD71885_ADC_ACCUM_SRC, reg);
+	if (ret)
+		return failure(ret);
+
+	if (started) {
+		ret = start_adc_accum();
+		if (ret) {
+			printf("Could not restart ADC\n");
+			return failure(ret);
+		}
+	}
+
+	return CMD_RET_SUCCESS;
+}
+
+static const char * const adc_vol_sources[] = {
+	"vsys",
+	"fb1",
+	"fb2",
+	"fb3",
+	"fb4",
+	"fb5",
+	"fb6",
+	"fb7",
+	"fb8",
+	"ldo1",
+	"ldo2",
+	"ldo3",
+	"ldo4",
+	"adin_p",
+	"gpio1",
+};
+
+static int get_adc_vol_source(void)
+{
+	int ret = __get_adc_vol_source();
+
+	if (ret < 0)
+		return failure(ret);
+
+	printf("ADC Accumulator voltage source set to '%s'\n",
+	       adc_vol_sources[ret]);
+
+	return CMD_RET_SUCCESS;
+}
+
+static int do_adc_vol_source(struct cmd_tbl *cmdtp, int flag, int argc,
+			     char *const argv[])
+{
+	char *src;
+	int ret, i;
+	int started;
+
+	ret = get_dev();
+	if (ret)
+		return failure(ret);
+
+	if (argc == 1)
+		return get_adc_vol_source();
+
+	if (argc != 2)
+		return CMD_RET_USAGE;
+
+	if (ADC_SRC_VOLTAGE !=  __get_adc_source()) {
+		printf("ADC ACCUM not set to accumulate voltage\n");
+		get_adc_source();
+
+		return failure(-EINVAL);
+	}
+
+	src = argv[1];
+
+	for (i = 0; i < ARRAY_SIZE(adc_vol_sources); i++) {
+		if (!strcmp(src, adc_vol_sources[i]))
+			break;
+
+	}
+	if (i == ARRAY_SIZE(adc_vol_sources)) {
+		printf("Unsupported ADC accum voltage source\n");
+
+		return CMD_RET_USAGE;
+	}
+
+	started = get_adc_accum();
+	if (started) {
+		ret = stop_adc_accum();
+
+		if (ret)
+			return failure(ret);
+	}
+
+	ret = pmic_clrsetbits(currdev, BD71885_ADC_CTRL_1,
+			      BD71885_ADC_ACCUM_VOL_SRC, i);
+	if (ret)
+		return failure(ret);
+
+	if (started) {
+		ret = start_adc_accum();
+		if (ret) {
+			printf("Could not restart ADC\n");
+			return failure(ret);
+		}
+	}
+
+	return CMD_RET_SUCCESS;
+}
+
 static struct cmd_tbl subcmd[] = {
 	U_BOOT_CMD_MKENT(dt_init, 1, 1, do_dt_init, "", ""),
 	U_BOOT_CMD_MKENT(rr, 1, 1, do_rr, "", ""),
@@ -508,6 +764,8 @@ static struct cmd_tbl subcmd[] = {
 	U_BOOT_CMD_MKENT(hibernate, 1, 1, do_hibernate, "", ""),
 	U_BOOT_CMD_MKENT(get_state, 1, 1, do_get_state, "", ""),
 	U_BOOT_CMD_MKENT(set_state, 2, 1, do_set_state, "", ""),
+	U_BOOT_CMD_MKENT(DC_SOURCE, 2, 1, do_adc_source, "", ""),
+	U_BOOT_CMD_MKENT(DC_SOURCE, 2, 1, do_adc_vol_source, "", ""),
 };
 
 static int do_bd71885(struct cmd_tbl *cmdtp, int flag, int argc,
@@ -531,7 +789,9 @@ U_BOOT_CMD(bd71885, CONFIG_SYS_MAXARGS, 1, do_bd71885,
 	"bd71885 pr - show previous power-on reason\n"
 	"bd71885 hibernate - tranfer to HBNT state - MAY DAMAGE HW\n"
 	"bd71885 get_state - read current power-state\n"
-	"bd71885 set_state <state>- set power-state, suspend, idle, run\n"
+	"bd71885 set_state <state>- set power-state (suspend, idle, run)\n"
 	"bd71885 dt_init - initialize PMIC based on DT values\n"
+	"bd71885 adc_source - get or set ADC accum source (voltage, current, power)\n"
+	"bd71885 adc_vol_source - get or set ADC accum voltage source\n"
 );
 
