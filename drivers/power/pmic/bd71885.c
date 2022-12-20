@@ -5,17 +5,22 @@
  */
 
 #include <common.h>
-#include <errno.h>
+#include <div64.h>
 #include <dm.h>
+#include <errno.h>
 #include <i2c.h>
 #include <log.h>
 #include <asm/global_data.h>
+#include <linux/delay.h>
 #include <power/pmic.h>
 #include <power/regulator.h>
 #include <power/bd71885.h>
 #include "bdxxxx.h"
 
 DECLARE_GLOBAL_DATA_PTR;
+
+/* Board specific sense resistor value read from the device-tree */
+static uint g_r_sense;
 
 static const struct pmic_child_info pmic_children_info[] = {
 	/* buck */
@@ -161,6 +166,11 @@ static int bd718xx_init_press_duration(struct udevice *ud)
 		if (i == ARRAY_SIZE(long_durations))
 			pr_err("Bad long-press duration %d\n", long_press_ms);
 	}
+	ret =  dev_read_u32u(ud, "rohm,sense-resistor-ohms", &g_r_sense);
+	if (!ret)
+		printf("R_sense set to %u Ohms\n", g_r_sense);
+	else
+		pr_err("No sense resistor value found\n");
 
 	return 0;
 }
@@ -499,6 +509,8 @@ static int do_get_state(struct cmd_tbl *cmdtp, int flag, int argc,
 
 	return CMD_RET_SUCCESS;
 }
+#define BD71885_ADC_ACCUM_VAL_BASE	0x74
+#define BD71885_ADC_ACCUM_CNT_BASE	0x71
 
 #define BD71885_ADC_CTRL_1 		0x6b
 #define BD71885_ADC_CTRL_2 		0x6c
@@ -512,6 +524,7 @@ static int do_get_state(struct cmd_tbl *cmdtp, int flag, int argc,
 #define BD71885_ADC_GAIN_MASK		(BIT(3) | BIT(4))
 #define BD71885_ADC_GAIN_SIFT		3
 
+#define BD71885_ADC_ACCUM_CLEAR BIT(2)
 #define BD71885_ADC_ACCUM_STOP BIT(1)
 #define BD71885_ADC_ACCUM_START BIT(0)
 
@@ -552,19 +565,26 @@ static int get_adc_accum(void)
 }
 
 
-static int set_adc_accum(bool enable)
+static int set_adc_accum(bool enable, bool clear)
 {
-	if (enable)
-		return pmic_reg_write(currdev, BD71885_ADC_ACCUM_KICK, BD71885_ADC_ACCUM_START);
+	uint val = 0;
 
-	return pmic_reg_write(currdev, BD71885_ADC_ACCUM_KICK, BD71885_ADC_ACCUM_STOP);
+	if (clear)
+		val |= BD71885_ADC_ACCUM_CLEAR;
+
+	if (enable)
+		val |= BD71885_ADC_ACCUM_START;
+	else
+		val |= BD71885_ADC_ACCUM_STOP;
+
+	return pmic_reg_write(currdev, BD71885_ADC_ACCUM_KICK, val);
 }
 
-static int stop_adc_accum(void)
+static int __stop_adc_accum(bool clear)
 {
 	int ret;
 
-	ret = set_adc_accum(0);
+	ret = set_adc_accum(0, clear);
 
 	if (ret)
 		return ret;
@@ -576,9 +596,25 @@ static int stop_adc_accum(void)
 	return ret;
 }
 
+static int stop_adc_accum(void)
+{
+	return __stop_adc_accum(0);
+}
+
+static int stop_clear_adc_accum(void)
+{
+	return __stop_adc_accum(1);
+}
+
 static int start_adc_accum(void)
 {
-	return set_adc_accum(1);
+	return set_adc_accum(1, 0);
+}
+
+static int start_clear_adc_accum(void) __attribute__((unused));
+static int start_clear_adc_accum(void)
+{
+	return set_adc_accum(1, 1);
 }
 
 static int do_adc_state(struct cmd_tbl *cmdtp, int flag, int argc,
@@ -863,6 +899,374 @@ static int do_adc_vol_source(struct cmd_tbl *cmdtp, int flag, int argc,
 	return CMD_RET_SUCCESS;
 }
 
+enum {
+	TYPE_VOLTAGE,
+	TYPE_CURRENT,
+	TYPE_POWER,
+	TYPE_TEMPERATURE,
+	#define TYPE_MAX TYPE_TEMPERATURE
+};
+
+static int get_operation_type(char *arg)
+{
+	if (!arg)
+		return -EINVAL;
+
+	switch(arg[0])
+	{
+	case 'v':
+		return TYPE_VOLTAGE;
+	case 'i':
+		return TYPE_CURRENT;
+	case 'p':
+		return TYPE_POWER;
+	case 't':
+		return TYPE_TEMPERATURE;
+	}
+
+	pr_err("Invalid operation\n");
+	return -EINVAL;
+}
+
+enum {
+	LIMIT_TYPE_ACCUM,
+	LIMIT_TYPE_POWER,
+	LIMIT_TYPE_TEMPERATURE,
+	#define LIMIT_TYPE_MAX LIMIT_TYPE_TEMPERATURE
+};
+
+static int get_limit_type(char *arg)
+{
+	if (!arg)
+		return -EINVAL;
+
+	switch(arg[0])
+	{
+	case 'p':
+		return LIMIT_TYPE_POWER;
+	case 'a':
+		return LIMIT_TYPE_ACCUM;
+	case 't':
+		return LIMIT_TYPE_TEMPERATURE;
+	}
+
+	pr_err("Invalid limit type\n");
+	return -EINVAL;
+}
+
+
+
+#define BD71885_ADC_NUM_SAMPLES_BASE	0x6d
+#define BD71885_MAX_ADC_SAMPLES 0x3fffff
+
+static int bd71885_adc_set_num_samples(struct udevice *ud, long samples)
+{
+	int val = cpu_to_be32(samples) << 8;
+
+	return pmic_write(ud, BD71885_ADC_NUM_SAMPLES_BASE, (char *)&val, 3);
+}
+
+static int interval2reg(long interval)
+{
+	static const int ivals[] = { 50, 100, 1000, 10000, 100000, 1000000};
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(ivals); i++)
+		if (ivals[i] == interval)
+			return i;
+
+	return -EINVAL;
+}
+
+static int get_adc_accum_avg(struct udevice *ud, uint64_t *avg_value, uint64_t *accum)
+{
+	uint64_t *tmp2, val2;
+	char buf[4], buf2[8];
+	uint num_samples;
+	u32 *tmp;
+	int ret;
+
+	tmp = (u32 *)&buf[0];
+
+	ret = pmic_read(ud, BD71885_ADC_ACCUM_CNT_BASE, &buf[1], 3);
+	if (ret)
+		return ret;
+
+	num_samples = be32_to_cpu(*tmp);
+
+	ret = pmic_read(ud, BD71885_ADC_ACCUM_VAL_BASE, &buf2[3], 5);
+	if (ret)
+		return ret;
+
+	tmp2 = (uint64_t *)&buf2[0];
+	val2 = be64_to_cpu(*tmp2);
+
+	*accum = val2;
+	val2 += num_samples / 2;
+	do_div(val2, num_samples);
+	*avg_value = val2;
+
+	return 0;
+}
+
+static int get_avg_voltage(struct udevice *ud, uint64_t *value, uint64_t *accum)
+{
+	int ret;
+
+	ret = get_adc_accum_avg(ud, value, accum);
+	if (ret)
+		return ret;
+
+	/* Scale? */
+	return 0;
+}
+
+static int get_avg_current(struct udevice *ud, uint64_t *value, uint64_t *accum)
+{
+	int ret;
+
+	ret = get_adc_accum_avg(ud, value, accum);
+	if (ret)
+		return ret;
+
+	/* Scale? */
+	return 0;
+}
+
+static int get_avg_power(struct udevice *ud, uint64_t *value, uint64_t *accum)
+{
+	int ret;
+
+	ret = get_adc_accum_avg(ud, value, accum);
+	if (ret)
+		return ret;
+
+	/* Scale? */
+	return 0;
+}
+
+static int measure_avg(struct udevice *ud, int type, long samples,
+		       long interval)
+{
+	unsigned long tmp = interval, meas_time;
+	int multiplier = 0;
+	int ret, i, j;
+	int ireg;
+
+	ireg = interval2reg(interval);
+	ret = stop_clear_adc_accum();
+	if (ret)
+		return failure(ret);
+
+	ret = pmic_clrsetbits(ud, BD71885_ADC_CTRL_2, BD71885_ADC_INTERVAL_MASK,
+			      ireg);
+	if (ret)
+		return failure(ret);
+
+	ret = bd71885_adc_set_num_samples(ud, samples);
+	if (ret)
+		return failure(ret);
+
+	while (tmp > 1000) {
+		tmp /= 10;
+		multiplier++;
+	}
+
+	meas_time = samples * tmp;
+
+	ret = start_adc_accum();
+	if (ret)
+		return failure(ret);
+
+	/*
+	 * Here we should catch the IRQ but for the sake of the simplicity
+	 * we just sleep/delay for the time it takes to complete measurement.
+	 *
+	 * Note, we keep the CPU busy. This should probably be avoided in
+	 * the product code using IRQs instead.
+	 */
+	if (!multiplier)
+		udelay(meas_time);
+	else
+		for (j = 1; j < multiplier; j++)
+			for (i = 0; i < 10; i++)
+				udelay(meas_time);
+
+	switch (type) {
+	uint64_t avg, accum;
+
+	case TYPE_VOLTAGE:
+		ret = get_avg_voltage(ud, &avg, &accum);
+		printf("Samples %lu, interval %lu, average voltage %llu, accumulated %llu\n",
+		       samples, interval, avg, accum);
+		break;
+	case TYPE_CURRENT:
+		ret = get_avg_current(ud, &avg, &accum);
+		printf("Samples %lu, interval %lu, average current %llu accumulated %llu\n",
+		       samples, interval, avg, accum);
+		break;
+	case TYPE_POWER:
+		ret = get_avg_power(ud, &avg, &accum);
+		printf("Samples %lu, interval %lu, average power %llu accumulated %llu\n",
+		       samples, interval, avg, accum);
+		break;
+	default:
+		pr_err("Unknown type\n");
+		ret = -EINVAL;
+		break;
+	}
+	if (ret)
+		return failure(ret);
+
+	return CMD_RET_SUCCESS;
+}
+
+static int do_adc_meas(struct cmd_tbl *cmdtp, int flag, int argc,
+			     char *const argv[])
+{
+	long samples, interval;
+	int type, ret;
+	char *eptr;
+
+	if (argc != 4)
+		return CMD_RET_USAGE;
+
+	type = get_operation_type(argv[1]);
+	if (type < 0 || type == TYPE_TEMPERATURE)
+		return CMD_RET_USAGE;
+
+        samples = simple_strtol(argv[2], &eptr, 10);
+        if (!*argv[2] || *eptr || ((unsigned long)samples) >= BD71885_MAX_ADC_SAMPLES)
+		return CMD_RET_USAGE;
+
+        interval = simple_strtol(argv[3], &eptr, 10);
+        if (!*argv[3] || *eptr)
+		return CMD_RET_USAGE;
+
+	if (0 > interval2reg(interval))
+		return CMD_RET_USAGE;
+
+	ret = get_dev();
+	if (ret)
+		return failure(ret);
+
+	return measure_avg(currdev, type, samples, interval);
+}
+#define BD71885_ADC_ACCUM_TH_BASE	0x81
+#define BD71885_ADC_TEMP_WARN_BASE	0x86
+#define BD71885_ADC_POWER_WARN_BASE	0x88
+
+static int adc_set_accum_limit(struct udevice *ud, uint64_t limit)
+{
+	char *tmp;
+
+	if (limit > 0x3FFFFFFFFULL) {
+		pr_err("Limit too big\n");
+		return -EINVAL;
+	}
+
+	limit = cpu_to_be64(limit);
+	tmp = ((char*)&limit);
+
+	return pmic_write(ud, BD71885_ADC_ACCUM_TH_BASE, &tmp[3], 5);
+}
+
+static int adc_set_power_limit(struct udevice *ud, uint64_t limit)
+{
+	char *tmp;
+	u16 lim;
+
+	if (limit > 0x3FFF) {
+		pr_err("Limit too big\n");
+		return -EINVAL;
+	}
+
+	lim = cpu_to_be16((u16)limit);
+	tmp = ((char*)&lim);
+
+	return pmic_write(ud, BD71885_ADC_POWER_WARN_BASE, &tmp[0], 2);
+
+}
+
+static int adc_set_temp_limit(struct udevice *ud, uint64_t limit)
+{
+	char *tmp;
+	u16 lim;
+
+	if (limit > 0x3ff) {
+		pr_err("Limit too big\n");
+		return -EINVAL;
+	}
+
+	lim = cpu_to_be16((u16)limit);
+	tmp = ((char*)&lim);
+
+	return pmic_write(ud, BD71885_ADC_TEMP_WARN_BASE, &tmp[0], 2);
+
+}
+
+static int do_adc_limit(struct cmd_tbl *cmdtp, int flag, int argc,
+			     char *const argv[])
+{
+	long long limit;
+	int type, ret;
+	char *eptr;
+
+	if (argc != 3)
+		return CMD_RET_USAGE;
+
+	type = get_limit_type(argv[1]);
+	if (type < 0)
+		return CMD_RET_USAGE;
+
+        limit = simple_strtoll(argv[2], &eptr, 10);
+        if (!*argv[2] || *eptr)
+		return CMD_RET_USAGE;
+
+	ret = get_dev();
+	if (ret)
+		return failure(ret);
+
+	switch (type) {
+	case LIMIT_TYPE_ACCUM:
+		ret = adc_set_accum_limit(currdev, limit);
+		break;
+	case LIMIT_TYPE_POWER:
+		ret = adc_set_power_limit(currdev, limit);
+		break;
+	case LIMIT_TYPE_TEMPERATURE:
+		ret = adc_set_temp_limit(currdev, limit);
+		break;
+	default:
+		pr_err("Unknown type\n");
+		ret = -EINVAL;
+		break;
+	}
+	if (ret)
+		return failure(ret);
+
+	return CMD_RET_SUCCESS;
+}
+
+static int do_adc_get(struct cmd_tbl *cmdtp, int flag, int argc,
+			     char *const argv[])
+{
+	int type, ret;
+
+	if (argc != 2)
+		return CMD_RET_USAGE;
+
+	type = get_operation_type(argv[1]);
+	if (type < 0)
+		return CMD_RET_USAGE;
+
+	ret = get_dev();
+	if (ret)
+		return failure(ret);
+
+	return CMD_RET_SUCCESS;
+}
+
 static struct cmd_tbl subcmd[] = {
 	U_BOOT_CMD_MKENT(dt_init, 1, 1, do_dt_init, "", ""),
 	U_BOOT_CMD_MKENT(rr, 1, 1, do_rr, "", ""),
@@ -874,6 +1278,9 @@ static struct cmd_tbl subcmd[] = {
 	U_BOOT_CMD_MKENT(adc_source, 2, 1, do_adc_source, "", ""),
 	U_BOOT_CMD_MKENT(adc_vol_source, 2, 1, do_adc_vol_source, "", ""),
 	U_BOOT_CMD_MKENT(adc_gain, 2, 1, do_adc_gain, "", ""),
+	U_BOOT_CMD_MKENT(adc_meas, 4, 1, do_adc_meas, "", ""),
+	U_BOOT_CMD_MKENT(adc_limit, 3, 1, do_adc_limit, "", ""),
+	U_BOOT_CMD_MKENT(adc_get, 2, 1, do_adc_get, "", ""),
 };
 
 static int do_bd71885(struct cmd_tbl *cmdtp, int flag, int argc,
@@ -903,5 +1310,8 @@ U_BOOT_CMD(bd71885, CONFIG_SYS_MAXARGS, 1, do_bd71885,
 	"bd71885 adc_source - get or set ADC accum source (voltage, current, power)\n"
 	"bd71885 adc_vol_source - get or set ADC accum voltage source\n"
 	"bd71885 adc_gain - get or set gain for ADC current accumulator\n"
+	"bd71885 adc_meas [v, i, p] <num_samples> <interval> - measure\n"
+	"bd71885 adc_limit [a(ccum), p(ower), t(emperature)] <threshold value> - set limit\n"
+	"bd71885 adc_get [v, i, p, t] - get last measured value\n"
 );
 
