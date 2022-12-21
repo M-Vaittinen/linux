@@ -529,25 +529,6 @@ static int do_get_state(struct cmd_tbl *cmdtp, int flag, int argc,
 #define BD71885_ADC_ACCUM_START BIT(0)
 
 #define ADC_SRC_VOLTAGE			0
-static int __get_adc_vol_source(void)
-{
-	int ret;
-
-	ret = pmic_reg_read(currdev, BD71885_ADC_CTRL_1);
-	if (ret < 0)
-		return ret;
-
-	ret &= BD71885_ADC_ACCUM_VOL_SRC;
-
-	if (ret >= 0x0f) {
-		pr_err("Bad ADC accum voltage source %d\n", ret);
-
-		return -EINVAL;
-	}
-
-	return ret;
-}
-
 
 static int get_adc_accum(void)
 {
@@ -690,7 +671,7 @@ static int get_adc_source(void)
 
 static const long bd71885_adc_gain[] = { 15, 30, 60, 100 };
 
-static int __get_adc_gain(void)
+static int __get_adc_gain_idx(void)
 {
 	int ret;
 
@@ -705,7 +686,7 @@ static int get_adc_gain(void)
 {
 	int ret;
 
-	ret = __get_adc_gain();
+	ret = __get_adc_gain_idx();
 	if (ret < 0)
 		return failure(ret);
 
@@ -824,33 +805,64 @@ static int do_adc_source(struct cmd_tbl *cmdtp, int flag, int argc,
 	return CMD_RET_SUCCESS;
 }
 
-static const char * const adc_vol_sources[] = {
-	"vsys",
-	"fb1",
-	"fb2",
-	"fb3",
-	"fb4",
-	"fb5",
-	"fb6",
-	"fb7",
-	"fb8",
-	"ldo1",
-	"ldo2",
-	"ldo3",
-	"ldo4",
-	"adin_p",
-	"gpio1",
+struct bd71885_adc_vol_src {
+	const char * const name;
+	const uint reso_uv;
 };
+
+#define BD71885_ADC_VOL(_name, _vol) { .name = (_name), .reso_uv = (_vol) }
+
+static const struct bd71885_adc_vol_src adc_vol_sources[] = {
+	BD71885_ADC_VOL("vsys", 5860000),
+	BD71885_ADC_VOL("fb1", 5860000),
+	BD71885_ADC_VOL("fb2", 5860000),
+	BD71885_ADC_VOL("fb3", 5860000),
+	BD71885_ADC_VOL("fb4", 5860000),
+	BD71885_ADC_VOL("fb5", 5860000),
+	BD71885_ADC_VOL("fb6", 5860000),
+	BD71885_ADC_VOL("fb7", 5860000),
+	BD71885_ADC_VOL("fb8", 5860000),
+	BD71885_ADC_VOL("ldo1", 5860000),
+	BD71885_ADC_VOL("ldo2", 5860000),
+	BD71885_ADC_VOL("ldo3", 5860000),
+	BD71885_ADC_VOL("ldo4", 5860000),
+	BD71885_ADC_VOL("adin_p", 5860000),
+	BD71885_ADC_VOL("gpio1", 1170000),
+};
+
+static int __get_adc_vol_source(const struct bd71885_adc_vol_src **src)
+{
+	int ret;
+
+	ret = pmic_reg_read(currdev, BD71885_ADC_CTRL_1);
+	if (ret < 0)
+		return ret;
+
+	ret &= BD71885_ADC_ACCUM_VOL_SRC;
+
+	if (ret >= 0x0f) {
+		pr_err("Bad ADC accum voltage source %d\n", ret);
+
+		return -EINVAL;
+	}
+
+	*src = &adc_vol_sources[ret];
+
+	return 0;
+}
 
 static int get_adc_vol_source(void)
 {
-	int ret = __get_adc_vol_source();
+	int ret;
+	const struct bd71885_adc_vol_src * src;
 
-	if (ret < 0)
+	ret = __get_adc_vol_source(&src);
+
+	if (ret)
 		return failure(ret);
 
 	printf("ADC Accumulator voltage source set to '%s'\n",
-	       adc_vol_sources[ret]);
+	       src->name);
 
 	return CMD_RET_SUCCESS;
 }
@@ -881,7 +893,7 @@ static int do_adc_vol_source(struct cmd_tbl *cmdtp, int flag, int argc,
 	src = argv[1];
 
 	for (i = 0; i < ARRAY_SIZE(adc_vol_sources); i++) {
-		if (!strcmp(src, adc_vol_sources[i]))
+		if (!strcmp(src, adc_vol_sources[i].name))
 			break;
 
 	}
@@ -1012,34 +1024,127 @@ static int get_adc_accum_avg(struct udevice *ud, uint64_t *avg_value, uint64_t *
 static int get_avg_voltage(struct udevice *ud, uint64_t *value, uint64_t *accum)
 {
 	int ret;
+	const struct bd71885_adc_vol_src *src;
+
+	ret = __get_adc_vol_source(&src);
+	if (ret)
+		return ret;
+
+	printf("Measured voltage for source '%s'\n", src->name);
 
 	ret = get_adc_accum_avg(ud, value, accum);
 	if (ret)
 		return ret;
 
-	/* Scale? */
+	/* Scale */
+	*value *= src->reso_uv;
+	*accum *= src->reso_uv;
+
 	return 0;
+}
+
+static int gain_idx_resolution(unsigned int gain_idx)
+{
+	/* Unit 0.1 uV / register step */
+	static const int gain2reso[] = { 781, 391, 195, 117};
+
+	if (gain_idx < ARRAY_SIZE(gain2reso))
+		return gain2reso[gain_idx];
+
+	return -EINVAL;
+}
+
+static int get_adc_reg_reso(void)
+{
+	int ret;
+
+	ret = __get_adc_gain_idx();
+	if (ret < 0)
+		return ret;
+
+	ret = gain_idx_resolution(ret);
+	if (ret < 0)
+		return -EINVAL;
+
+	return ret;
 }
 
 static int get_avg_current(struct udevice *ud, uint64_t *value, uint64_t *accum)
 {
+	unsigned int rsens;
+	int64_t reso;
+	uint64_t curr;
 	int ret;
+
+	reso = get_adc_reg_reso();
+	if (reso < 0)
+		return reso;
 
 	ret = get_adc_accum_avg(ud, value, accum);
 	if (ret)
 		return ret;
 
-	/* Scale? */
+	/*
+	 * V = resolution * reg_val
+	 *
+	 * V = RI => I = V/R
+	 *
+	 * Unit of V is 0.1 uV
+	 * Unit of R is Ohm
+	 * => Unit of I is 0.1 uA
+	 */
+
+	curr = *value * reso;
+	/*
+	 * Let's increase rsense to make units uA and to reduce the time
+	 * a loop-based implementation of do_div() may take
+	 */
+	rsens = g_r_sense * 10;
+	do_div(curr, rsens);
+	*value = curr;
+
+	curr = *accum * reso;
+	do_div(curr, rsens);
+	*accum = curr;
+
 	return 0;
 }
 
 static int get_avg_power(struct udevice *ud, uint64_t *value, uint64_t *accum)
 {
+	const struct bd71885_adc_vol_src *src;
+	uint64_t power;
+	unsigned int rsens;
+	int64_t reso;
 	int ret;
+
+	ret = __get_adc_vol_source(&src);
+	if (ret)
+		return ret;
+
+	reso = get_adc_reg_reso();
+	if (reso < 0)
+		return reso;
+
+	reso *= src->reso_uv;
 
 	ret = get_adc_accum_avg(ud, value, accum);
 	if (ret)
 		return ret;
+
+	rsens = g_r_sense * 10;
+
+	/* uA * uV */
+
+	/* Can we overflow here? */
+	power = *value * reso;
+	do_div(power, rsens);
+	*value = power;
+
+	/* Can we overflow here? */
+	power = *accum * reso;
+	do_div(power, rsens);
+	*accum = power;
 
 	/* Scale? */
 	return 0;
@@ -1097,12 +1202,12 @@ static int measure_avg(struct udevice *ud, int type, long samples,
 
 	case TYPE_VOLTAGE:
 		ret = get_avg_voltage(ud, &avg, &accum);
-		printf("Samples %lu, interval %lu, average voltage %llu, accumulated %llu\n",
+		printf("Samples %lu, interval %lu, average voltage %llu uV, accumulated %llu uV\n",
 		       samples, interval, avg, accum);
 		break;
 	case TYPE_CURRENT:
 		ret = get_avg_current(ud, &avg, &accum);
-		printf("Samples %lu, interval %lu, average current %llu accumulated %llu\n",
+		printf("Samples %lu, interval %lu, average current %llu uA accumulated %llu uA\n",
 		       samples, interval, avg, accum);
 		break;
 	case TYPE_POWER:
@@ -1135,6 +1240,12 @@ static int do_adc_meas(struct cmd_tbl *cmdtp, int flag, int argc,
 	if (type < 0 || type == TYPE_TEMPERATURE)
 		return CMD_RET_USAGE;
 
+	if ( (type == TYPE_CURRENT || TYPE_POWER) && !g_r_sense) {
+		pr_err("sense-resistor not known\n");
+
+		return failure(-EINVAL);
+	}
+
         samples = simple_strtol(argv[2], &eptr, 10);
         if (!*argv[2] || *eptr || ((unsigned long)samples) >= BD71885_MAX_ADC_SAMPLES)
 		return CMD_RET_USAGE;
@@ -1152,6 +1263,7 @@ static int do_adc_meas(struct cmd_tbl *cmdtp, int flag, int argc,
 
 	return measure_avg(currdev, type, samples, interval);
 }
+
 #define BD71885_ADC_ACCUM_TH_BASE	0x81
 #define BD71885_ADC_TEMP_WARN_BASE	0x86
 #define BD71885_ADC_POWER_WARN_BASE	0x88
