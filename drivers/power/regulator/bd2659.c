@@ -39,7 +39,7 @@ struct bd2659_plat {
 };
 
 #define BD_DATA(_name, _range, _id) \
-{ .name = (_name), .ranges = (_range),  .numranges = ARRAY_SIZE(_range), .id = (_id) }
+{ .name = (_name), .ranges = &(_range)[0],  .numranges = ARRAY_SIZE(_range), .id = (_id) }
 
 static struct regulator_vrange buck123_vranges[] = {
 	BD_RANGE(500000, 5000, 1, 0xab),
@@ -52,10 +52,10 @@ static struct regulator_vrange buck4_vranges[] = {
 };
 
 static struct bd2659_plat bd2659_reg_data[] = {
-	BD_DATA("BUCK1", &buck123_vranges[0], BD2659_BUCK1_ID),
-	BD_DATA("BUCK2", &buck123_vranges[0], BD2659_BUCK2_ID),
-	BD_DATA("BUCK3", &buck123_vranges[0], BD2659_BUCK3_ID),
-	BD_DATA("BUCK4", &buck4_vranges[0], BD2659_BUCK4_ID),
+	BD_DATA("BUCK1", buck123_vranges, BD2659_BUCK1_ID),
+	BD_DATA("BUCK2", buck123_vranges, BD2659_BUCK2_ID),
+	BD_DATA("BUCK3", buck123_vranges, BD2659_BUCK3_ID),
+	BD_DATA("BUCK4", buck4_vranges, BD2659_BUCK4_ID),
 };
 
 static int bd2659_get_enable(struct udevice *dev)
