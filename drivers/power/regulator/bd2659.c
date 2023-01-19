@@ -62,7 +62,7 @@ static int bd2659_get_enable(struct udevice *dev)
 {
 	int val;
 	struct bd2659_plat *plat = dev_get_plat(dev);
-	int reg = TO_BUCKx_REG(BD2659_BUCK0_VID_S0,  plat->id);
+	int reg = TO_BUCKx_REG(plat->id, BD2659_BUCK0_VID_S0);
 
 	val = pmic_reg_read(dev->parent, reg);
 	if (val < 0)
@@ -75,7 +75,7 @@ static int bd2659_set_enable(struct udevice *dev, bool enable)
 {
 	int val;
 	struct bd2659_plat *plat = dev_get_plat(dev);
-	int reg = TO_BUCKx_REG(BD2659_BUCK0_VID_S0,  plat->id);
+	int reg = TO_BUCKx_REG(plat->id, BD2659_BUCK0_VID_S0);
 
 	if (enable)
 		val = plat->vsel_cache;
@@ -106,7 +106,7 @@ static int bd2659_get_value(struct udevice *dev)
 static int bd2659_set_value(struct udevice *dev, int uvolt)
 {
 	struct bd2659_plat *plat = dev_get_plat(dev);
-	int reg = TO_BUCKx_REG(BD2659_BUCK0_VID_S0,  plat->id);
+	int reg = TO_BUCKx_REG(plat->id, BD2659_BUCK0_VID_S0);
 	unsigned int sel;
 	int i, enable;
 	int found = 0;
@@ -177,10 +177,10 @@ static int bd2659_regulator_probe(struct udevice *dev)
 			int reg;
 
 			*plat = bd2659_reg_data[i];
-			reg = TO_BUCKx_REG(BD2659_BUCK0_VID_S0,  plat->id);
+			reg = TO_BUCKx_REG(plat->id, BD2659_BUCK0_VID_S0);
 			plat->vsel_cache = pmic_reg_read(parent, reg);
 			if (plat->vsel_cache < 0) {
-				pr_err("Reading S3 voltage failed\n");
+				pr_err("Reading S0 voltage failed\n");
 
 				return plat->vsel_cache;
 			}
