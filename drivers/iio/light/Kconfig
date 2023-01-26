@@ -303,6 +303,21 @@ config ROHM_BU27008
 	  Typical application is adjusting LCD backlight of TVs,
 	  mobile phones and tablet PCs.
 
+config ROHM_BU27010
+	tristate "ROHM BU27010 color (RGB+C/IR + flicker) sensor"
+	depends on I2C
+	select REGMAP_I2C
+	select IIO_GTS_HELPER
+	help
+	  Enable support for the ROHM BU27010 color sensor.
+	  The ROHM BU27010 is a sensor with 6 photodiodes (red, green,
+	  blue, clear, IR and flickering detection) with five configurable
+	  channels. Red, green and flickering detection being always
+	  available and two out of the rest three (blue, clear, IR) can be
+	  selected to be simultaneously measured.
+	  Typical application is adjusting LCD/OLED backlight of TVs,
+	  mobile phones and tablet PCs.
+
 config ROHM_BU27034
 	tristate "ROHM BU27034 ambient light sensor"
 	depends on I2C
