@@ -18095,6 +18095,7 @@ M:	Matti Vaittinen <mazziesaccount@gmail.com>
 S:	Supported
 F:	drivers/iio/light/rohm-bu27034.c
 F:	drivers/iio/light/rohm-bu27008.c
+F:	drivers/iio/light/rohm-bu27010.c
 
 ROHM MULTIFUNCTION BD9571MWV-M PMIC DEVICE DRIVERS
 M:	Marek Vasut <marek.vasut+renesas@gmail.com>
