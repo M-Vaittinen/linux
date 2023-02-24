@@ -267,9 +267,12 @@ static int bu27034_get_gain(struct bu27034_data *data, int chan, int *gain)
 	sel = ret;
 
 	ret = iio_gts_find_gain_by_sel(&data->gts, sel);
-	if (ret < 0)
+	if (ret < 0) {
 		dev_err(data->dev, "chan %u: unknown gain value 0x%x\n", chan,
 			sel);
+
+		return ret;
+	}
 
 	*gain = ret;
 
@@ -346,15 +349,15 @@ static int bu27034_write_gain_sel(struct bu27034_data *data, int chan, int sel)
 	return regmap_update_bits(data->regmap, reg[chan], mask, sel);
 }
 
-static int _bu27034_set_gain(struct bu27034_data *data, int chan, int gain)
+static int bu27034_set_gain(struct bu27034_data *data, int chan, int gain)
 {
-	int ret, sel;
+	int ret;
 
 	ret = iio_gts_find_sel_by_gain(&data->gts, gain);
 	if (ret < 0)
 		return ret;
 
-	return bu27034_write_gain_sel(data, chan, sel);
+	return bu27034_write_gain_sel(data, chan, ret);
 }
 
 /* Caller should hold the lock to protect data->cached */
@@ -436,7 +439,7 @@ static int bu27034_try_set_int_time(struct bu27034_data *data, int time_us)
 	 * channels intact by tuning the gains.
 	 */
 	for (i = 0; i < numg; i++) {
-		ret = _bu27034_set_gain(data, gains[i].chan, gains[i].new_gain);
+		ret = bu27034_set_gain(data, gains[i].chan, gains[i].new_gain);
 		if (ret)
 			goto unlock_out;
 	}
@@ -519,12 +522,12 @@ static int bu27034_set_scale(struct bu27034_data *data, int chan,
 		}
 
 		for (i = 0; i < 2; i++) {
-			ret = _bu27034_set_gain(data, gains[0].chan,
+			ret = bu27034_set_gain(data, gains[0].chan,
 						gains[0].new_gain);
 			if (ret)
 				goto unlock_out;
 
-			ret = _bu27034_set_gain(data, gains[1].chan,
+			ret = bu27034_set_gain(data, gains[1].chan,
 						gains[1].new_gain);
 			if (ret)
 				goto unlock_out;
