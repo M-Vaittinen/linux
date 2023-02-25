@@ -35,7 +35,51 @@ enum iio_available_type {
 	IIO_AVAIL_LIST,
 	IIO_AVAIL_RANGE,
 };
-
+/**
+ * enum iio_chan_info_enum - Information related to a IIO channel
+ *
+ * Many IIO channels have extra properties. Typically these properties can be
+ * read / written by user using the read_raw or write_raw callbacks in the
+ * struct iio_info.
+ *
+ * @IIO_CHAN_INFO_RAW:		Raw channel data as provided by device. Scale
+ *				and offset are often required to convert these
+ *				values to meaningful units.
+ * @IIO_CHAN_INFO_PROCESSED:	Processed data. Typically driver performs
+ *				computations to convert device data to more
+ *				meaningfull processed values.
+ * @IIO_CHAN_INFO_SCALE:	Scale to be applied to data in order to convert
+ *				it to units mandated by the channel type.
+ * @IIO_CHAN_INFO_OFFSET:	Offset to be applied to data in order to convert
+ *				it to units mandated by the channel type.
+ * @IIO_CHAN_INFO_CALIBSCALE:
+ * @IIO_CHAN_INFO_CALIBBIAS:
+ * @IIO_CHAN_INFO_PEAK:		Peak value (TODO: Since measurement start?)
+ * @IIO_CHAN_INFO_PEAK_SCALE:	Scale to be applied to the peak value in order
+ *				to convert it to units mandated by the channel
+ *				type.
+ * @IIO_CHAN_INFO_QUADRATURE_CORRECTION_RAW:
+ * @IIO_CHAN_INFO_AVERAGE_RAW:	Average of raw values (TODO: Since measurement
+ *				start or just for some undefined time?)
+ * @IIO_CHAN_INFO_SAMP_FREQ:	Sampling frequency for device.
+ * @IIO_CHAN_INFO_FREQUENCY:
+ * @IIO_CHAN_INFO_PHASE:
+ * @IIO_CHAN_INFO_HARDWAREGAIN:	Amplification applied by the hardware.
+ * @IIO_CHAN_INFO_HYSTERESIS:
+ * @IIO_CHAN_INFO_HYSTERESIS_RELATIVE:
+ * @IIO_CHAN_INFO_INT_TIME:	Integration time. Time during which the data is
+ *				accumulated by the device.
+ * @IIO_CHAN_INFO_ENABLE:
+ * @IIO_CHAN_INFO_CALIBHEIGHT:
+ * @IIO_CHAN_INFO_CALIBWEIGHT:
+ * @IIO_CHAN_INFO_DEBOUNCE_COUNT:
+ * @IIO_CHAN_INFO_DEBOUNCE_TIME:
+ * @IIO_CHAN_INFO_CALIBEMISSIVITY:
+ * @IIO_CHAN_INFO_OVERSAMPLING_RATIO:
+ * @IIO_CHAN_INFO_THERMOCOUPLE_TYPE:
+ * @IIO_CHAN_INFO_CALIBAMBIENT:
+ * @IIO_CHAN_INFO_ZEROPOINT:
+ */
 enum iio_chan_info_enum {
 	IIO_CHAN_INFO_RAW = 0,
 	IIO_CHAN_INFO_PROCESSED,
