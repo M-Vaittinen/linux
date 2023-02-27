@@ -18104,6 +18104,7 @@ F:	drivers/iio/light/bh1750.c
 
 ROHM BU27034 AMBIENT LIGHT SENSOR DRIVER
 M:	Matti Vaittinen <mazziesaccount@gmail.com>
+L:	linux-iio@vger.kernel.org
 S:	Supported
 F:	drivers/iio/light/rohm-bu27034.c
 
