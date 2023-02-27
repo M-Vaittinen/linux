@@ -16,7 +16,8 @@
 #include <linux/units.h>
 
 #include <linux/iio/iio.h>
-#include <linux/iio/sysfs.h>
+#include <linux/iio/buffer.h>
+#include <linux/iio/kfifo_buf.h>
 
 #include "gain-time-scale-helper.h"
 
@@ -45,12 +46,42 @@
 #define BU27034_REG_MANUFACTURER_ID	0x92
 #define BU27034_REG_MAX BU27034_REG_MANUFACTURER_ID
 
+/*
+ * The BU27034 does not have interrupt or any other mechanism of triggering
+ * the data read when measurement has finished. Hence we poll the VALID bit in
+ * a thread. We will try to wake the thread BU27034_MEAS_WAIT_PREMATURE_MS
+ * milliseconds before the expected sampling time to prevent the drifting. Eg,
+ * If we constantly wake up a bit too late we would eventually skip a sample.
+ * And because the sleep can't wake up _exactly_ at given time this would be
+ * inevitable even if the sensor clock would be perfectly phase-locked to CPU
+ * clock - which we can't say is the case.
+ *
+ * This is still fragile. No matter how big advance do we have, we will still
+ * risk of losing a sample because things can in a rainy-day skenario be
+ * delayed a lot. Yet, more we reserve the time for polling, more we also lose
+ * the performance by spending cycles polling the register. So, selecting this
+ * value is a balancing dance between severity of wasting CPU time and severity
+ * of losing samples.
+ *
+ * In most cases losing the samples is not _that_ crucial because light levels
+ * tend to change slowly.
+ */
+#define BU27034_MEAS_WAIT_PREMATURE_MS	5
+#define BU27034_DATA_WAIT_TIME_US	1000
+#define BU27034_TOTAL_DATA_WAIT_TIME_US (BU27034_MEAS_WAIT_PREMATURE_MS * 1000)
+
+
 enum {
 	BU27034_CHAN_ALS,
 	BU27034_CHAN_DATA0,
 	BU27034_CHAN_DATA1,
 	BU27034_CHAN_DATA2,
 	BU27034_NUM_CHANS
+};
+
+static const unsigned long bu27034_scan_masks[] = {
+	BIT(BU27034_CHAN_ALS) | BIT(BU27034_CHAN_DATA0) |
+	BIT(BU27034_CHAN_DATA1) | BIT(BU27034_CHAN_DATA2), 0
 };
 
 /*
@@ -136,10 +167,18 @@ static const struct iio_chan_spec bu27034_channels[] = {
 		.type = IIO_LIGHT,
 		.info_mask_separate = BIT(IIO_CHAN_INFO_PROCESSED),
 		.channel = BU27034_CHAN_ALS,
+		.scan_index = BU27034_CHAN_ALS,
+		.scan_type = {
+			.sign = 'u',
+			.realbits = 32,
+			.storagebits = 32,
+			.endianness = IIO_CPU,
+		},
 	},
 	BU27034_CHAN_DATA(DATA0, IIO_MOD_LIGHT_CLEAR),
 	BU27034_CHAN_DATA(DATA1, IIO_MOD_LIGHT_CLEAR),
 	BU27034_CHAN_DATA(DATA2, IIO_MOD_LIGHT_IR),
+	IIO_CHAN_SOFT_TIMESTAMP(4),
 };
 
 struct bu27034_data {
@@ -151,8 +190,14 @@ struct bu27034_data {
 	 */
 	struct mutex mutex;
 	struct iio_gts gts;
-	bool cached;
+	struct task_struct *task;
+	int int_time_ms;
 	__le16 raw[3];
+	struct {
+		u32 lux;
+		__le16 channels[3];
+		s64 ts __aligned(8);
+	} scan;
 };
 
 struct bu27034_result {
@@ -198,7 +243,7 @@ static const struct regmap_config bu27034_regmap = {
 	.max_register	= BU27034_REG_MAX,
 	.cache_type	= REGCACHE_RBTREE,
 	.volatile_table = &bu27034_volatile_regs,
-	.wr_table	= &bu27034_read_only_ranges,
+	.wr_table	= &bu27034_ro_regs,
 };
 
 static int bu27034_validate_int_time(struct bu27034_data *data, int time_us)
@@ -319,7 +364,7 @@ static int bu27034_get_scale(struct bu27034_data *data, int channel, int *val,
 	return ret;
 }
 
-/* Caller should hold the lock to protect data->cached */
+/* Caller should hold the lock to protect lux reading */
 static int bu27034_write_gain_sel(struct bu27034_data *data, int chan, int sel)
 {
 	static const int reg[] = {
@@ -343,9 +388,6 @@ static int bu27034_write_gain_sel(struct bu27034_data *data, int chan, int sel)
 		mask =  BU27034_MASK_D2_GAIN_LO;
 	}
 
-	/* We are changing gain so we need to invalidate cached results. */
-	data->cached = false;
-
 	return regmap_update_bits(data->regmap, reg[chan], mask, sel);
 }
 
@@ -360,7 +402,7 @@ static int bu27034_set_gain(struct bu27034_data *data, int chan, int gain)
 	return bu27034_write_gain_sel(data, chan, ret);
 }
 
-/* Caller should hold the lock to protect data->cached */
+/* Caller should hold the lock to protect data->int_time */
 static int bu27034_set_int_time(struct bu27034_data *data, int time)
 {
 	int ret;
@@ -369,11 +411,12 @@ static int bu27034_set_int_time(struct bu27034_data *data, int time)
 	if (ret < 0)
 		return ret;
 
-	/* We are changing int time so we need to invalidate cached results. */
-	data->cached = false;
+	ret = regmap_update_bits(data->regmap, BU27034_REG_MODE_CONTROL1,
+				 BU27034_MASK_MEAS_MODE, ret);
+	if (!ret)
+		data->int_time_ms = time / 1000;
 
-	return regmap_update_bits(data->regmap, BU27034_REG_MODE_CONTROL1,
-				  BU27034_MASK_MEAS_MODE, ret);
+	return time;
 }
 
 /*
@@ -822,138 +865,51 @@ static void bu27034_invalidate_read_data(struct bu27034_data *data)
 	bu27034_has_valid_sample(data);
 }
 
-static int _bu27034_get_result(struct bu27034_data *data, u16 *res, bool lock)
+static int bu27034_read_result(struct bu27034_data *data, int chan, int *res)
+{
+	int reg[] = {
+		[BU27034_CHAN_DATA0] = BU27034_REG_DATA0_LO,
+		[BU27034_CHAN_DATA1] = BU27034_REG_DATA1_LO,
+		[BU27034_CHAN_DATA2] = BU27034_REG_DATA2_LO,
+	};
+	int valid, ret;
+	__le16 val;
+
+	ret = regmap_read_poll_timeout(data->regmap, BU27034_REG_MODE_CONTROL4,
+				       valid, (valid & BU27034_MASK_VALID),
+				       BU27034_DATA_WAIT_TIME_US, 0);
+	if (ret)
+		return ret;
+
+	ret = regmap_bulk_read(data->regmap, reg[chan], &val, sizeof(val));
+	if (ret)
+		return ret;
+
+	*res = le16_to_cpu(val);
+
+	return 0;
+}
+
+static int bu27034_get_result_unlocked(struct bu27034_data *data, __le16 *res,
+				       int size)
 {
 	int ret = 0;
 
 retry:
-	if (lock)
-		mutex_lock(&data->mutex);
-	/* Get new value from sensor if data is ready - or use cached value */
+	/* Get new value from sensor if data is ready */
 	if (bu27034_has_valid_sample(data)) {
 		ret = regmap_bulk_read(data->regmap, BU27034_REG_DATA0_LO,
-				       &data->raw[0], sizeof(data->raw));
+				       res, size);
 		if (ret)
-			goto unlock_out;
+			return ret;
 
-		data->cached = true;
 		bu27034_invalidate_read_data(data);
-	} else if (unlikely(!data->cached)) {
-		/* No new data in sensor and no value cached. Wait and retry */
-		if (lock)
-			mutex_unlock(&data->mutex);
+	} else {
+		/* No new data in sensor. Wait and retry */
 		msleep(25);
 
 		goto retry;
 	}
-	res[0] = le16_to_cpu(data->raw[0]);
-	res[1] = le16_to_cpu(data->raw[1]);
-	res[2] = le16_to_cpu(data->raw[2]);
-
-unlock_out:
-	if (lock)
-		mutex_unlock(&data->mutex);
-
-	return ret;
-}
-
-static int bu27034_get_result_unlocked(struct bu27034_data *data, u16 *res)
-{
-	return _bu27034_get_result(data, res, false);
-}
-
-static int bu27034_get_result(struct bu27034_data *data, u16 *res)
-{
-	return _bu27034_get_result(data, res, true);
-}
-
-/*
- * The formula given by vendor for computing luxes out of data0 and data1
- * (in open air) is as follows:
- *
- * Let's mark:
- * D0 = data0/ch0_gain/meas_time_ms * 25600
- * D1 = data1/ch1_gain/meas_time_ms * 25600
- *
- * Then:
- * if (D1/D0 < 0.87)
- *	lx = (0.001331 * D0 + 0.0000354 * D1) * ((D1 / D0 - 0.87) * 3.45 + 1)
- * else if (D1/D0 < 1)
- *	lx = (0.001331 * D0 + 0.0000354 * D1) * ((D1 / D0 - 0.87) * 0.385 + 1)
- * else
- *	lx = (0.001331 * D0 + 0.0000354 * D1) * ((D1 / D0 - 2) * -0.05 + 1)
- *
- * we try implementing it here. Users who have for example some colored lens
- * need to modify the calculation but I hope this gives a starting point for
- * those working with such devices.
- *
- * The first case (D1/D0 < 0.87) can be computed to a form:
- * lx = 0.004521097 * D1 - 0.002663996 * D0 + 0.00012213 * D1 * D1 / D0
- */
-static int bu27034_get_lux(struct bu27034_data *data, int *val)
-{
-	unsigned int gain0, gain1, meastime;
-	unsigned int d1_d0_ratio_scaled;
-	u16 res[3], ch0, ch1;
-	u64 helper64;
-	int ret;
-
-	mutex_lock(&data->mutex);
-	ret = bu27034_get_result_unlocked(data, &res[0]);
-	if (ret)
-		goto unlock_out;
-
-	/* Avoid div by zero */
-	if (!res[0])
-		ch0 = 1;
-	else
-		ch0 = res[0];
-
-	if (!res[1])
-		ch1 = 1;
-	else
-		ch1 = res[1];
-
-
-	ret = bu27034_get_gain(data, BU27034_CHAN_DATA0, &gain0);
-	if (ret)
-		goto unlock_out;
-
-	ret = bu27034_get_gain(data, BU27034_CHAN_DATA1, &gain1);
-	if (ret)
-		goto unlock_out;
-
-	ret = bu27034_get_int_time(data);
-	if (ret < 0)
-		goto unlock_out;
-
-	meastime = ret;
-
-	mutex_unlock(&data->mutex);
-
-	d1_d0_ratio_scaled = (unsigned int)ch1 * (unsigned int)gain0 * 100;
-	helper64 = (u64)ch1 * (u64)gain0 * 100LLU;
-
-	if (helper64 != d1_d0_ratio_scaled) {
-		unsigned int div = (unsigned int)ch0 * gain1;
-
-		do_div(helper64, div);
-		d1_d0_ratio_scaled = helper64;
-	} else {
-		d1_d0_ratio_scaled /= ch0 * gain1;
-	}
-
-	if (d1_d0_ratio_scaled < 87)
-		*val = bu27034_fixp_calc_lx(ch0, ch1, gain0, gain1, meastime, 0);
-	else if (d1_d0_ratio_scaled < 100)
-		*val = bu27034_fixp_calc_lx(ch0, ch1, gain0, gain1, meastime, 1);
-	else
-		*val = bu27034_fixp_calc_lx(ch0, ch1, gain0, gain1, meastime, 2);
-
-	return 0;
-
-unlock_out:
-	mutex_unlock(&data->mutex);
 
 	return ret;
 }
@@ -982,6 +938,136 @@ static int bu27034_meas_en(struct bu27034_data *data)
 static int bu27034_meas_dis(struct bu27034_data *data)
 {
 	return bu27034_meas_set(data, false);
+}
+
+static int bu27034_get_single_result(struct bu27034_data *data, int chan,
+				     int *val)
+{
+	int ret;
+
+	ret = bu27034_meas_en(data);
+	if (ret)
+		return ret;
+
+	mutex_lock(&data->mutex);
+
+	ret = bu27034_get_int_time(data);
+	if (ret < 0)
+		goto unlock_out;
+
+	msleep(ret / 1000);
+
+	ret = bu27034_read_result(data, chan, val);
+
+unlock_out:
+	mutex_unlock(&data->mutex);
+
+	return ret;
+}
+
+/*
+ * The formula given by vendor for computing luxes out of data0 and data1
+ * (in open air) is as follows:
+ *
+ * Let's mark:
+ * D0 = data0/ch0_gain/meas_time_ms * 25600
+ * D1 = data1/ch1_gain/meas_time_ms * 25600
+ *
+ * Then:
+ * if (D1/D0 < 0.87)
+ *	lx = (0.001331 * D0 + 0.0000354 * D1) * ((D1 / D0 - 0.87) * 3.45 + 1)
+ * else if (D1/D0 < 1)
+ *	lx = (0.001331 * D0 + 0.0000354 * D1) * ((D1 / D0 - 0.87) * 0.385 + 1)
+ * else
+ *	lx = (0.001331 * D0 + 0.0000354 * D1) * ((D1 / D0 - 2) * -0.05 + 1)
+ *
+ * we try implementing it here. Users who have for example some colored lens
+ * need to modify the calculation but I hope this gives a starting point for
+ * those working with such devices.
+ *
+ * The first case (D1/D0 < 0.87) can be computed to a form:
+ * lx = 0.004521097 * D1 - 0.002663996 * D0 + 0.00012213 * D1 * D1 / D0
+ */
+
+static int bu27034_calc_lux(struct bu27034_data *data, __le16 *res, int *val)
+{
+	unsigned int gain0, gain1, meastime;
+	unsigned int d1_d0_ratio_scaled;
+	u16  ch0, ch1;
+	u64 helper64;
+	int ret;
+
+	/*
+	 * We return 0 luxes if calculation fails. This should be reasonably
+	 * easy to spot from the buffers especially if raw-data channels show
+	 * valid values
+	 */
+	*val = 0;
+
+	/* Avoid div by zero */
+	if (!res[0])
+		ch0 = 1;
+	else
+		ch0 = le16_to_cpu(res[0]);
+
+	if (!res[1])
+		ch1 = 1;
+	else
+		ch1 = le16_to_cpu(res[1]);
+
+
+	ret = bu27034_get_gain(data, BU27034_CHAN_DATA0, &gain0);
+	if (ret)
+		return ret;
+
+	ret = bu27034_get_gain(data, BU27034_CHAN_DATA1, &gain1);
+	if (ret)
+		return ret;
+
+	ret = bu27034_get_int_time(data);
+	if (ret < 0)
+		return ret;
+
+	meastime = ret;
+
+	d1_d0_ratio_scaled = (unsigned int)ch1 * (unsigned int)gain0 * 100;
+	helper64 = (u64)ch1 * (u64)gain0 * 100LLU;
+
+	if (helper64 != d1_d0_ratio_scaled) {
+		unsigned int div = (unsigned int)ch0 * gain1;
+
+		do_div(helper64, div);
+		d1_d0_ratio_scaled = helper64;
+	} else {
+		d1_d0_ratio_scaled /= ch0 * gain1;
+	}
+
+	if (d1_d0_ratio_scaled < 87)
+		*val = bu27034_fixp_calc_lx(ch0, ch1, gain0, gain1, meastime, 0);
+	else if (d1_d0_ratio_scaled < 100)
+		*val = bu27034_fixp_calc_lx(ch0, ch1, gain0, gain1, meastime, 1);
+	else
+		*val = bu27034_fixp_calc_lx(ch0, ch1, gain0, gain1, meastime, 2);
+
+	return 0;
+
+}
+
+static int bu27034_get_lux(struct bu27034_data *data, int *val)
+{
+	__le16 res[3];
+	int ret;
+
+	mutex_lock(&data->mutex);
+	ret = bu27034_get_result_unlocked(data, &res[0], sizeof(res));
+	if (ret)
+		goto unlock_out;
+
+	ret = bu27034_calc_lux(data, res, val);
+unlock_out:
+	mutex_unlock(&data->mutex);
+
+	return ret;
 }
 
 static int bu27034_read_raw(struct iio_dev *idev,
@@ -1031,26 +1117,19 @@ static int bu27034_read_raw(struct iio_dev *idev,
 		if (chan->channel < BU27034_CHAN_DATA0 ||
 		    chan->channel > BU27034_CHAN_DATA2)
 			return -EINVAL;
+
+		ret = iio_device_claim_direct_mode(idev);
+		if (ret)
+			return ret;
+
 		/*
-		 * Reading one channel at a time is inefficient.
-		 *
-		 * Hence we run the measurement on the background and always
-		 * read all the channels. There are following caveats:
-		 * 1) The VALID bit handling is racy. Valid bit clearing is not
-		 * tied to reading the data in the hardware. We clear the
-		 * valid-bit manually _after_ we have read the data - but this
-		 * means there is a small time-window where new result may
-		 * arrive between read and clear. This means we can miss a
-		 * sample. For normal use this should not be fatal because
-		 * usually the light is changing slowly. There might be
-		 * use-cases for measuring more rapidly changing light but this
-		 * driver is unsuitable for those cases anyways. (Smallest
-		 * measurement time we support is 55 mS.)
-		 * 2) Data readings more frequent than the meas_time will return
-		 * the same cached values. This should not be a problem for the
-		 * very same reason 1) is not a problem.
+		 * Reasing one channel at a time is ineffiecient but we don't
+		 * care here. Buffered version should be used if performance is
+		 * an issue.
 		 */
-		ret = bu27034_get_result(data, &res[0]);
+		ret = bu27034_get_single_result(data, chan->channel, val);
+		iio_device_release_direct_mode(idev);
+
 		if (ret)
 			return ret;
 
@@ -1063,9 +1142,22 @@ static int bu27034_read_raw(struct iio_dev *idev,
 		if (chan->type != IIO_LIGHT)
 			return -EINVAL;
 
-		ret = bu27034_get_lux(data, val);
+		ret = bu27034_meas_en(data);
 		if (ret)
 			return ret;
+
+		ret = iio_device_claim_direct_mode(idev);
+		if (ret)
+			return ret;
+
+		ret = bu27034_get_lux(data, val);
+
+		iio_device_release_direct_mode(idev);
+		bu27034_meas_dis(data);
+
+		if (ret)
+			return ret;
+
 		return IIO_VAL_INT;
 
 	}
@@ -1078,26 +1170,33 @@ static int bu27034_write_raw(struct iio_dev *idev,
 			     int val, int val2, long mask)
 {
 	struct bu27034_data *data = iio_priv(idev);
+	int ret;
+
+	ret = iio_device_claim_direct_mode(idev);
+	if (ret)
+		return ret;
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SCALE:
-		return bu27034_set_scale(data, chan->channel, val, val2);
+		ret = bu27034_set_scale(data, chan->channel, val, val2);
+		break;
 	case IIO_CHAN_INFO_INT_TIME:
-		return bu27034_try_set_int_time(data, val);
+		ret = bu27034_try_set_int_time(data, val);
+		break;
+	default:
+		ret = -EINVAL;
+		break;
 	}
 
-	return -EINVAL;
+	iio_device_release_direct_mode(idev);
+
+	return ret;
 }
 
 static const struct iio_info bu27034_info = {
 	.read_raw = &bu27034_read_raw,
 	.write_raw = &bu27034_write_raw,
 };
-
-static void bu27034_meas_stop(void *data)
-{
-	bu27034_meas_dis(data);
-}
 
 static int bu27034_chip_init(struct bu27034_data *data)
 {
@@ -1116,16 +1215,112 @@ static int bu27034_chip_init(struct bu27034_data *data)
 	 */
 	msleep(1);
 
-	/*
-	 * Consider disabling the measurement (and powering off the sensor) for
-	 * runtime pm
-	 */
+	return 0;
+}
+
+static int bu27034_wait_for_data(struct bu27034_data *data)
+{
+	int ret, val;
+
+	ret = regmap_read_poll_timeout(data->regmap, BU27034_REG_MODE_CONTROL4,
+				       val, (val & BU27034_MASK_VALID),
+				       BU27034_DATA_WAIT_TIME_US,
+				       BU27034_TOTAL_DATA_WAIT_TIME_US);
+	if (ret) {
+		dev_err(data->dev, "data polling %s\n",
+			!(val & BU27034_MASK_VALID) ? "timeout" : "fail");
+		return ret;
+	}
+	ret = regmap_bulk_read(data->regmap, BU27034_REG_DATA0_LO,
+			       &data->scan.channels[0],
+			       sizeof(data->scan.channels));
+	bu27034_invalidate_read_data(data);
+
+	return ret;
+}
+
+static int bu27034_buffer_thread(void *arg)
+{
+	struct iio_dev *idev = arg;
+	struct bu27034_data *data;
+	int wait_ms;
+
+	data = iio_priv(idev);
+
+	wait_ms = data->int_time_ms - BU27034_MEAS_WAIT_PREMATURE_MS;
+
+	while (!kthread_should_stop())
+	{
+		int ret;
+		int64_t tstamp;
+
+		msleep(wait_ms);
+		ret = bu27034_wait_for_data(data);
+		if (ret)
+			continue;
+
+		tstamp = iio_get_time_ns(idev);
+
+		if (*idev->active_scan_mask & BIT(BU27034_CHAN_ALS)) {
+			ret = bu27034_calc_lux(data, &data->scan.channels[0],
+					       &data->scan.lux);
+			if (ret)
+				dev_err(data->dev, "failed to calculate lux\n");
+		}
+		iio_push_to_buffers_with_timestamp(idev, &data->scan, tstamp);
+
+	}
+
+	return 0;
+}
+
+static int bu27034_buffer_enable(struct iio_dev *idev)
+{
+	struct bu27034_data *data = iio_priv(idev);
+	struct task_struct *task;
+	int ret;
+
+	mutex_lock(&data->mutex);
+
 	ret = bu27034_meas_en(data);
 	if (ret)
 		return ret;
 
-	return devm_add_action_or_reset(data->dev, bu27034_meas_stop, data);
+	task = kthread_run(bu27034_buffer_thread, idev,
+				 "bu27034-buffering-%u",
+				 iio_device_id(idev));
+	if (IS_ERR(task)) {
+		mutex_unlock(&data->mutex);
+		return PTR_ERR(task);
+	}
+
+	data->task = task;
+	mutex_unlock(&data->mutex);
+
+	return 0;
 }
+
+static int bu27034_buffer_disable(struct iio_dev *idev)
+{
+	struct bu27034_data *data = iio_priv(idev);
+	int ret;
+
+	mutex_lock(&data->mutex);
+	if (data->task) {
+		kthread_stop(data->task);
+		data->task = NULL;
+	}
+
+	ret = bu27034_meas_dis(data);
+	mutex_unlock(&data->mutex);
+
+	return ret;
+}
+
+static const struct iio_buffer_setup_ops bu27034_buffer_ops = {
+	.postenable = &bu27034_buffer_enable,
+	.predisable = &bu27034_buffer_disable,
+};
 
 static int bu27034_probe(struct i2c_client *i2c)
 {
@@ -1182,13 +1377,16 @@ static int bu27034_probe(struct i2c_client *i2c)
 	idev->name = "bu27034-als";
 	idev->info = &bu27034_info;
 
-	idev->modes = INDIO_DIRECT_MODE;
+	idev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_SOFTWARE;
+	idev->available_scan_masks = bu27034_scan_masks;
 
 	ret = bu27034_chip_init(data);
 	if (ret)
 		return ret;
 
-	ret = devm_iio_device_register(data->dev, idev);
+	ret = devm_iio_kfifo_buffer_setup(dev, idev, &bu27034_buffer_ops);
+
+	ret = devm_iio_device_register(dev, idev);
 	if (ret < 0)
 		return dev_err_probe(dev, ret,
 				     "Unable to register iio device\n");
