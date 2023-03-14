@@ -4,6 +4,7 @@
 #include <drm/drm_kunit_helpers.h>
 
 #include <kunit/test.h>
+#include <kunit/test-helpers.h>
 
 #include "vc4_mock.h"
 

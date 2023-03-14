@@ -8,9 +8,6 @@
 struct drm_device;
 struct kunit;
 
-struct device *test_kunit_helper_alloc_device(struct kunit *test);
-void test_kunit_helper_free_device(struct kunit *test, struct device *dev);
-
 struct drm_device *
 __drm_kunit_helper_alloc_drm_device_with_driver(struct kunit *test,
 						struct device *dev,

@@ -14,6 +14,7 @@
 #include <drm/drm_probe_helper.h>
 
 #include <kunit/test.h>
+#include <kunit/test-helpers.h>
 
 struct drm_probe_helper_test_priv {
 	struct drm_device *drm;

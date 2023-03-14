@@ -5,6 +5,7 @@
 #include <drm/drm_managed.h>
 
 #include <kunit/resource.h>
+#include <kunit/test-helpers.h>
 
 #include <linux/device.h>
 

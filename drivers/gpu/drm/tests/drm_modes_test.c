@@ -8,6 +8,7 @@
 #include <drm/drm_modes.h>
 
 #include <kunit/test.h>
+#include <kunit/test-helpers.h>
 
 #include <linux/units.h>
 

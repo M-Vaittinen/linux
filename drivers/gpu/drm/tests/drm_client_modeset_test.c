@@ -4,6 +4,7 @@
  */
 
 #include <kunit/test.h>
+#include <kunit/test-helpers.h>
 
 #include <drm/drm_connector.h>
 #include <drm/drm_edid.h>

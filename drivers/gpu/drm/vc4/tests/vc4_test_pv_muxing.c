@@ -13,6 +13,7 @@
 #include <drm/drm_plane.h>
 
 #include <kunit/test.h>
+#include <kunit/test-helpers.h>
 
 #include "../vc4_drv.h"
 
