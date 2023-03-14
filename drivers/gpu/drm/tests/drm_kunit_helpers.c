@@ -33,7 +33,7 @@ static struct platform_driver fake_platform_driver = {
 };
 
 /**
- * drm_kunit_helper_alloc_device - Allocate a mock device for a KUnit test
+ * test_kunit_helper_alloc_device - Allocate a mock device for a KUnit test
  * @test: The test context object
  *
  * This allocates a fake struct &device to create a mock for a KUnit
@@ -41,13 +41,13 @@ static struct platform_driver fake_platform_driver = {
  * able to leverage the usual infrastructure and most notably the
  * device-managed resources just like a "real" device.
  *
- * Callers need to make sure drm_kunit_helper_free_device() on the
+ * Callers need to make sure test_kunit_helper_free_device() on the
  * device when done.
  *
  * Returns:
  * A pointer to the new device, or an ERR_PTR() otherwise.
  */
-struct device *drm_kunit_helper_alloc_device(struct kunit *test)
+struct device *test_kunit_helper_alloc_device(struct kunit *test)
 {
 	struct platform_device *pdev;
 	int ret;
@@ -63,23 +63,23 @@ struct device *drm_kunit_helper_alloc_device(struct kunit *test)
 
 	return &pdev->dev;
 }
-EXPORT_SYMBOL_GPL(drm_kunit_helper_alloc_device);
+EXPORT_SYMBOL_GPL(test_kunit_helper_alloc_device);
 
 /**
- * drm_kunit_helper_free_device - Frees a mock device
+ * test_kunit_helper_free_device - Frees a mock device
  * @test: The test context object
  * @dev: The device to free
  *
- * Frees a device allocated with drm_kunit_helper_alloc_device().
+ * Frees a device allocated with test_kunit_helper_alloc_device().
  */
-void drm_kunit_helper_free_device(struct kunit *test, struct device *dev)
+void test_kunit_helper_free_device(struct kunit *test, struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 
 	platform_device_unregister(pdev);
 	platform_driver_unregister(&fake_platform_driver);
 }
-EXPORT_SYMBOL_GPL(drm_kunit_helper_free_device);
+EXPORT_SYMBOL_GPL(test_kunit_helper_free_device);
 
 struct drm_device *
 __drm_kunit_helper_alloc_drm_device_with_driver(struct kunit *test,

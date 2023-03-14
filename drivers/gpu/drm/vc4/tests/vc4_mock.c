@@ -162,7 +162,7 @@ static struct vc4_dev *__mock_device(struct kunit *test, bool is_vc5)
 	struct device *dev;
 	int ret;
 
-	dev = drm_kunit_helper_alloc_device(test);
+	dev = test_kunit_helper_alloc_device(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, dev);
 
 	vc4 = drm_kunit_helper_alloc_drm_device_with_driver(test, dev,

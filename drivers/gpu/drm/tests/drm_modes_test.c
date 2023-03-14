@@ -23,7 +23,7 @@ static int drm_test_modes_init(struct kunit *test)
 	priv = kunit_kzalloc(test, sizeof(*priv), GFP_KERNEL);
 	KUNIT_ASSERT_NOT_NULL(test, priv);
 
-	priv->dev = drm_kunit_helper_alloc_device(test);
+	priv->dev = test_kunit_helper_alloc_device(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, priv->dev);
 
 	priv->drm = __drm_kunit_helper_alloc_drm_device(test, priv->dev,
@@ -40,7 +40,7 @@ static void drm_test_modes_exit(struct kunit *test)
 {
 	struct drm_test_modes_priv *priv = test->priv;
 
-	drm_kunit_helper_free_device(test, priv->dev);
+	test_kunit_helper_free_device(test, priv->dev);
 }
 
 static void drm_test_modes_analog_tv_ntsc_480i(struct kunit *test)
