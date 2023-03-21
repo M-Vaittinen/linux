@@ -4,6 +4,7 @@
 #include <drm/drm_kunit_helpers.h>
 #include <drm/drm_managed.h>
 
+#include <kunit/platform_device.h>
 #include <kunit/resource.h>
 
 #include <linux/device.h>
@@ -35,7 +36,7 @@ static void drm_test_managed_run_action(struct kunit *test)
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, priv);
 	init_waitqueue_head(&priv->action_wq);
 
-	dev = drm_kunit_helper_alloc_device(test);
+	dev = test_kunit_helper_alloc_device(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, dev);
 
 	drm = __drm_kunit_helper_alloc_drm_device(test, dev, sizeof(*drm), 0, DRIVER_MODESET);
@@ -48,7 +49,7 @@ static void drm_test_managed_run_action(struct kunit *test)
 	KUNIT_ASSERT_EQ(test, ret, 0);
 
 	drm_dev_unregister(drm);
-	drm_kunit_helper_free_device(test, dev);
+	test_kunit_helper_free_device(test, dev);
 
 	ret = wait_event_interruptible_timeout(priv->action_wq, priv->action_done,
 					       msecs_to_jiffies(TEST_TIMEOUT_MS));

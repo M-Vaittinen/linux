@@ -8,9 +8,6 @@
 struct drm_device;
 struct kunit;
 
-struct device *drm_kunit_helper_alloc_device(struct kunit *test);
-void drm_kunit_helper_free_device(struct kunit *test, struct device *dev);
-
 struct drm_device *
 __drm_kunit_helper_alloc_drm_device_with_driver(struct kunit *test,
 						struct device *dev,
@@ -27,7 +24,7 @@ __drm_kunit_helper_alloc_drm_device_with_driver(struct kunit *test,
  *
  * This function creates a struct &drm_device from @_dev and @_drv.
  *
- * @_dev should be allocated using drm_kunit_helper_alloc_device().
+ * @_dev should be allocated using test_kunit_helper_alloc_device().
  *
  * The driver is tied to the @_test context and will get cleaned at the
  * end of the test. The drm_device is allocated through
@@ -72,7 +69,7 @@ __drm_kunit_helper_alloc_drm_device(struct kunit *test,
  * This function creates a struct &drm_driver and will create a struct
  * &drm_device from @_dev and that driver.
  *
- * @_dev should be allocated using drm_kunit_helper_alloc_device().
+ * @_dev should be allocated using test_kunit_helper_alloc_device().
  *
  * The driver is tied to the @_test context and will get cleaned at the
  * end of the test. The drm_device is allocated through

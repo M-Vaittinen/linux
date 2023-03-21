@@ -3,6 +3,7 @@
  * Copyright (c) 2022 Maxime Ripard <mripard@kernel.org>
  */
 
+#include <kunit/platform_device.h>
 #include <kunit/test.h>
 
 #include <drm/drm_connector.h>
@@ -60,7 +61,7 @@ static int drm_client_modeset_test_init(struct kunit *test)
 
 	test->priv = priv;
 
-	priv->dev = drm_kunit_helper_alloc_device(test);
+	priv->dev = test_kunit_helper_alloc_device(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, priv->dev);
 
 	priv->drm = __drm_kunit_helper_alloc_drm_device(test, priv->dev,
@@ -86,7 +87,7 @@ static void drm_client_modeset_test_exit(struct kunit *test)
 {
 	struct drm_client_modeset_test_priv *priv = test->priv;
 
-	drm_kunit_helper_free_device(test, priv->dev);
+	test_kunit_helper_free_device(test, priv->dev);
 }
 
 static void drm_test_pick_cmdline_res_1920_1080_60(struct kunit *test)

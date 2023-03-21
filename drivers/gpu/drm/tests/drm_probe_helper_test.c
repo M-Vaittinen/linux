@@ -13,6 +13,7 @@
 #include <drm/drm_modeset_helper_vtables.h>
 #include <drm/drm_probe_helper.h>
 
+#include <kunit/platform_device.h>
 #include <kunit/test.h>
 
 struct drm_probe_helper_test_priv {
@@ -40,7 +41,7 @@ static int drm_probe_helper_test_init(struct kunit *test)
 	KUNIT_ASSERT_NOT_NULL(test, priv);
 	test->priv = priv;
 
-	priv->dev = drm_kunit_helper_alloc_device(test);
+	priv->dev = test_kunit_helper_alloc_device(test);
 	KUNIT_ASSERT_NOT_ERR_OR_NULL(test, priv->dev);
 
 	priv->drm = __drm_kunit_helper_alloc_drm_device(test, priv->dev,
@@ -64,7 +65,7 @@ static void drm_probe_helper_test_exit(struct kunit *test)
 {
 	struct drm_probe_helper_test_priv *priv = test->priv;
 
-	drm_kunit_helper_free_device(test, priv->dev);
+	test_kunit_helper_free_device(test, priv->dev);
 }
 
 typedef struct drm_display_mode *(*expected_mode_func_t)(struct drm_device *);

@@ -39,6 +39,7 @@ config DRM_VC4_KUNIT_TEST
 	tristate "KUnit tests for VC4" if !KUNIT_ALL_TESTS
 	depends on DRM_VC4 && KUNIT
 	select DRM_KUNIT_TEST_HELPERS
+	select TEST_KUNIT_DEVICE_HELPERS
 	default KUNIT_ALL_TESTS
 	help
 	  This builds unit tests for the VC4 DRM/KMS driver. This option is
