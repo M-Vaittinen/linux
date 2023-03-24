@@ -13,6 +13,7 @@
 #include <linux/mfd/core.h>
 #include <linux/mfd/rohm-bd71815.h>
 #include <linux/mfd/rohm-bd71828.h>
+#include <linux/mfd/rohm-bd71885.h>
 #include <linux/mfd/rohm-generic.h>
 #include <linux/module.h>
 #include <linux/of_device.h>
@@ -41,6 +42,12 @@ static const struct resource bd71828_rtc_irqs[] = {
 	DEFINE_RES_IRQ_NAMED(BD71828_INT_RTC0, "bd71828-rtc-alm-0"),
 	DEFINE_RES_IRQ_NAMED(BD71828_INT_RTC1, "bd71828-rtc-alm-1"),
 	DEFINE_RES_IRQ_NAMED(BD71828_INT_RTC2, "bd71828-rtc-alm-2"),
+};
+
+static const struct resource bd71885_rtc_irqs[] = {
+	DEFINE_RES_IRQ_NAMED(BD71885_INT_RTC0, "bd71885-rtc-alm-0"),
+	DEFINE_RES_IRQ_NAMED(BD71885_INT_RTC1, "bd71885-rtc-alm-1"),
+	DEFINE_RES_IRQ_NAMED(BD71885_INT_RTC2, "bd71885-rtc-alm-2"),
 };
 
 static struct resource bd71815_power_irqs[] = {
@@ -130,6 +137,22 @@ static struct mfd_cell bd71828_mfd_cells[] = {
 	},
 };
 
+static struct mfd_cell bd71885_mfd_cells[] = {
+//	{ .name = "bd71885-pmic", },
+	{ .name = "bd71885-clk", },
+/*	{ .name = "bd71885-gpo", },
+	{
+		.name = "bd71885-power",
+		.num_resources = ARRAY_SIZE(bd71815_power_irqs),
+		.resources = &bd71815_power_irqs[0],
+	}, */
+	{
+		.name = "bd71885-rtc",
+		.num_resources = ARRAY_SIZE(bd71885_rtc_irqs),
+		.resources = &bd71885_rtc_irqs[0],
+	},
+};
+
 static const struct regmap_range bd71815_volatile_ranges[] = {
 	{
 		.range_min = BD71815_REG_SEC,
@@ -182,6 +205,36 @@ static const struct regmap_range bd71828_volatile_ranges[] = {
 	},
 };
 
+static const struct regmap_range bd71885_volatile_ranges[] = {
+	{
+		.range_min = BD71885_REG_SEC,
+		.range_max = BD71885_REG_YEAR,
+	},
+/*{
+		.range_min = BD71885_REG_CONF,
+		.range_max = BD71885_REG_BAT_TEMP,
+	}, {
+		.range_min = BD71885_REG_VM_IBAT_U,
+		.range_max = BD71885_REG_CC_CTRL,
+	}, {
+		.range_min = BD71885_REG_CC_STAT,
+		.range_max = BD71885_REG_CC_CURCD_L,
+	}, {
+		.range_min = BD71885_REG_VM_BTMP_MON,
+		.range_max = BD71885_REG_VM_BTMP_MON,
+	}, */
+ {
+		.range_min = BD71885_REG_INT_MAIN,
+		.range_max = BD71885_REG_INT_STAT_05,
+	}, /*{
+		.range_min = BD71885_REG_VM_VSYS_U,
+		.range_max = BD71885_REG_REX_CTRL_1,
+	}, {
+		.range_min = BD71885_REG_FULL_CCNTD_3,
+		.range_max = BD71885_REG_CCNTD_CHG_2,
+	},*/
+};
+
 static const struct regmap_access_table bd71815_volatile_regs = {
 	.yes_ranges = &bd71815_volatile_ranges[0],
 	.n_yes_ranges = ARRAY_SIZE(bd71815_volatile_ranges),
@@ -190,6 +243,11 @@ static const struct regmap_access_table bd71815_volatile_regs = {
 static const struct regmap_access_table bd71828_volatile_regs = {
 	.yes_ranges = &bd71828_volatile_ranges[0],
 	.n_yes_ranges = ARRAY_SIZE(bd71828_volatile_ranges),
+};
+
+static const struct regmap_access_table bd71885_volatile_regs = {
+	.yes_ranges = &bd71885_volatile_ranges[0],
+	.n_yes_ranges = ARRAY_SIZE(bd71885_volatile_ranges),
 };
 
 static const struct regmap_config bd71815_regmap = {
@@ -208,10 +266,19 @@ static const struct regmap_config bd71828_regmap = {
 	.cache_type = REGCACHE_RBTREE,
 };
 
+static const struct regmap_config bd71885_regmap = {
+	.reg_bits = 8,
+	.val_bits = 8,
+	.volatile_table = &bd71885_volatile_regs,
+	.max_register = BD71885_MAX_REGISTER - 1,
+	.cache_type = REGCACHE_RBTREE,
+};
+
 /*
  * Mapping of main IRQ register bits to sub-IRQ register offsets so that we can
  * access corect sub-IRQ registers based on bits that are set in main IRQ
  * register. BD71815 and BD71828 have same sub-register-block offests.
+ * BD71885 has direct 1 to 1 mapping and does not need specifiers.
  */
 
 static unsigned int bit0_offsets[] = {11};		/* RTC IRQ */
@@ -232,6 +299,12 @@ static struct regmap_irq_sub_irq_map bd718xx_sub_irq_offsets[] = {
 	REGMAP_IRQ_MAIN_REG_OFFSET(bit5_offsets),
 	REGMAP_IRQ_MAIN_REG_OFFSET(bit6_offsets),
 	REGMAP_IRQ_MAIN_REG_OFFSET(bit7_offsets),
+};
+
+static const struct regmap_irq bd71885_irqs[] = {
+	REGMAP_IRQ_REG(BD71885_INT_RTC0, 0, BD71885_INT_RTC0_MASK),
+	REGMAP_IRQ_REG(BD71885_INT_RTC1, 0, BD71885_INT_RTC1_MASK),
+	REGMAP_IRQ_REG(BD71885_INT_RTC2, 0, BD71885_INT_RTC2_MASK),
 };
 
 static const struct regmap_irq bd71815_irqs[] = {
@@ -439,6 +512,21 @@ static struct regmap_irq_chip bd71815_irq_chip = {
 	.irq_reg_stride = 1,
 };
 
+static struct regmap_irq_chip bd71885_irq_chip = {
+	.name = "bd71885_irq",
+	.main_status = BD71885_REG_INT_MAIN,
+	.irqs = &bd71885_irqs[0],
+	.num_irqs = ARRAY_SIZE(bd71885_irqs),
+	.status_base = BD71885_REG_INT_STAT_01,
+	.unmask_base = BD71885_REG_INT_EN_01,
+	.ack_base = BD71828_REG_INT_BUCK,
+	.init_ack_masked = true,
+	.num_regs = 5,
+	.num_main_regs = 1,
+	.num_main_status_bits = 5,
+	.irq_reg_stride = 1,
+};
+
 static int set_clk_mode(struct device *dev, struct regmap *regmap,
 			int clkmode_reg)
 {
@@ -485,6 +573,15 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 	chip_type = (unsigned int)(uintptr_t)
 		    of_device_get_match_data(&i2c->dev);
 	switch (chip_type) {
+	case ROHM_CHIP_TYPE_BD71885:
+		mfd = bd71885_mfd_cells;
+		cells = ARRAY_SIZE(bd71885_mfd_cells);
+		regmap_config = &bd71885_regmap;
+		irqchip = &bd71885_irq_chip;
+		clkmode_reg = BD71885_REG_OUT32K;
+		button_irq = 0;
+		break;
+
 	case ROHM_CHIP_TYPE_BD71828:
 		mfd = bd71828_mfd_cells;
 		cells = ARRAY_SIZE(bd71828_mfd_cells);
@@ -549,6 +646,9 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 
 static const struct of_device_id bd71828_of_match[] = {
 	{
+		.compatible = "rohm,bd71885",
+		.data = (void *)ROHM_CHIP_TYPE_BD71885,
+	}, {
 		.compatible = "rohm,bd71828",
 		.data = (void *)ROHM_CHIP_TYPE_BD71828,
 	}, {
