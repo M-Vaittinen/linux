@@ -7,6 +7,7 @@
 #include <linux/bcd.h>
 #include <linux/mfd/rohm-bd71815.h>
 #include <linux/mfd/rohm-bd71828.h>
+#include <linux/mfd/rohm-bd71885.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -281,6 +282,12 @@ static int bd70528_probe(struct platform_device *pdev)
 		bd_rtc->bd718xx_alm_block_start = BD71828_REG_RTC_ALM_START;
 		hour_reg = BD71828_REG_RTC_HOUR;
 		break;
+	case ROHM_CHIP_TYPE_BD71885:
+		irq_name = "bd71885-rtc-alm-0";
+		bd_rtc->reg_time_start = BD71885_REG_RTC_START;
+		bd_rtc->bd718xx_alm_block_start = BD71885_REG_RTC_ALM_START;
+		hour_reg = BD71885_REG_HOUR;
+		break;
 	default:
 		dev_err(&pdev->dev, "Unknown chip\n");
 		return -ENOENT;
@@ -338,6 +345,7 @@ static int bd70528_probe(struct platform_device *pdev)
 }
 
 static const struct platform_device_id bd718x7_rtc_id[] = {
+	{ "bd71885-rtc", ROHM_CHIP_TYPE_BD71885 },
 	{ "bd71828-rtc", ROHM_CHIP_TYPE_BD71828 },
 	{ "bd71815-rtc", ROHM_CHIP_TYPE_BD71815 },
 	{ },
