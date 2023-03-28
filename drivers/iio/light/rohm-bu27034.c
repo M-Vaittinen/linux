@@ -396,8 +396,9 @@ static int bu27034_write_gain_sel(struct bu27034_data *data, int chan, int sel)
 	if (chan != BU27034_CHAN_DATA0 && chan != BU27034_CHAN_DATA1)
 		return -EINVAL;
 
+	val = FIELD_PREP(BU27034_MASK_D01_GAIN, sel);
+
 	mask = BU27034_MASK_D01_GAIN;
-	val = FIELD_PREP(mask, sel);
 
 	if (chan == BU27034_CHAN_DATA0) {
 		/*
