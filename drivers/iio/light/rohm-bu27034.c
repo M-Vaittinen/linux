@@ -21,7 +21,6 @@
 #include <linux/iio/iio-gts-helper.h>
 #include <linux/iio/kfifo_buf.h>
 
-
 #define BU27034_REG_SYSTEM_CONTROL	0x40
 #define BU27034_MASK_SW_RESET		BIT(7)
 #define BU27034_MASK_PART_ID		GENMASK(5, 0)
@@ -94,8 +93,7 @@ enum {
 };
 
 static const unsigned long bu27034_scan_masks[] = {
-	BIT(BU27034_CHAN_ALS) | BIT(BU27034_CHAN_DATA0) |
-	BIT(BU27034_CHAN_DATA1) | BIT(BU27034_CHAN_DATA2), 0
+	GENMASK(BU27034_CHAN_DATA2, BU27034_CHAN_ALS), 0
 };
 
 /*
