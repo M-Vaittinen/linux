@@ -36,12 +36,8 @@
 
 #define BU27008_REG_MODE_CONTROL2	0x42
 #define BU27008_MASK_RGBC_GAIN		GENMASK(7, 3)
-#define BU27008_SHIFT_RGBC_GAIN		3
-#define BU27008_MASK_IR_GAIN_HI		GENMASK(7, 6)
 #define BU27008_MASK_IR_GAIN_LO		GENMASK(2, 0)
 #define BU27008_SHIFT_IR_GAIN		3
-#define BU27008_MASK_IR_GAIN		(BU27008_MASK_IR_GAIN_HI | \
-					 BU27008_MASK_IR_GAIN_LO)
 
 #define BU27008_REG_MODE_CONTROL3	0x43
 #define BU27008_MASK_VALID		BIT(7)
@@ -56,12 +52,6 @@
 #define BU27008_REG_MANUFACTURER_ID	0x92
 #define BU27008_REG_MAX BU27008_REG_MANUFACTURER_ID
 
-/*
- * Max amplification is (HWGAIN * MAX integration-time multiplier) 1024 * 8
- * = 8192. With NANO scale we get rid of accuracy loss when we start with the
- * scale 16.0 for HWGAIN1, INT-TIME 55 mS. This way the nano scale for MAX
- * total gain 8192 will be 1953125
- */
 enum {
 	BU27008_RED,	/* Always data0 */
 	BU27008_GREEN,	/* Always data1 */
@@ -100,8 +90,10 @@ static const unsigned long bu27008_scan_masks[] = {
  *
  * => Max total gain is HWGAIN * gain by integration time (8 * 1024) = 8192
  *
- * Using NANO precision for scale we must use scale 16x corresponding gain 1x
- * to avoid precision loss.
+ * Max amplification is (HWGAIN * MAX integration-time multiplier) 1024 * 8
+ * = 8192. With NANO scale we get rid of accuracy loss when we start with the
+ * scale 16.0 for HWGAIN1, INT-TIME 55 mS. This way the nano scale for MAX
+ * total gain 8192 will be 1953125
  */
 #define BU27008_SCALE_1X 16
 
@@ -156,13 +148,15 @@ static const struct iio_itime_sel_mul bu27008_itimes[] = {
 
 /*
  * All the RGBC channels share the same gain.
- * IR gain can be fine-tuned from the gain set for the RGBC by 2 bits
- * but this would yield quite complex gain setting. Especially since not all
- * bit compinations are supported. And in any case setting GAIN for RGBC will
+ * IR gain can be fine-tuned from the gain set for the RGBC by 2 bit, but this
+ * would yield quite complex gain setting. Especially since not all bit
+ * compinations are supported. And in any case setting GAIN for RGBC will
  * always also change the IR-gain.
  *
- * This is something that should be considered by one who implements the
- * support for the IR channel.
+ * Un tip of this, the selector '0' which corresponds to hw-gain 1X on RGBC,
+ * corresponds to gain 2X on IR. Rest of the selctors correspond to same gains
+ * though. This, however, makes it not possible to use shared gain for all
+ * RGBC and IR settings even though they are all changed at the one go.
  */
 #define BU27008_CHAN(color, data, separate_avail)				\
 {										\
@@ -190,7 +184,11 @@ static const struct iio_chan_spec bu27008_channels[] = {
 	BU27008_CHAN(GREEN, DATA1, BIT(IIO_CHAN_INFO_SCALE)),
 	BU27008_CHAN(BLUE, DATA2, BIT(IIO_CHAN_INFO_SCALE)),
 	BU27008_CHAN(CLEAR, DATA2, BIT(IIO_CHAN_INFO_SCALE)),
-	BU27008_CHAN(IR, DATA3, 0),	/* We don't allow settin scale for IR */
+	/*
+	 * We don't allow setting scale for IR (because of shared gain bits).
+	 * Hence we don't advertise available ones either.
+	 */
+	BU27008_CHAN(IR, DATA3, 0),
 	IIO_CHAN_SOFT_TIMESTAMP(BU27008_NUM_CHANS),
 };
 
@@ -201,7 +199,6 @@ struct bu27008_data {
 	struct iio_gts gts;
 	struct iio_gts gts_ir;
 	int64_t timestamp, old_timestamp;
-
 	int irq;
 
 	/*
@@ -261,8 +258,6 @@ static const struct regmap_config bu27008_regmap = {
 	.volatile_table = &bu27008_volatile_regs,
 	.wr_table = &bu27008_ro_regs,
 };
-
-
 
 #define BU27008_MAX_VALID_RESULT_WAIT_US	50000
 #define BU27008_VALID_RESULT_WAIT_QUANTA_US	1000
@@ -786,12 +781,18 @@ static irqreturn_t bu27008_trigger_handler(int irq, void *p)
 	struct iio_poll_func *pf = p;
 	struct iio_dev *idev = pf->indio_dev;
 	struct bu27008_data *data = iio_priv(idev);
-	int ret;
 	__le16 raw[BU27008_NUM_CHANS + NUM_U16_IN_TSTAMP];
+	int ret, dummy;
 
 	memset(&raw, 0, sizeof(raw));
 
-	pr_info("Reading data...\n");
+	/*
+	 * After some measurements, it seems reading the
+	 * BU27008_REG_MODE_CONTROL3 debounces the IRQ line
+	 */
+	ret = regmap_read(data->regmap, BU27008_REG_MODE_CONTROL3, &dummy);
+	if (ret < 0)
+		goto err_read;
 
 	ret = regmap_bulk_read(data->regmap, BU27008_REG_DATA0_LO, data->buffer,
 			       BU27008_HW_DATA_SIZE);
@@ -834,6 +835,7 @@ static irqreturn_t bu27008_irq_thread_handler(int irq, void *private)
 	struct bu27008_data *data = iio_priv(idev);
 	irqreturn_t ret = IRQ_NONE;
 
+	pr_info("IRQ-handler\n");
 	mutex_lock(&data->mutex);
 
 	if (data->trigger_enabled) {
@@ -851,7 +853,7 @@ static int bu27008_buffer_preenable(struct iio_dev *idev)
 	struct bu27008_data *data = iio_priv(idev);
 	int chan_sel, ret;
 
-	pr_info("Enabling buffer, scan mask 0x%x\n", *idev->active_scan_mask);
+	pr_info("Enabling buffer, scan mask 0x%lx\n", *idev->active_scan_mask);
 	/* Configure channel selection */
 	if (*idev->active_scan_mask & BIT(BU27008_BLUE)) {
 		if (*idev->active_scan_mask & BIT(BU27008_CLEAR))
