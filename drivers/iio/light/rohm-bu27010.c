@@ -15,7 +15,7 @@
 #include <linux/regulator/consumer.h>
 
 #include <linux/iio/iio.h>
-#include <linux/iio/sysfs.h>
+#include <linux/iio/iio-gts-helper.h>
 #include <linux/iio/trigger.h>
 #include <linux/iio/trigger_consumer.h>
 #include <linux/iio/triggered_buffer.h>
@@ -73,28 +73,43 @@
 #define BU27010_REG_MAX BU27010_REG_MANUFACTURER_ID
 
 enum {
-	BU27010_DATA0, /* Always RED */
-	BU27010_DATA1, /* Always Green */
-	BU27010_DATA2, /* configurable (blue for now) */
-	BU27010_DATA3, /* configurable (clear for now) */
-	BU27010_FLICKER, /* flickering fifo */
+	BU27010_RED,	/* Always data0 */
+	BU27010_GREEN,	/* Always data1 */
+	BU27010_BLUE,	/* data2, configurable (blue / clear) */
+	BU27010_CLEAR,	/* data2 or data3 */
+	BU27010_IR,	/* data3 */
 	BU27010_NUM_CHANS
 };
 
-#define BU27008_CHAN_DATA_SIZE		2 /* Each channel has 16bits of data */
-#define BU27008_DATA_SIZE (BU27008_NUM_CHANS * BU27008_CHAN_DATA_SIZE)
+enum {
+	BU27010_DATA0, /* Always RED */
+	BU27010_DATA1, /* Always Green */
+	BU27010_DATA2, /* Blue / Clear */
+	BU27010_DATA3, /* Clear / IR */
+	BU27010_FLICKER, /* flickering fifo - may be dropped */
+	BU27010_NUM_HW_CHANS
+};
 
-static const unsigned long bu27008_scan_masks[] = {
-	GENMASK(BU27008_DATA3, BU27008_DATA0), 0
+/* We can always measure red and green at same time */
+#define ALWAYS_SCANNABLE (BIT(BU27010_RED) | BIT(BU27010_GREEN))
+
+#define BU27010_CHAN_DATA_SIZE		2 /* Each channel has 16bits of data */
+#define BU27010_BUF_DATA_SIZE (BU27010_NUM_CHANS * BU27010_CHAN_DATA_SIZE)
+#define BU27010_HW_DATA_SIZE (BU27010_NUM_HW_CHANS * BU27010_CHAN_DATA_SIZE)
+
+static const unsigned long bu27010_scan_masks[] = {
+	ALWAYS_SCANNABLE | BIT(BU27010_CLEAR) | BIT(BU27010_IR),
+	ALWAYS_SCANNABLE | BIT(BU27010_CLEAR) | BIT(BU27010_BLUE),
+	ALWAYS_SCANNABLE | BIT(BU27010_BLUE) | BIT(BU27010_IR),
 };
 
 /*
  * Available scales with gain 1x - 1024x, timings 55, 100, 200, 400 mS
  * Time impacts to gain: 1x, 2x, 4x, 8x.
  *
- * => Max total gain is HWGAIN * gain by integration time (8 * 1024) = 8192
+ * => Max total gain is HWGAIN * gain by integration time (8 * 4096)
  *
- * Using NANO precision for scale we must use scale 16x corresponding gain 1x
+ * Using NANO precision for scale we must use scale 64x corresponding gain 1x
  * to avoid precision loss.
  */
 #define BU270010_SCALE_1X 64
@@ -108,7 +123,7 @@ static const unsigned long bu27008_scan_masks[] = {
 #define BU27010_GSEL_1024X	0x2e	/* 101110 */
 #define BU27010_GSEL_4096X	0x3f	/* 111111 */
 
-static const struct iio_gain_sel_pair bu27008_gains[] = {
+static const struct iio_gain_sel_pair bu27010_gains[] = {
 	GAIN_SCALE_GAIN(1, BU27010_GSEL_1X),
 	GAIN_SCALE_GAIN(4, BU27010_GSEL_4X),
 	GAIN_SCALE_GAIN(16, BU27010_GSEL_16X),
@@ -138,7 +153,7 @@ static const struct iio_itime_sel_mul bu27010_itimes[] = {
  * (see the defines BU27010_GSEL_<gain>X above).
  * What makes this odd is that four high bits of the gain setting are common
  * for all channels - but the low 2 bits can be set independently for each
- * channel. I am unsure of this makes  sense because - if we allow setting
+ * channel. I am unsure of this makes sense because - if we allow setting
  * common bits, we will change GAIN for all channels. If we 'fix' the high bits
  * and allow only setting two lowest bits (which were independetly changeable
  * for each channel) we can only support two different valid GAIN bit
@@ -152,28 +167,25 @@ static const struct iio_itime_sel_mul bu27010_itimes[] = {
  *
  * FLICKER detection has own gain setting but currently we don't support the
  * flicker detection at all.
- *
- * This is something that should be considered by one who implements the
- * support for the IR channel.
  */
-#define BU27010_CHAN(color, data)					\
-{									\
-	.type = IIO_INTENSITY,						\
-	.modified = 1,							\
-	.channel2 = IIO_MOD_LIGHT_##color,				\
-	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),			\
-	.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SCALE) |		\
-				   BIT(IIO_CHAN_INFO_INT_TIME),		\
-	.info_mask_shared_by_all_available = /* BIT(IIO_CHAN_INFO_SCALE) TODO: How to make IR-scale*/	\
-					BIT(IIO_CHAN_INFO_INT_TIME),	\
-	.address = BU27010_REG_##data##_LO,				\
-	.scan_index = BU27010_##data,					\
-	.scan_type = {							\
-		.sign = 's',						\
-		.realbits = 16,						\
-		.storagebits = 16,					\
-		.endianness = IIO_LE,					\
-	},								\
+#define BU27010_CHAN(color, data)						\
+{										\
+	.type = IIO_INTENSITY,							\
+	.modified = 1,								\
+	.channel2 = IIO_MOD_LIGHT_##color,					\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),				\
+	.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_SCALE) |			\
+				   BIT(IIO_CHAN_INFO_INT_TIME),			\
+	.info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_SCALE) |		\
+					     BIT(IIO_CHAN_INFO_INT_TIME),	\
+	.address = BU27010_REG_##data##_LO,					\
+	.scan_index = BU27010_##color,						\
+	.scan_type = {								\
+		.sign = 's',							\
+		.realbits = 16,							\
+		.storagebits = 16,						\
+		.endianness = IIO_LE,						\
+	},									\
 }
 
 /* TODO: Fix this to same as bu27008 */
@@ -181,49 +193,36 @@ static const struct iio_chan_spec bu27010_channels[] = {
 	BU27010_CHAN(RED, DATA0),
 	BU27010_CHAN(GREEN, DATA1),
 	BU27010_CHAN(BLUE, DATA2),
-	BU27010_CHAN(CLEAR, DATA3),
-	IIO_CHAN_SOFT_TIMESTAMP(BU27008_NUM_CHANS),
+	BU27010_CHAN(CLEAR, DATA2),
+	BU27010_CHAN(IR, DATA3),
+	IIO_CHAN_SOFT_TIMESTAMP(BU27010_NUM_CHANS),
 };
 
 struct bu27010_data {
 	struct regmap *regmap;
+	struct iio_trigger *trig;
 	struct device *dev;
-/*	struct iio_trigger *trig;
-	struct iio_mount_matrix orientation;
+	struct iio_gts gts;
 	int64_t timestamp, old_timestamp;
-
 	int irq;
-	int inc_reg;
-	int ien_reg;
-
-	unsigned int g_range;
-	unsigned int state;
-	unsigned int odr_ns;
-
-	bool trigger_enabled;
-	 *
-	 * Prevent toggling the sensor stby/active state (PC1 bit) in the
-	 * middle of a configuration, or when the fifo is enabled. Also,
-	 * protect the data stored/retrieved from this structure from
-	 * concurrent accesses.
-	 *
+	/*
+	 * Prevent changing gain/time config when scale is read/written.
+	 * Prevent changing gain/time when raw data is read.
+	 */
 	struct mutex mutex;
-	u8 watermark;
+	bool trigger_enabled;
 
-	* 3 x 16bit accel data + timestamp *
-*	__le16 buffer[8] __aligned(IIO_DMA_MINALIGN);
-	struct {
-		__le16 channels[3];
-		s64 ts __aligned(8);
-	} scan;
-*/
+	__le16 buffer[BU27010_NUM_CHANS];
 };
 
-
+#define BU27010_REG_RESET	0x3f
 /* Regmap configs */
 static const struct regmap_range bu27010_volatile_ranges[] = {
 	{
-		.range_min = BU27010_REG_MODE_CONTROL5,
+		.range_min = BU27010_REG_RESET,			/* RSTB */
+		.range_max = BU27010_REG_SYSTEM_CONTROL,	/* RESET */
+	}, {
+		.range_min = BU27010_REG_MODE_CONTROL5,		/* VALID bits */
 		.range_max = BU27010_REG_MODE_CONTROL5,
 	}, {
 		.range_min = BU27010_REG_DATA0_LO,
@@ -264,10 +263,13 @@ static const struct regmap_config bu27010_regmap = {
 static int bu27010_probe(struct i2c_client *i2c)
 {
 	struct device *dev = &i2c->dev;
-	struct fwnode_handle *fwnode;
+	struct iio_trigger *indio_trig;
 	struct bu27010_data *data;
 	struct regmap *regmap;
+	unsigned int part_id, reg;
 	struct iio_dev *idev;
+	char *name;
+	int ret;
 
 	if (!i2c->irq) {
 		dev_err(dev, "No IRQ configured\n");
@@ -279,16 +281,42 @@ static int bu27010_probe(struct i2c_client *i2c)
 		return dev_err_probe(dev, PTR_ERR(regmap),
 				     "Failed to initialize Regmap\n");
 
-	fwnode = dev_fwnode(dev);
-	if (!fwnode)
-		return -ENODEV;
-
 	idev = devm_iio_device_alloc(dev, sizeof(*data));
 	if (!idev)
 		return -ENOMEM;
 
+	ret = devm_regulator_get_enable(dev, "vdd");
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to get regulator\n");
+
 	data = iio_priv(idev);
 
+	ret = regmap_read(regmap, BU27010_REG_SYSTEM_CONTROL, &reg);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to access sensor\n");
+
+	part_id = FIELD_GET(BU27010_MASK_PART_ID, reg);
+
+	if (part_id != BU27010_ID)
+		dev_warn(dev, "unknown device 0x%x\n", part_id);
+
+	ret = devm_iio_init_iio_gts(dev, BU27010_SCALE_1X, 0, bu27010_gains,
+				    ARRAY_SIZE(bu27010_gains), bu27010_itimes,
+				    ARRAY_SIZE(bu27010_itimes), &data->gts);
+	if (ret)
+		return ret;
+
+	mutex_init(&data->mutex);
+	data->regmap = regmap;
+	data->dev = dev;
+	data->irq = i2c->irq;
+
+	idev->channels = bu27010_channels;
+	idev->num_channels = ARRAY_SIZE(bu27010_channels);
+	idev->name = "bu27010";
+	idev->info = &bu27010_info;
+	idev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_SOFTWARE;
+	idev->available_scan_masks = bu27010_scan_masks;
 	return 0;
 }
 
@@ -300,7 +328,7 @@ MODULE_DEVICE_TABLE(of, bu27010_of_match);
 
 static struct i2c_driver bu27010_i2c_driver = {
 	.driver = {
-		.name  = "bu27010-i2c",
+		.name  = "bu27010",
 		.of_match_table = bu27010_of_match,
 	  },
 	.probe_new    = bu27010_probe,
