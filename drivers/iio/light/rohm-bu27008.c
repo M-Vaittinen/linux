@@ -42,7 +42,7 @@
 #define BU27008_MASK_IR_GAIN_LO		GENMASK(2, 0)
 #define BU27008_SHIFT_IR_GAIN		3
 
-#define BU27008_MASK_VALID		BIT(7)
+#define BU27_MASK_VALID		BIT(7)
 #define BU27008_MASK_INT_EN		BIT(1)
 #define BU27008_MASK_MEAS_EN		BIT(0)
 
@@ -131,7 +131,7 @@ enum {
 #define BU27008_HW_DATA_SIZE (BU27008_NUM_HW_CHANS * BU27008_CHAN_DATA_SIZE)
 #define NUM_U16_IN_TSTAMP (sizeof(s64) / sizeof(u16))
 
-static const unsigned long bu27008_scan_masks[] = {
+static const unsigned long bu27_scan_masks[] = {
 	ALWAYS_SCANNABLE | BIT(BU27008_CLEAR) | BIT(BU27008_IR),
 	ALWAYS_SCANNABLE | BIT(BU27008_CLEAR) | BIT(BU27008_BLUE),
 	ALWAYS_SCANNABLE | BIT(BU27008_BLUE) | BIT(BU27008_IR),
@@ -160,7 +160,7 @@ static const unsigned long bu27008_scan_masks[] = {
  * Using NANO precision for scale we must use scale 64x corresponding gain 1x
  * to avoid precision loss.
  */
-#define BU270010_SCALE_1X 64
+#define BU27010_SCALE_1X 64
 
 #define BU27008_GSEL_1X		0x00
 #define BU27008_GSEL_4X		0x08
@@ -196,16 +196,16 @@ static const struct iio_gain_sel_pair bu27008_gains_ir[] = {
 	GAIN_SCALE_GAIN(1024, BU27008_GSEL_1024X),
 };
 
-#define BU27008_MEAS_MODE_100MS		0x00
-#define BU27008_MEAS_MODE_55MS		0x01
-#define BU27008_MEAS_MODE_200MS		0x02
-#define BU27008_MEAS_MODE_400MS		0x04
+#define BU27_MEAS_MODE_100MS		0x00
+#define BU27_MEAS_MODE_55MS		0x01
+#define BU27_MEAS_MODE_200MS		0x02
+#define BU27_MEAS_MODE_400MS		0x04
 
-static const struct iio_itime_sel_mul bu27008_itimes[] = {
-        GAIN_SCALE_ITIME_US(400000, BU27008_MEAS_MODE_400MS, 8),
-        GAIN_SCALE_ITIME_US(200000, BU27008_MEAS_MODE_200MS, 4),
-        GAIN_SCALE_ITIME_US(100000, BU27008_MEAS_MODE_100MS, 2),
-        GAIN_SCALE_ITIME_US(55000, BU27008_MEAS_MODE_55MS, 1),
+static const struct iio_itime_sel_mul bu27_itimes[] = {
+        GAIN_SCALE_ITIME_US(400000, BU27_MEAS_MODE_400MS, 8),
+        GAIN_SCALE_ITIME_US(200000, BU27_MEAS_MODE_200MS, 4),
+        GAIN_SCALE_ITIME_US(100000, BU27_MEAS_MODE_100MS, 2),
+        GAIN_SCALE_ITIME_US(55000, BU27_MEAS_MODE_55MS, 1),
 };
 
 #define BU27010_GSEL_1X		0x00	/* 000000 */
@@ -226,16 +226,14 @@ static const struct iio_gain_sel_pair bu27010_gains[] = {
 	GAIN_SCALE_GAIN(4096, BU27010_GSEL_4096X),
 };
 
-#define BU27010_MEAS_MODE_100MS		0x00
-#define BU27010_MEAS_MODE_55MS		0x01
-#define BU27010_MEAS_MODE_200MS		0x02
-#define BU27010_MEAS_MODE_400MS		0x04
-
-static const struct iio_itime_sel_mul bu27010_itimes[] = {
-        GAIN_SCALE_ITIME_US(400000, BU27010_MEAS_MODE_400MS, 8),
-        GAIN_SCALE_ITIME_US(200000, BU27010_MEAS_MODE_200MS, 4),
-        GAIN_SCALE_ITIME_US(100000, BU27010_MEAS_MODE_100MS, 2),
-        GAIN_SCALE_ITIME_US(50000, BU27010_MEAS_MODE_55MS, 1),
+static const struct iio_gain_sel_pair bu27010_gains_ir[] = {
+	GAIN_SCALE_GAIN(2, BU27010_GSEL_1X),
+	GAIN_SCALE_GAIN(4, BU27010_GSEL_4X),
+	GAIN_SCALE_GAIN(16, BU27010_GSEL_16X),
+	GAIN_SCALE_GAIN(64, BU27010_GSEL_64X),
+	GAIN_SCALE_GAIN(256, BU27010_GSEL_256X),
+	GAIN_SCALE_GAIN(1024, BU27010_GSEL_1024X),
+	GAIN_SCALE_GAIN(4096, BU27010_GSEL_4096X),
 };
 
 /*
@@ -340,14 +338,14 @@ struct bu27008_data;
 
 static int bu27010_chip_init(struct bu27008_data *data);
 static int bu27008_chip_init(struct bu27008_data *data);
-static int bu27008_gts_init(struct bu27008_data *data);
-static int bu27010_gts_init(struct bu27008_data *data);
 static struct iio_gts *bu27008_get_gts(struct bu27008_data *data,
 				       struct iio_chan_spec const *chan);
 static struct iio_gts *bu27010_get_gts(struct bu27008_data *data,
 				       struct iio_chan_spec const *chan);
 static int bu27008_get_gain_sel(struct bu27008_data *data, int *sel);
 static int bu27010_get_gain_sel(struct bu27008_data *data, int *sel);
+static int bu27008_write_gain_sel(struct bu27008_data *data, unsigned int sel);
+static int bu27010_write_gain_sel(struct bu27008_data *data, unsigned int sel);
 
 static const struct regmap_range bu27008_volatile_ranges[] = {
 	{
@@ -393,12 +391,17 @@ static const struct regmap_config bu27008_regmap = {
 
 struct bu27_chip_data {
 	int (*chip_init)(struct bu27008_data *data);
-	int (*gts_init)(struct bu27008_data *data);
 	struct iio_gts *(*get_gts)(struct bu27008_data *data,
 				   struct iio_chan_spec const *chan);
 	int (*get_gain_sel)(struct bu27008_data *data, int *sel);
+	int (*write_gain_sel)(struct bu27008_data *data, unsigned int sel);
 	const struct regmap_config *regmap_cfg;
 	const struct iio_chan_spec *cspec;
+	struct iio_gain_sel_pair *gains;
+	int num_gains;
+	struct iio_gain_sel_pair *gains_ir;
+	int scale1x;
+	int num_gains_ir;
 	int num_channels;
 	int drdy_en_reg;
 	int drdy_en_mask;
@@ -412,12 +415,14 @@ struct bu27_chip_data {
 	const char *name;
 };
 
+
 static const struct bu27_chip_data bu27010_chip {
 	name = "bu27010",
 	chip_init = bu27010_chip_init,
-	gts_init = bu27010_gts_init,
 	get_gts = bu27010_get_gts,
-	get_gain_sel = bu27010_get_gain_sel;
+	get_gain_sel = bu27010_get_gain_sel,
+	write_gain_sel = bu27010_write_gain_sel,
+	scale1x = BU27010_SCALE_1X;
 	part_id = BU27010_ID,
 	regmap_cfg = bu27010_regmap,
 	cspec = &bu27010_channels[0],
@@ -430,14 +435,19 @@ static const struct bu27_chip_data bu27010_chip {
 	chan_sel_reg = BU27010_REG_MODE_CONTROL1,
 	chan_sel_mask = BU27010_MASK_CHAN_SEL,
 	int_time_mask = BU27010_MASK_MEAS_MODE,
+	gains = &bu27010_gains[0],
+	num_gains = ARRAY_SIZE(bu27010_gains),
+	gains_ir = &bu27010_gains_ir[0],
+	num_gains_ir = ARRAY_SIZE(bu27010_gains_ir),
 };
 
 static const struct bu27_chip_data bu27008_chip {
 	name = "bu27008",
 	chip_init = bu27008_chip_init,
-	gts_init = bu27008_gts_init,
 	get_gts = bu27008_get_gts,
-	get_gain_sel = bu27008_get_gain_sel;
+	scale1x = BU27008_SCALE_1X;
+	get_gain_sel = bu27008_get_gain_sel,
+	write_gain_sel = bu27008_write_gain_sel,
 	part_id = BU27008_ID,
 	regmap_cfg = bu27008_regmap,
 	cspec = &bu27008_channels[0],
@@ -450,6 +460,10 @@ static const struct bu27_chip_data bu27008_chip {
 	chan_sel_reg = BU27_REG_MODE_CONTROL3,
 	chan_sel_mask= BU27008_MASK_CHAN_SEL,
 	int_time_mask = BU27008_MASK_MEAS_MODE,
+	gains = &bu27008_gains[0],
+	num_gains = ARRAY_SIZE(bu27008_gains),
+	gains_ir = &bu27008_gains_ir[0],
+	num_gains_ir = ARRAY_SIZE(bu27008_gains_ir),
 };
 
 struct bu27008_data {
@@ -472,18 +486,18 @@ struct bu27008_data {
 	__le16 buffer[BU27008_NUM_CHANS];
 };
 
-#define BU27008_MAX_VALID_RESULT_WAIT_US	50000
-#define BU27008_VALID_RESULT_WAIT_QUANTA_US	1000
+#define BU27_MAX_VALID_RESULT_WAIT_US	50000
+#define BU27_VALID_RESULT_WAIT_QUANTA_US	1000
 
-static int bu27008_chan_read_data(struct bu27008_data *data, int reg, int *val)
+static int bu27_chan_read_data(struct bu27008_data *data, int reg, int *val)
 {
 	int ret, valid;
 	__le16 tmp;
 
 	ret = regmap_read_poll_timeout(data->regmap, data->cd->valid_reg, /*BU27_REG_MODE_CONTROL3, */
-				       valid, (valid & BU27008_MASK_VALID),
-				       BU27008_VALID_RESULT_WAIT_QUANTA_US,
-				       BU27008_MAX_VALID_RESULT_WAIT_US);
+				       valid, (valid & BU27_MASK_VALID),
+				       BU27_VALID_RESULT_WAIT_QUANTA_US,
+				       BU27_MAX_VALID_RESULT_WAIT_US);
 	if (ret)
 		return ret;
 
@@ -552,7 +566,7 @@ static int bu27008_get_gain_sel(struct bu27008_data *data, int *sel)
 	return 0;
 }
 
-static int bu27008_get_gain(struct bu27008_data *data, struct iio_gts *gts, int *gain)
+static int bu27_get_gain(struct bu27008_data *data, struct iio_gts *gts, int *gain)
 {
 	int ret, sel;
 
@@ -573,7 +587,32 @@ static int bu27008_get_gain(struct bu27008_data *data, struct iio_gts *gts, int 
 	return 0;
 }
 
-static int bu27008_write_gain_sel(struct bu27008_data *data, int sel)
+static int bu27010_write_gain_sel(struct bu27008_data *data, unsigned int sel)
+{
+	int regval, ret;
+
+	/*
+	 * Gain 'selector' is composed of two registers. Selector is 6bit value,
+	 * 4 high bits being the RGBC gin fied in MODE_CONTROL1 register.
+	 *
+	 * Let's take the 4 high bits of selector and prepare MODE_CONTROL1
+	 * value.
+	 */
+	regval = FIELD_PREP(BU270010_MASK_RGBC_GAIN, (sel >> 2));
+
+	ret = regmap_update_bits(data->regmap, BU27_REG_MODE_CONTROL1,
+				  BU27010_MASK_RGBC_GAIN, regval);
+	/*
+	 * Two low two bits must be set for all 4 channels in the
+	 * MODE_CONTROL2 register.
+	 */
+	regval = sel & GENMASK(1, 0);
+	regval = regval | regval >> 2 | regval >> 4 | regval >> 6;
+
+	return regmap_write(data->regmap, BU27_REG_MODE_CONTROL2, regval);
+}
+
+static int bu27008_write_gain_sel(struct bu27008_data *data, unsigned int sel)
 {
 	int regval;
 
@@ -589,7 +628,7 @@ static int bu27008_write_gain_sel(struct bu27008_data *data, int sel)
 				  BU27008_MASK_RGBC_GAIN, regval);
 }
 
-static int bu27008_set_gain(struct bu27008_data *data, int gain)
+static int bu27_set_gain(struct bu27008_data *data, int gain)
 {
 	int ret;
 
@@ -597,10 +636,11 @@ static int bu27008_set_gain(struct bu27008_data *data, int gain)
 	if (ret < 0)
 		return ret;
 
-	return bu27008_write_gain_sel(data, ret);
+	return data->cd->write_gain_sel(data, ret);
+//bu27008_write_gain_sel(data, ret);
 }
 
-static int bu27008_get_int_time_sel(struct bu27008_data *data, int *sel)
+static int bu27_get_int_time_sel(struct bu27008_data *data, int *sel)
 {
 	int ret, val;
 
@@ -610,18 +650,20 @@ static int bu27008_get_int_time_sel(struct bu27008_data *data, int *sel)
 	return ret;
 }
 
-static int bu27008_set_int_time_sel(struct bu27008_data *data, int sel)
+static int bu27_set_int_time_sel(struct bu27008_data *data, int sel)
 {
-		return regmap_update_bits(data->regmap,
-					  BU27_REG_MODE_CONTROL1,
-					  BU27008_MASK_MEAS_MODE, sel);
+	int tsel;
+
+	tsel = FIELD_PREP(data->cd->int_time_mask, sel);
+	return regmap_update_bits(data->regmap, BU27_REG_MODE_CONTROL1,
+				  data->cd->int_time_mask, tsel);
 }
 
-static int bu27008_get_int_time(struct bu27008_data *data)
+static int bu27_get_int_time(struct bu27008_data *data)
 {
 	int ret, sel;
 
-	ret = bu27008_get_int_time_sel(data, &sel);
+	ret = bu27_get_int_time_sel(data, &sel);
 	if (ret)
 		return ret;
 
@@ -629,56 +671,42 @@ static int bu27008_get_int_time(struct bu27008_data *data)
 					    sel & BU27008_MASK_MEAS_MODE);
 }
 
-static struct iio_gts *bu27008_get_gts(struct bu27008_data *data,
-				       struct iio_chan_spec const *chan)
-{
-	if (chan->scan_index == BU27008_IR)
-		return &data->gts_ir;
-
-	return &data->gts;
-}
-
-static struct iio_gts *bu27010_get_gts(struct bu27008_data *data,
-				       struct iio_chan_spec const *chan)
-{
-	return &data->gts;
-}
-
-static int _bu27008_get_scale(struct bu27008_data *data, struct iio_chan_spec const *chan, int *val,
+static int _bu27_get_scale(struct bu27008_data *data, struct iio_chan_spec const *chan, int *val,
 			      int *val2)
 {
 	struct iio_gts *gts;
 	int gain, ret;
 
-	gts = data->cd->get_gts(data, chan);
-	if (!gts)
-		return -EINVAL;
+	if (chan->scan_index == BU27008_IR)
+		gts = &data->gts_ir;
+	else
+		gts = &data->gts;
 
-	ret = bu27008_get_gain(data, gts, &gain);
+	ret = bu27_get_gain(data, gts, &gain);
 	if (ret)
 		return ret;
 
-	ret = bu27008_get_int_time(data);
+	ret = bu27_get_int_time(data);
 	if (ret < 0)
 		return ret;
 
 	return iio_gts_get_scale(gts, gain, ret, val, val2);
 }
 
-static int bu27008_get_scale(struct bu27008_data *data, struct iio_chan_spec const *chan, int *val, int *val2)
+static int bu27_get_scale(struct bu27008_data *data, struct iio_chan_spec const *chan, int *val, int *val2)
 {
 	int ret;
 
-/*		ret = bu27008_get_scale(data, chan->scan_index == BU27008_IR,
+/*		ret = bu27_get_scale(data, chan->scan_index == BU27008_IR,
 					val, val2); */
 	mutex_lock(&data->mutex);
-	ret = _bu27008_get_scale(data, ir, val, val2);
+	ret = _bu27_get_scale(data, ir, val, val2);
 	mutex_unlock(&data->mutex);
 
 	return ret;
 }
 
-static int bu27008_set_int_time(struct bu27008_data *data, int time)
+static int bu27_set_int_time(struct bu27008_data *data, int time)
 {
 	int ret;
 
@@ -686,18 +714,17 @@ static int bu27008_set_int_time(struct bu27008_data *data, int time)
 	if (ret < 0)
 		return ret;
 
-	return regmap_update_bits(data->regmap, BU27_REG_MODE_CONTROL1,
-				  BU27008_MASK_MEAS_MODE, ret);
+	return bu27_set_int_time_sel(data, ret);
 }
 
 /* Try to change the time so that the scale is maintained */
-static int bu27008_try_set_int_time(struct bu27008_data *data, int int_time_new)
+static int bu27_try_set_int_time(struct bu27008_data *data, int int_time_new)
 {
 	int ret, old_time_sel, new_time_sel,  old_gain, new_gain;
 
 	mutex_lock(&data->mutex);
 
-	ret = bu27008_get_int_time_sel(data, &old_time_sel);
+	ret = bu27_get_int_time_sel(data, &old_time_sel);
 	if (ret < 0)
 		goto unlock_out;
 
@@ -714,7 +741,7 @@ static int bu27008_try_set_int_time(struct bu27008_data *data, int int_time_new)
 		goto unlock_out;
 	}
 
-	ret = bu27008_get_gain(data, &data->gts, &old_gain);
+	ret = bu27_get_gain(data, &data->gts, &old_gain);
 	if (ret)
 		goto unlock_out;
 
@@ -724,7 +751,7 @@ static int bu27008_try_set_int_time(struct bu27008_data *data, int int_time_new)
 		int scale1, scale2;
 		bool ok;
 
-		_bu27008_get_scale(data, false, &scale1, &scale2);
+		_bu27_get_scale(data, false, &scale1, &scale2);
 		dev_dbg(data->dev,
 			"Can't support time %u with current scale %u %u\n",
 			int_time_new, scale1, scale2);
@@ -753,11 +780,11 @@ static int bu27008_try_set_int_time(struct bu27008_data *data, int int_time_new)
 		dev_dbg(data->dev, "scale changed, new gain %u\n", new_gain);
 	}
 
-	ret = bu27008_set_gain(data, new_gain);
+	ret = bu27_set_gain(data, new_gain);
 	if (ret)
 		goto unlock_out;
 
-	ret = bu27008_set_int_time(data, int_time_new);
+	ret = bu27_set_int_time(data, int_time_new);
 
 unlock_out:
 	mutex_unlock(&data->mutex);
@@ -765,29 +792,29 @@ unlock_out:
 	return ret;
 }
 
-static int bu27008_meas_set(struct bu27008_data *data, bool enable)
+static int bu27_meas_set(struct bu27008_data *data, bool enable)
 {
 	if (enable)
 		return regmap_set_bits(data->regmap, BU27_REG_MODE_CONTROL3,
-				       BU27008_MASK_MEAS_EN);
+				       data->cd->meas_en);
 
 	return regmap_clear_bits(data->regmap, BU27_REG_MODE_CONTROL3,
-				 BU27008_MASK_MEAS_EN);
+				 data->cd->meas_en);
 }
 
-static int bu27008_meas_en(struct bu27008_data *data)
+static int bu27_meas_en(struct bu27008_data *data)
 {
 	pr_info("Enable measurement\n");
-	return bu27008_meas_set(data, true);
+	return bu27_meas_set(data, true);
 }
 
-static int bu27008_meas_dis(struct bu27008_data *data)
+static int bu27_meas_dis(struct bu27008_data *data)
 {
 	pr_info("Disable measurement\n");
-	return bu27008_meas_set(data, false);
+	return bu27_meas_set(data, false);
 }
 
-static int bu27008_chan_cfg(struct bu27008_data *data,
+static int bu27_chan_cfg(struct bu27008_data *data,
 			    struct iio_chan_spec const *chan)
 {
 	int chan_sel;
@@ -803,36 +830,36 @@ static int bu27008_chan_cfg(struct bu27008_data *data,
 				  data->cd->chan_sel_mask, /* BU27008_MASK_CHAN_SEL,*/ chan_sel);
 }
 
-static int bu27008_read_one(struct bu27008_data *data, struct iio_dev *idev,
+static int bu27_read_one(struct bu27008_data *data, struct iio_dev *idev,
 			    struct iio_chan_spec const *chan, int *val, int *val2)
 {
 	int ret, int_time;
 
-	ret = bu27008_chan_cfg(data, chan);
+	ret = bu27_chan_cfg(data, chan);
 	if (ret)
 		return ret;
 
-	ret = bu27008_meas_en(data);
+	ret = bu27_meas_en(data);
 	if (ret)
 		return ret;
 
-	int_time = bu27008_get_int_time(data);
+	int_time = bu27_get_int_time(data);
 	if (int_time < 0)
 		int_time = 400000;
 
 	msleep((int_time + 500) / 1000)
 
-	ret = bu27008_chan_read_data(data, chan->address, val);
+	ret = bu27_chan_read_data(data, chan->address, val);
 	if (!ret)
 		ret = IIO_VAL_INT;
 
-	if (bu27008_meas_dis(data))
+	if (bu27_meas_dis(data))
 		dev_warn(data->dev, "measurement disabling failed\n");
 
 	return ret;
 }
 
-static int bu27008_read_raw(struct iio_dev *idev,
+static int bu27_read_raw(struct iio_dev *idev,
 			   struct iio_chan_spec const *chan,
 			   int *val, int *val2, long mask)
 {
@@ -847,7 +874,7 @@ static int bu27008_read_raw(struct iio_dev *idev,
 			return -EBUSY;
 
 		mutex_lock(&data->mutex);
-		ret = bu27008_read_one(data, idev, chan, val, val2);
+		ret = bu27_read_one(data, idev, chan, val, val2);
 		mutex_unlock(&data->mutex);
 
 		iio_device_release_direct_mode(idev);
@@ -856,7 +883,7 @@ static int bu27008_read_raw(struct iio_dev *idev,
 	}
 	case IIO_CHAN_INFO_SCALE:
 
-		ret = data->cd->get_scale(data, chan, val, val2);
+		ret = bu27_get_scale(data, chan, val, val2);
 /*		ret = bu27008_get_scale(data, chan->scan_index == BU27008_IR,
 					val, val2); */
 		if (ret)
@@ -865,7 +892,7 @@ static int bu27008_read_raw(struct iio_dev *idev,
 		return IIO_VAL_INT_PLUS_NANO;
 
 	case IIO_CHAN_INFO_INT_TIME:
-		ret = bu27008_get_int_time(data);
+		ret = bu27_get_int_time(data);
 		if (ret < 0)
 			return ret;
 
@@ -878,7 +905,7 @@ static int bu27008_read_raw(struct iio_dev *idev,
 	}
 }
 
-static int bu27008_set_scale(struct bu27008_data *data,
+static int bu27_set_scale(struct bu27008_data *data,
 			     struct iio_chan_spec const *chan,
 			     int val, int val2)
 {
@@ -889,7 +916,7 @@ static int bu27008_set_scale(struct bu27008_data *data,
 
 	mutex_lock(&data->mutex);
 
-	ret = bu27008_get_int_time_sel(data, &time_sel);
+	ret = bu27_get_int_time_sel(data, &time_sel);
 	if (ret < 0)
 		goto unlock_out;
 
@@ -916,13 +943,13 @@ static int bu27008_set_scale(struct bu27008_data *data,
 			goto unlock_out;
 		}
 
-		ret = bu27008_set_int_time_sel(data, new_time_sel);
+		ret = bu27_set_int_time_sel(data, new_time_sel);
 		if (ret)
 			goto unlock_out;
 	}
 
 
-	ret = bu27008_write_gain_sel(data, gain_sel);
+	ret = data->cd->write_gain_sel(data, gain_sel);
 
 unlock_out:
 	mutex_unlock(&data->mutex);
@@ -930,7 +957,7 @@ unlock_out:
 	return ret;
 }
 
-static int bu27008_write_raw(struct iio_dev *idev,
+static int bu27_write_raw(struct iio_dev *idev,
 			    struct iio_chan_spec const *chan,
 			    int val, int val2, long mask)
 {
@@ -947,10 +974,10 @@ static int bu27008_write_raw(struct iio_dev *idev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SCALE:
-		ret = bu27008_set_scale(data, chan, val, val2);
+		ret = bu27_set_scale(data, chan, val, val2);
 		break;
 	case IIO_CHAN_INFO_INT_TIME:
-		ret = bu27008_try_set_int_time(data, val);
+		ret = bu27_try_set_int_time(data, val);
 		break;
 	default:
 		ret = -EINVAL;
@@ -961,7 +988,7 @@ static int bu27008_write_raw(struct iio_dev *idev,
 	return ret;
 }
 
-static int bu27008_validate_trigger(struct iio_dev *idev,
+static int bu27_validate_trigger(struct iio_dev *idev,
 				   struct iio_trigger *trig)
 {
 	struct bu27008_data *data = iio_priv(idev);
@@ -972,7 +999,7 @@ static int bu27008_validate_trigger(struct iio_dev *idev,
 	return 0;
 }
 
-static int bu27008_read_avail(struct iio_dev *idev,
+static int bu27_read_avail(struct iio_dev *idev,
 			      struct iio_chan_spec const *chan, const int **vals,
 			      int *type, int *length, long mask)
 {
@@ -991,11 +1018,11 @@ static int bu27008_read_avail(struct iio_dev *idev,
 	}
 }
 
-static const struct iio_info bu27008_info = {
-	.read_raw = &bu27008_read_raw,
-	.write_raw = &bu27008_write_raw,
-	.read_avail = &bu27008_read_avail,
-	.validate_trigger = bu27008_validate_trigger,
+static const struct iio_info bu27_info = {
+	.read_raw = &bu27_read_raw,
+	.write_raw = &bu27_write_raw,
+	.read_avail = &bu27_read_avail,
+	.validate_trigger = bu27_validate_trigger,
 };
 
 static int bu27010_chip_init(struct bu27008_data *data)
@@ -1196,7 +1223,7 @@ static int bu27008_buffer_preenable(struct iio_dev *idev)
 	if (ret)
 		return ret;
 
-	return bu27008_meas_en(data);
+	return bu27_meas_en(data);
 }
 
 static int bu27008_buffer_postdisable(struct iio_dev *idev)
@@ -1205,7 +1232,7 @@ static int bu27008_buffer_postdisable(struct iio_dev *idev)
 
 	pr_info("Disabling buffer\n");
 
-	return bu27008_meas_dis(data);
+	return bu27_meas_dis(data);
 }
 
 static const struct iio_buffer_setup_ops bu27008_buffer_ops = {
@@ -1213,37 +1240,13 @@ static const struct iio_buffer_setup_ops bu27008_buffer_ops = {
 	.postdisable = bu27008_buffer_postdisable,
 };
 
-static int bu27010_gts_init(struct bu27008_data *data)
-{
-	return devm_iio_init_iio_gts(dev, BU27010_SCALE_1X, 0, bu27010_gains,
-				     ARRAY_SIZE(bu27010_gains), bu27010_itimes,
-				     ARRAY_SIZE(bu27010_itimes), &data->gts);
-}
-
-static int bu27008_gts_init(struct bu27008_data *data)
-{
-	int ret;
-
-	ret = devm_iio_init_iio_gts(dev, BU27008_SCALE_1X, 0, bu27008_gains,
-				    ARRAY_SIZE(bu27008_gains), bu27008_itimes,
-				    ARRAY_SIZE(bu27008_itimes), &data->gts);
-	if (ret)
-		return ret;
-
-	ret = devm_iio_init_iio_gts(dev, BU27008_SCALE_1X, 0, bu27008_gains_ir,
-				    ARRAY_SIZE(bu27008_gains_ir), bu27008_itimes,
-				    ARRAY_SIZE(bu27008_itimes), &data->gts_ir);
-	if (ret)
-		return ret;
-}
-
 static int bu27008_probe(struct i2c_client *i2c)
 {
 	struct device *dev = &i2c->dev;
 	struct iio_trigger *indio_trig;
 	struct bu27008_data *data;
+	struct bu27_chip_data *cd;
 	struct regmap *regmap;
-//	unsigned int part_id, reg;
 	struct iio_dev *idev;
 	char *name;
 	int ret;
@@ -1263,19 +1266,20 @@ static int bu27008_probe(struct i2c_client *i2c)
 
 	data = iio_priv(idev);
 
-
 	switch () {
 	case BU27008:
-		data->cd = bu27008_chip;
+		cd = bu27008_chip;
 		break;
 	case bu27010:
-		data->cd = bu27010_chip;
+		cd = bu27010_chip;
 		break;
 	default:
 		return -ENODEV;
 	}
 
-	regmap = devm_regmap_init_i2c(i2c, data->cd->regmap_cfg);
+	data->cd = cd;
+
+	regmap = devm_regmap_init_i2c(i2c, cd->regmap_cfg);
 	if (IS_ERR(regmap))
 		return dev_err_probe(dev, PTR_ERR(regmap),
 				     "Failed to initialize Regmap\n");
@@ -1286,23 +1290,34 @@ static int bu27008_probe(struct i2c_client *i2c)
 
 	part_id = FIELD_GET(BU27_MASK_PART_ID, reg);
 
-	if (part_id != data->cd->part_id)
+	if (part_id != cd->part_id)
 			dev_warn(dev, "unknown device 0x%x\n", part_id);
+
+	ret = devm_iio_init_iio_gts(dev, cd->scale1x, 0, cd->gains,
+				    cd->num_gains, bu27_itimes,
+				    ARRAY_SIZE(bu27_itimes), &data->gts);
+	if (ret)
+		return ret;
+
+	ret = devm_iio_init_iio_gts(dev, cd->scale1x, 0, cd->gains_ir,
+				    cd->num_gains_ir, bu27_itimes,
+				    ARRAY_SIZE(bu27_itimes), &data->gts_ir);
+	if (ret)
+		return ret;
 
 	mutex_init(&data->mutex);
 	data->regmap = regmap;
 	data->dev = dev;
 	data->irq = i2c->irq;
 
-	idev->channels = data->cd->cspec; /* bu27008_channels; */
-	idev->num_channels = data->cd->num_channels; /* ARRAY_SIZE(bu27008_channels); */
-	idev->name = data->cd->name;
-	idev->info = &bu27008_info;
+	idev->channels = cd->cspec; /* bu27008_channels; */
+	idev->num_channels = cd->num_channels; /* ARRAY_SIZE(bu27008_channels); */
+	idev->name = cd->name;
+	idev->info = &bu27_info;
 	idev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_SOFTWARE;
-	idev->available_scan_masks = bu27008_scan_masks;
+	idev->available_scan_masks = bu27_scan_masks;
 
-//	ret = bu27008_chip_init(data);
-	ret = data->cd->chip_init(data);
+	ret = cd->chip_init(data);
 	if (ret)
 		return ret;
 
