@@ -683,7 +683,7 @@ int iio_gts_avail_times(struct iio_gts *gts,  const int **vals, int *type,
 		return -EINVAL;
 
 	*vals = gts->avail_time_tables;
-	*type = IIO_VAL_INT;
+	*type = IIO_VAL_INT_MICRO;
 	*length = gts->num_avail_time_tables;
 
 	return IIO_AVAIL_LIST;
