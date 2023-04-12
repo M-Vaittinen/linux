@@ -628,6 +628,8 @@ static ssize_t __iio_format_value(char *buf, size_t offset, unsigned int type,
 	switch (type) {
 	case IIO_VAL_INT:
 		return sysfs_emit_at(buf, offset, "%d", vals[0]);
+	case IIO_VAL_INT_MICRO:
+		return sysfs_emit_at(buf, offset, "0.%06u%s", vals[0]);
 	case IIO_VAL_INT_PLUS_MICRO_DB:
 		scale_db = true;
 		fallthrough;
@@ -952,6 +954,7 @@ static ssize_t iio_write_channel_info(struct device *dev,
 		case IIO_VAL_INT_PLUS_MICRO_DB:
 			scale_db = true;
 			fallthrough;
+		case IIO_VAL_INT_MICRO:
 		case IIO_VAL_INT_PLUS_MICRO:
 			fract_mult = 100000;
 			break;
