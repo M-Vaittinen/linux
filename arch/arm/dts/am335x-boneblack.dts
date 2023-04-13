@@ -18,6 +18,7 @@
 	companionpmic: companion@6a {
 		compatible = "rohm,bd2659";
 		reg = <0x6a>;
+
 		/* GPIO 1_29 - (connector 8, pin 26) for irq */
 /*		interrupt-parent = <&gpio1>; */
 /*		interrupts = <29 GPIO_ACTIVE_LOW>; */
@@ -48,6 +49,8 @@
 			};
 			BUCK4 {
 				regulator-name = "BUCK4";
+				rohm,otp-min-microvolt = <500000>;
+
 				regulator-min-microvolt = <500000>;
 				regulator-max-microvolt = <1850000>;
 				regulator-boot-on;
