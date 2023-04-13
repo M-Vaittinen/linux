@@ -41,15 +41,18 @@ struct bd2659_plat {
 #define BD_DATA(_name, _range, _id) \
 { .name = (_name), .ranges = &(_range)[0],  .numranges = ARRAY_SIZE(_range), .id = (_id) }
 
+#define BD2659_NUM_DYN_VOLTS 0xab
+#define BD2659_DYN_VOLT_STEP 5000 /* uV */
 static struct regulator_vrange buck123_vranges[] = {
-	BD_RANGE(500000, 5000, 1, 0xab),
-	BD_RANGE(1350000, 0, 0xac, 0xff),
+	BD_RANGE(500000, BD2659_DYN_VOLT_STEP, 1, BD2659_NUM_DYN_VOLTS),
+	BD_RANGE(1350000, 0, BD2659_NUM_DYN_VOLTS + 1, 0xff),
 };
 
 static struct regulator_vrange buck4_vranges[] = {
-	BD_RANGE(700000, 10000, 0, 0x3c),
-	BD_RANGE(1300000, 0, 0x3d, 0x3f),
+	BD_RANGE(1100000, BD2659_DYN_VOLT_STEP, 1, BD2659_NUM_DYN_VOLTS),
+	BD_RANGE(1850000, 0, BD2659_NUM_DYN_VOLTS + 1, 0xff),
 };
+
 
 static struct bd2659_plat bd2659_reg_data[] = {
 	BD_DATA("BUCK1", buck123_vranges, BD2659_BUCK1_ID),
@@ -57,6 +60,8 @@ static struct bd2659_plat bd2659_reg_data[] = {
 	BD_DATA("BUCK3", buck123_vranges, BD2659_BUCK3_ID),
 	BD_DATA("BUCK4", buck4_vranges, BD2659_BUCK4_ID),
 };
+
+#define OTP_PROP "rohm,otp-min-microvolt"
 
 static int bd2659_get_enable(struct udevice *dev)
 {
@@ -152,8 +157,9 @@ static int bd2659_regulator_probe(struct udevice *dev)
 	struct bd2659_plat *plat = dev_get_plat(dev);
 	struct dm_regulator_uclass_plat *uc_pdata;
 	int data_amnt = BD2659_REGULATOR_AMOUNT;
-	int i, rev, vendor;
+	int ret, i, rev, vendor;
 	struct udevice *parent;
+	int buck4_vbase;
 
 	parent = dev_get_parent(dev);
 	if (!parent) {
@@ -172,9 +178,23 @@ static int bd2659_regulator_probe(struct udevice *dev)
 	if (vendor != BD2659_VENDOR_ROHM || rev != BD2659_REV_KNOWN)
 		pr_warn("Unknown vendor / revision\n");
 
+	/* BD2659 has OTP option to change BUCK4 voltage range */
+
 	for (i = 0; i < data_amnt; i++) {
 		if (!strcmp(dev->name, bd2659_reg_data[i].name)) {
 			int reg;
+
+			if (i == 3) {
+				ret = dev_read_u32(dev, OTP_PROP, &buck4_vbase);
+				if (!ret) {
+					printf("Found %s\n", OTP_PROP);
+					buck4_vranges[0].min_volt = buck4_vbase;
+					buck4_vranges[1].min_volt = buck4_vbase +
+						(BD2659_NUM_DYN_VOLTS - 1 ) * BD2659_DYN_VOLT_STEP;
+				} else {
+					printf("Not Found %s\n", OTP_PROP);
+				}
+			}
 
 			*plat = bd2659_reg_data[i];
 			reg = TO_BUCKx_REG(plat->id, BD2659_BUCK0_VID_S0);
