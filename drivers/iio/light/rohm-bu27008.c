@@ -32,6 +32,12 @@
 #define BU27_CLEAR2_IR3		0x1
 #define BU27_BLUE2_IR3		0x2
 
+#define BU27_REG_DATA0_LO		0x50
+#define BU27_REG_DATA1_LO		0x52
+#define BU27_REG_DATA2_LO		0x54
+#define BU27_REG_DATA3_LO		0x56
+#define BU27_REG_DATA3_HI		0x57
+
 /* BU27008 specific */
 #define BU27008_ID			0x1a
 #define BU27008_MASK_MEAS_MODE		GENMASK(2, 0)
@@ -46,26 +52,22 @@
 #define BU27008_MASK_INT_EN		BIT(1)
 #define BU27008_MASK_MEAS_EN		BIT(0)
 
-#define BU27008_REG_DATA0_LO		0x50
-#define BU27008_REG_DATA1_LO		0x52
-#define BU27008_REG_DATA2_LO		0x54
-#define BU27008_REG_DATA3_LO		0x56
-#define BU27008_REG_DATA3_HI		0x57
 #define BU27008_REG_MANUFACTURER_ID	0x92
 #define BU27008_REG_MAX BU27008_REG_MANUFACTURER_ID
 
 /* BU27010 specific */
+#define BU27010_ID			0x1b
 #define BU27010_REG_POWER		0x3e
-#define BU27010_MASK_POWER		NIT(0)
+#define BU27010_MASK_POWER		BIT(0)
 
 #define BU27010_REG_RESET		0x3f
-#define BU27010_MASK_RESET		NIT(0)
+#define BU27010_MASK_RESET		BIT(0)
 
 #define BU27010_MASK_MEAS_EN		BIT(1)
 
 #define BU27010_MASK_CHAN_SEL		GENMASK(7, 6)
 #define BU27010_MASK_MEAS_MODE		GENMASK(5, 4)
-#define BU27010_MASK_RGB_GAIN		GENMASK(3, 0)
+#define BU27010_MASK_RGBC_GAIN		GENMASK(3, 0)
 
 #define BU27010_MASK_DATA3_GAIN		GENMASK(7, 6)
 #define BU27010_MASK_DATA2_GAIN		GENMASK(5, 4)
@@ -77,7 +79,7 @@
 
 #define BU27010_REG_MODE_CONTROL4	0x44
 /* If flicker is ever to be supported the IRQ must be handled as a field */
-#define BU27010_IRQ_DIS_ALL		GENMASK(1, 0);
+#define BU27010_IRQ_DIS_ALL		GENMASK(1, 0)
 #define BU27010_DRDY_EN			BIT(0)
 #define BU27010_MASK_INT_SEL		GENMASK(1, 0)
 
@@ -89,10 +91,6 @@
 #define BU27010_MASK_RGB_EN		BIT(1)
 #define BU27010_MASK_FLC_EN		BIT(0)
 
-#define BU27010_REG_DATA0_LO		0x50
-#define BU27010_REG_DATA1_LO		0x52
-#define BU27010_REG_DATA2_LO		0x54
-#define BU27010_REG_DATA3_LO		0x56
 #define BU27010_REG_DATA_FLICKER_LO	0x56
 #define BU27010_MASK_DATA_FLICKER_HI	GENMASK(2, 0)
 #define BU27010_REG_FLICKER_COUNT	0x5a
@@ -107,12 +105,12 @@
 
 
 enum {
-	BU27008_RED,	/* Always data0 */
-	BU27008_GREEN,	/* Always data1 */
-	BU27008_BLUE,	/* data2, configurable (blue / clear) */
-	BU27008_CLEAR,	/* data2 or data3 */
-	BU27008_IR,	/* data3 */
-	BU27008_NUM_CHANS
+	BU27_RED,	/* Always data0 */
+	BU27_GREEN,	/* Always data1 */
+	BU27_BLUE,	/* data2, configurable (blue / clear) */
+	BU27_CLEAR,	/* data2 or data3 */
+	BU27_IR,	/* data3 */
+	BU27_NUM_CHANS
 };
 
 enum {
@@ -124,17 +122,17 @@ enum {
 };
 
 /* We can always measure red and green at same time */
-#define ALWAYS_SCANNABLE (BIT(BU27008_RED) | BIT(BU27008_GREEN))
+#define ALWAYS_SCANNABLE (BIT(BU27_RED) | BIT(BU27_GREEN))
 
 #define BU27008_CHAN_DATA_SIZE		2 /* Each channel has 16bits of data */
-#define BU27008_BUF_DATA_SIZE (BU27008_NUM_CHANS * BU27008_CHAN_DATA_SIZE)
+#define BU27008_BUF_DATA_SIZE (BU27_NUM_CHANS * BU27008_CHAN_DATA_SIZE)
 #define BU27008_HW_DATA_SIZE (BU27008_NUM_HW_CHANS * BU27008_CHAN_DATA_SIZE)
 #define NUM_U16_IN_TSTAMP (sizeof(s64) / sizeof(u16))
 
 static const unsigned long bu27_scan_masks[] = {
-	ALWAYS_SCANNABLE | BIT(BU27008_CLEAR) | BIT(BU27008_IR),
-	ALWAYS_SCANNABLE | BIT(BU27008_CLEAR) | BIT(BU27008_BLUE),
-	ALWAYS_SCANNABLE | BIT(BU27008_BLUE) | BIT(BU27008_IR),
+	ALWAYS_SCANNABLE | BIT(BU27_CLEAR) | BIT(BU27_IR),
+	ALWAYS_SCANNABLE | BIT(BU27_CLEAR) | BIT(BU27_BLUE),
+	ALWAYS_SCANNABLE | BIT(BU27_BLUE) | BIT(BU27_IR),
 	0
 };
 
@@ -258,8 +256,8 @@ static const struct iio_gain_sel_pair bu27010_gains_ir[] = {
 	.info_mask_separate_available = (separate_avail),			\
 	.info_mask_shared_by_all = BIT(IIO_CHAN_INFO_INT_TIME),			\
 	.info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_INT_TIME),	\
-	.address = BU27008_REG_##data##_LO,					\
-	.scan_index = BU27008_##color,						\
+	.address = BU27_REG_##data##_LO,					\
+	.scan_index = BU27_##color,						\
 	.scan_type = {								\
 		.sign = 's',							\
 		.realbits = 16,							\
@@ -301,8 +299,8 @@ static const struct iio_gain_sel_pair bu27010_gains_ir[] = {
 				   BIT(IIO_CHAN_INFO_INT_TIME),			\
 	.info_mask_shared_by_all_available = BIT(IIO_CHAN_INFO_SCALE) |		\
 					     BIT(IIO_CHAN_INFO_INT_TIME),	\
-	.address = BU27010_REG_##data##_LO,					\
-	.scan_index = BU27010_##color,						\
+	.address = BU27_REG_##data##_LO,					\
+	.scan_index = BU27_##color,						\
 	.scan_type = {								\
 		.sign = 's',							\
 		.realbits = 16,							\
@@ -322,7 +320,7 @@ static const struct iio_chan_spec bu27008_channels[] = {
 	 * Hence we don't advertise available ones either.
 	 */
 	BU27008_CHAN(IR, DATA3, 0),
-	IIO_CHAN_SOFT_TIMESTAMP(BU27008_NUM_CHANS),
+	IIO_CHAN_SOFT_TIMESTAMP(BU27_NUM_CHANS),
 };
 
 static const struct iio_chan_spec bu27010_channels[] = {
@@ -331,17 +329,17 @@ static const struct iio_chan_spec bu27010_channels[] = {
 	BU27010_CHAN(BLUE, DATA2),
 	BU27010_CHAN(CLEAR, DATA2),
 	BU27010_CHAN(IR, DATA3),
-	IIO_CHAN_SOFT_TIMESTAMP(BU27010_NUM_CHANS),
+	IIO_CHAN_SOFT_TIMESTAMP(BU27_NUM_CHANS),
 };
 
 struct bu27008_data;
 
 static int bu27010_chip_init(struct bu27008_data *data);
 static int bu27008_chip_init(struct bu27008_data *data);
-static struct iio_gts *bu27008_get_gts(struct bu27008_data *data,
-				       struct iio_chan_spec const *chan);
-static struct iio_gts *bu27010_get_gts(struct bu27008_data *data,
-				       struct iio_chan_spec const *chan);
+//static struct iio_gts *bu27008_get_gts(struct bu27008_data *data,
+//				       struct iio_chan_spec const *chan);
+//static struct iio_gts *bu27010_get_gts(struct bu27008_data *data,
+//				       struct iio_chan_spec const *chan);
 static int bu27008_get_gain_sel(struct bu27008_data *data, int *sel);
 static int bu27010_get_gain_sel(struct bu27008_data *data, int *sel);
 static int bu27008_write_gain_sel(struct bu27008_data *data, unsigned int sel);
@@ -355,8 +353,22 @@ static const struct regmap_range bu27008_volatile_ranges[] = {
 		.range_min = BU27_REG_MODE_CONTROL3,		/* VALID */
 		.range_max = BU27_REG_MODE_CONTROL3,
 	}, {
-		.range_min = BU27008_REG_DATA0_LO,		/* DATA */
-		.range_max = BU27008_REG_DATA3_HI,
+		.range_min = BU27_REG_DATA0_LO,		/* DATA */
+		.range_max = BU27_REG_DATA3_HI,
+	},
+};
+
+/* Regmap configs */
+static const struct regmap_range bu27010_volatile_ranges[] = {
+	{
+		.range_min = BU27010_REG_RESET,			/* RSTB */
+		.range_max = BU27_REG_SYSTEM_CONTROL,	/* RESET */
+	}, {
+		.range_min = BU27010_REG_MODE_CONTROL5,		/* VALID bits */
+		.range_max = BU27010_REG_MODE_CONTROL5,
+	}, {
+		.range_min = BU27_REG_DATA0_LO,
+		.range_max = BU27010_REG_FIFO_DATA_HI,
 	},
 };
 
@@ -365,19 +377,39 @@ static const struct regmap_access_table bu27008_volatile_regs = {
 	.n_yes_ranges = ARRAY_SIZE(bu27008_volatile_ranges),
 };
 
+static const struct regmap_access_table bu27010_volatile_regs = {
+	.yes_ranges = &bu27010_volatile_ranges[0],
+	.n_yes_ranges = ARRAY_SIZE(bu27010_volatile_ranges),
+};
+
 static const struct regmap_range bu27008_read_only_ranges[] = {
 	{
-		.range_min = BU27008_REG_DATA0_LO,
-		.range_max = BU27008_REG_DATA3_HI,
+		.range_min = BU27_REG_DATA0_LO,
+		.range_max = BU27_REG_DATA3_HI,
 	}, {
 		.range_min = BU27008_REG_MANUFACTURER_ID,
 		.range_max = BU27008_REG_MANUFACTURER_ID,
 	}
 };
 
+static const struct regmap_range bu27010_read_only_ranges[] = {
+	{
+		.range_min = BU27_REG_DATA0_LO,
+		.range_max = BU27010_REG_FIFO_DATA_HI,
+	}, {
+		.range_min = BU27010_REG_MANUFACTURER_ID,
+		.range_max = BU27010_REG_MANUFACTURER_ID,
+	}
+};
+
 static const struct regmap_access_table bu27008_ro_regs = {
 	.no_ranges = &bu27008_read_only_ranges[0],
 	.n_no_ranges = ARRAY_SIZE(bu27008_read_only_ranges),
+};
+
+static const struct regmap_access_table bu27010_ro_regs = {
+	.no_ranges = &bu27010_read_only_ranges[0],
+	.n_no_ranges = ARRAY_SIZE(bu27010_read_only_ranges),
 };
 
 static const struct regmap_config bu27008_regmap = {
@@ -389,17 +421,27 @@ static const struct regmap_config bu27008_regmap = {
 	.wr_table = &bu27008_ro_regs,
 };
 
+static const struct regmap_config bu27010_regmap = {
+	.reg_bits	= 8,
+	.val_bits	= 8,
+
+	.max_register	= BU27010_REG_MAX,
+	.cache_type	= REGCACHE_RBTREE,
+	.volatile_table = &bu27010_volatile_regs,
+	.wr_table	= &bu27010_ro_regs,
+};
+
 struct bu27_chip_data {
 	int (*chip_init)(struct bu27008_data *data);
-	struct iio_gts *(*get_gts)(struct bu27008_data *data,
-				   struct iio_chan_spec const *chan);
+//	struct iio_gts *(*get_gts)(struct bu27008_data *data,
+//				   struct iio_chan_spec const *chan);
 	int (*get_gain_sel)(struct bu27008_data *data, int *sel);
 	int (*write_gain_sel)(struct bu27008_data *data, unsigned int sel);
 	const struct regmap_config *regmap_cfg;
 	const struct iio_chan_spec *cspec;
-	struct iio_gain_sel_pair *gains;
+	const struct iio_gain_sel_pair *gains;
 	int num_gains;
-	struct iio_gain_sel_pair *gains_ir;
+	const struct iio_gain_sel_pair *gains_ir;
 	int scale1x;
 	int num_gains_ir;
 	int num_channels;
@@ -415,55 +457,54 @@ struct bu27_chip_data {
 	const char *name;
 };
 
-
-static const struct bu27_chip_data bu27010_chip {
-	name = "bu27010",
-	chip_init = bu27010_chip_init,
-	get_gts = bu27010_get_gts,
-	get_gain_sel = bu27010_get_gain_sel,
-	write_gain_sel = bu27010_write_gain_sel,
-	scale1x = BU27010_SCALE_1X;
-	part_id = BU27010_ID,
-	regmap_cfg = bu27010_regmap,
-	cspec = &bu27010_channels[0],
-	num_channels = ARRAY_SIZE(bu27010_channels),
-	drdy_en_reg = BU27010_REG_MODE_CONTROL4,
-	drdy_en_mask = BU27010_DRDY_EN,
-	valid_reg = BU27010_REG_MODE_CONTROL5,
-	meas_en_reg = BU27010_REG_MODE_CONTROL5,
-	meas_en_mask = BU27010_MASK_MEAS_EN,
-	chan_sel_reg = BU27010_REG_MODE_CONTROL1,
-	chan_sel_mask = BU27010_MASK_CHAN_SEL,
-	int_time_mask = BU27010_MASK_MEAS_MODE,
-	gains = &bu27010_gains[0],
-	num_gains = ARRAY_SIZE(bu27010_gains),
-	gains_ir = &bu27010_gains_ir[0],
-	num_gains_ir = ARRAY_SIZE(bu27010_gains_ir),
+static const struct bu27_chip_data bu27010_chip = {
+	.name = "bu27010",
+	.chip_init = bu27010_chip_init,
+//	.get_gts = bu27010_get_gts,
+	.get_gain_sel = bu27010_get_gain_sel,
+	.write_gain_sel = bu27010_write_gain_sel,
+	.scale1x = BU27010_SCALE_1X,
+	.part_id = BU27010_ID,
+	.regmap_cfg = &bu27010_regmap,
+	.cspec = &bu27010_channels[0],
+	.num_channels = ARRAY_SIZE(bu27010_channels),
+	.drdy_en_reg = BU27010_REG_MODE_CONTROL4,
+	.drdy_en_mask = BU27010_DRDY_EN,
+	.valid_reg = BU27010_REG_MODE_CONTROL5,
+	.meas_en_reg = BU27010_REG_MODE_CONTROL5,
+	.meas_en_mask = BU27010_MASK_MEAS_EN,
+	.chan_sel_reg = BU27_REG_MODE_CONTROL1,
+	.chan_sel_mask = BU27010_MASK_CHAN_SEL,
+	.int_time_mask = BU27010_MASK_MEAS_MODE,
+	.gains = &bu27010_gains[0],
+	.num_gains = ARRAY_SIZE(bu27010_gains),
+	.gains_ir = &bu27010_gains_ir[0],
+	.num_gains_ir = ARRAY_SIZE(bu27010_gains_ir),
 };
 
-static const struct bu27_chip_data bu27008_chip {
-	name = "bu27008",
-	chip_init = bu27008_chip_init,
-	get_gts = bu27008_get_gts,
-	scale1x = BU27008_SCALE_1X;
-	get_gain_sel = bu27008_get_gain_sel,
-	write_gain_sel = bu27008_write_gain_sel,
-	part_id = BU27008_ID,
-	regmap_cfg = bu27008_regmap,
-	cspec = &bu27008_channels[0],
-	num_channels = ARRAY_SIZE(bu27008_channels),
-	drdy_en_reg = BU27_REG_MODE_CONTROL3,
-	drdy_en_mask = BU27008_MASK_INT_EN,
-	valid_reg = BU27_REG_MODE_CONTROL3,
-	meas_en_reg = BU27_REG_MODE_CONTROL3,
-	meas_en_mask = BU27008_MASK_MEAS_EN,
-	chan_sel_reg = BU27_REG_MODE_CONTROL3,
-	chan_sel_mask= BU27008_MASK_CHAN_SEL,
-	int_time_mask = BU27008_MASK_MEAS_MODE,
-	gains = &bu27008_gains[0],
-	num_gains = ARRAY_SIZE(bu27008_gains),
-	gains_ir = &bu27008_gains_ir[0],
-	num_gains_ir = ARRAY_SIZE(bu27008_gains_ir),
+static const struct bu27_chip_data bu27008_chip = {
+	.name = "bu27008",
+	.chip_init = bu27008_chip_init,
+//	.get_gts = bu27008_get_gts,
+	.scale1x = BU27008_SCALE_1X,
+	.get_gain_sel = bu27008_get_gain_sel,
+	.write_gain_sel = bu27008_write_gain_sel,
+	.part_id = BU27008_ID,
+	.regmap_cfg = &bu27008_regmap,
+	.cspec = &bu27008_channels[0],
+	.num_channels = ARRAY_SIZE(bu27008_channels),
+	.drdy_en_reg = BU27_REG_MODE_CONTROL3,
+	.drdy_en_mask = BU27008_MASK_INT_EN,
+	.valid_reg = BU27_REG_MODE_CONTROL3,
+	.meas_en_reg = BU27_REG_MODE_CONTROL3,
+	.meas_en_mask = BU27008_MASK_MEAS_EN,
+	.chan_sel_reg = BU27_REG_MODE_CONTROL3,
+	.chan_sel_mask= BU27008_MASK_CHAN_SEL,
+	.int_time_mask = BU27008_MASK_MEAS_MODE,
+	.gains = &bu27008_gains[0],
+	.num_gains = ARRAY_SIZE(bu27008_gains),
+	.gains_ir = &bu27008_gains_ir[0],
+	.num_gains_ir = ARRAY_SIZE(bu27008_gains_ir),
 };
 
 struct bu27008_data {
@@ -481,9 +522,14 @@ struct bu27008_data {
 	 * Prevent changing gain/time when raw data is read.
 	 */
 	struct mutex mutex;
+	/*
+	 * On BU27010 we have gain setting divided in two registers. We want
+	 * to ensure the value is not read in the middle of writing.
+	 */
+	struct mutex gain_lock;
 	bool trigger_enabled;
 
-	__le16 buffer[BU27008_NUM_CHANS];
+	__le16 buffer[BU27_NUM_CHANS];
 };
 
 #define BU27_MAX_VALID_RESULT_WAIT_US	50000
@@ -525,7 +571,7 @@ static int bu27010_get_gain_sel(struct bu27008_data *data, int *sel)
 	 * If we support individual gains, then we need to have channel
 	 * information here.
 	 */
-	mutex_lock(data->gain_lock);
+	mutex_lock(&data->gain_lock);
 	ret = regmap_read(data->regmap, BU27_REG_MODE_CONTROL2, sel);
 	if (!ret) {
 		int tmp;
@@ -533,10 +579,11 @@ static int bu27010_get_gain_sel(struct bu27008_data *data, int *sel)
 		*sel = FIELD_GET(BU27010_MASK_DATA0_GAIN, *sel);
 
 		ret = regmap_read(data->regmap, BU27_REG_MODE_CONTROL1, &tmp);
-		*sel |= FIELD_GET(BU27010_MASK_RGB_GAIN, tmp) << fls(BU27010_MASK_DATA0_GAIN) - 1;
+		*sel |= FIELD_GET(BU27010_MASK_RGBC_GAIN, tmp) << (fls(BU27010_MASK_DATA0_GAIN) - 1);
 	}
 
 	*sel = FIELD_GET(BU27008_MASK_RGBC_GAIN, *sel);
+	mutex_unlock(&data->gain_lock);
 
 	return ret;
 }
@@ -598,8 +645,9 @@ static int bu27010_write_gain_sel(struct bu27008_data *data, unsigned int sel)
 	 * Let's take the 4 high bits of selector and prepare MODE_CONTROL1
 	 * value.
 	 */
-	regval = FIELD_PREP(BU270010_MASK_RGBC_GAIN, (sel >> 2));
+	regval = FIELD_PREP(BU27010_MASK_RGBC_GAIN, (sel >> 2));
 
+	mutex_lock(&data->gain_lock);
 	ret = regmap_update_bits(data->regmap, BU27_REG_MODE_CONTROL1,
 				  BU27010_MASK_RGBC_GAIN, regval);
 	/*
@@ -609,7 +657,10 @@ static int bu27010_write_gain_sel(struct bu27008_data *data, unsigned int sel)
 	regval = sel & GENMASK(1, 0);
 	regval = regval | regval >> 2 | regval >> 4 | regval >> 6;
 
-	return regmap_write(data->regmap, BU27_REG_MODE_CONTROL2, regval);
+	ret = regmap_write(data->regmap, BU27_REG_MODE_CONTROL2, regval);
+	mutex_unlock(&data->gain_lock);
+
+	return ret;
 }
 
 static int bu27008_write_gain_sel(struct bu27008_data *data, unsigned int sel)
@@ -642,21 +693,32 @@ static int bu27_set_gain(struct bu27008_data *data, int gain)
 
 static int bu27_get_int_time_sel(struct bu27008_data *data, int *sel)
 {
-	int ret, val;
+	unsigned int val;
+	int ret;
 
 	ret = regmap_read(data->regmap, BU27_REG_MODE_CONTROL1, &val);
-	*sel = FIELD_GET(data->cd->int_time_mask, /*BU27008_MASK_MEAS_MODE,*/ val);
+
+	val &= data->cd->int_time_mask;
+	val >>= ffs(data->cd->int_time_mask) - 1;
+
+	*sel = val;
+
+//	*sel = FIELD_GET(data->cd->int_time_mask, /*BU27008_MASK_MEAS_MODE,*/ val);
 
 	return ret;
 }
 
 static int bu27_set_int_time_sel(struct bu27008_data *data, int sel)
 {
-	int tsel;
+	//int tsel;
 
-	tsel = FIELD_PREP(data->cd->int_time_mask, sel);
+//	tsel = FIELD_PREP(data->cd->int_time_mask, sel);
+
+	sel <<= ffs(data->cd->int_time_mask) - 1;
+	sel &= data->cd->int_time_mask;
+
 	return regmap_update_bits(data->regmap, BU27_REG_MODE_CONTROL1,
-				  data->cd->int_time_mask, tsel);
+				  data->cd->int_time_mask, sel);
 }
 
 static int bu27_get_int_time(struct bu27008_data *data)
@@ -677,7 +739,7 @@ static int _bu27_get_scale(struct bu27008_data *data, struct iio_chan_spec const
 	struct iio_gts *gts;
 	int gain, ret;
 
-	if (chan->scan_index == BU27008_IR)
+	if (chan->scan_index == BU27_IR)
 		gts = &data->gts_ir;
 	else
 		gts = &data->gts;
@@ -697,10 +759,8 @@ static int bu27_get_scale(struct bu27008_data *data, struct iio_chan_spec const 
 {
 	int ret;
 
-/*		ret = bu27_get_scale(data, chan->scan_index == BU27008_IR,
-					val, val2); */
 	mutex_lock(&data->mutex);
-	ret = _bu27_get_scale(data, ir, val, val2);
+	ret = _bu27_get_scale(data, chan, val, val2);
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -794,24 +854,14 @@ unlock_out:
 
 static int bu27_meas_set(struct bu27008_data *data, bool enable)
 {
-	if (enable)
-		return regmap_set_bits(data->regmap, BU27_REG_MODE_CONTROL3,
-				       data->cd->meas_en);
-
-	return regmap_clear_bits(data->regmap, BU27_REG_MODE_CONTROL3,
-				 data->cd->meas_en);
-}
-
-static int bu27_meas_en(struct bu27008_data *data)
-{
+	if (enable) {
 	pr_info("Enable measurement\n");
-	return bu27_meas_set(data, true);
-}
-
-static int bu27_meas_dis(struct bu27008_data *data)
-{
+		return regmap_set_bits(data->regmap, data->cd->meas_en_reg,
+				       data->cd->meas_en_mask);
+	}
 	pr_info("Disable measurement\n");
-	return bu27_meas_set(data, false);
+	return regmap_clear_bits(data->regmap, data->cd->meas_en_reg,
+				 data->cd->meas_en_mask);
 }
 
 static int bu27_chan_cfg(struct bu27008_data *data,
@@ -819,12 +869,15 @@ static int bu27_chan_cfg(struct bu27008_data *data,
 {
 	int chan_sel;
 
-	if (chan->scan_index == BU27008_BLUE)
+	if (chan->scan_index == BU27_BLUE)
 		chan_sel = BU27_BLUE2_CLEAR3;
 	else
 		chan_sel = BU27_CLEAR2_IR3;
 
-	chan_sel = FIELD_PREP(data->cd->chan_sel_mask, /*BU27008_MASK_CHAN_SEL*/, chan_sel);
+//	chan_sel = FIELD_PREP(data->cd->chan_sel_mask, /*BU27008_MASK_CHAN_SEL*/ chan_sel);
+
+	chan_sel <<= ffs(data->cd->chan_sel_mask) - 1;
+	chan_sel &= data->cd->chan_sel_mask;
 
 	return regmap_update_bits(data->regmap, data->cd->chan_sel_reg, /* BU27_REG_MODE_CONTROL3, */
 				  data->cd->chan_sel_mask, /* BU27008_MASK_CHAN_SEL,*/ chan_sel);
@@ -839,7 +892,7 @@ static int bu27_read_one(struct bu27008_data *data, struct iio_dev *idev,
 	if (ret)
 		return ret;
 
-	ret = bu27_meas_en(data);
+	ret = bu27_meas_set(data, true);
 	if (ret)
 		return ret;
 
@@ -847,13 +900,13 @@ static int bu27_read_one(struct bu27008_data *data, struct iio_dev *idev,
 	if (int_time < 0)
 		int_time = 400000;
 
-	msleep((int_time + 500) / 1000)
+	msleep((int_time + 500) / 1000);
 
 	ret = bu27_chan_read_data(data, chan->address, val);
 	if (!ret)
 		ret = IIO_VAL_INT;
 
-	if (bu27_meas_dis(data))
+	if (bu27_meas_set(data, false))
 		dev_warn(data->dev, "measurement disabling failed\n");
 
 	return ret;
@@ -884,7 +937,7 @@ static int bu27_read_raw(struct iio_dev *idev,
 	case IIO_CHAN_INFO_SCALE:
 
 		ret = bu27_get_scale(data, chan, val, val2);
-/*		ret = bu27008_get_scale(data, chan->scan_index == BU27008_IR,
+/*		ret = bu27008_get_scale(data, chan->scan_index == BU27_IR,
 					val, val2); */
 		if (ret)
 			return ret;
@@ -911,7 +964,7 @@ static int bu27_set_scale(struct bu27008_data *data,
 {
 	int ret, gain_sel, time_sel, i;
 
-	if (chan->scan_index == BU27008_IR)
+	if (chan->scan_index == BU27_IR)
 		return -EINVAL;
 
 	mutex_lock(&data->mutex);
@@ -1133,7 +1186,7 @@ static irqreturn_t bu27008_trigger_handler(int irq, void *p)
 	struct iio_poll_func *pf = p;
 	struct iio_dev *idev = pf->indio_dev;
 	struct bu27008_data *data = iio_priv(idev);
-	__le16 raw[BU27008_NUM_CHANS + NUM_U16_IN_TSTAMP];
+	__le16 raw[BU27_NUM_CHANS + NUM_U16_IN_TSTAMP];
 	int ret, dummy;
 
 	memset(&raw, 0, sizeof(raw));
@@ -1146,33 +1199,33 @@ static irqreturn_t bu27008_trigger_handler(int irq, void *p)
 	if (ret < 0)
 		goto err_read;
 
-	ret = regmap_bulk_read(data->regmap, BU27008_REG_DATA0_LO, data->buffer,
+	ret = regmap_bulk_read(data->regmap, BU27_REG_DATA0_LO, data->buffer,
 			       BU27008_HW_DATA_SIZE);
 	if (ret < 0)
 		goto err_read;
 
 	/* Red and green are always in dedicated channels. */
-	if (*idev->active_scan_mask & BIT(BU27008_RED))
-		raw[BU27008_RED] = data->buffer[BU27008_RED];
-	if (*idev->active_scan_mask & BIT(BU27008_GREEN))
-		raw[BU27008_GREEN] = data->buffer[BU27008_GREEN];
+	if (*idev->active_scan_mask & BIT(BU27_RED))
+		raw[BU27_RED] = data->buffer[BU27_RED];
+	if (*idev->active_scan_mask & BIT(BU27_GREEN))
+		raw[BU27_GREEN] = data->buffer[BU27_GREEN];
 
  	/*
  	 * We need to check the scan mask to determine which of the
  	 * BLUE/CLEAR/IR are enabled so we know which channel is used to
  	 * measure which data.
 	 */
-	if (*idev->active_scan_mask & BIT(BU27008_BLUE)) {
-		raw[BU27008_BLUE] = data->buffer[BU27008_DATA2];
+	if (*idev->active_scan_mask & BIT(BU27_BLUE)) {
+		raw[BU27_BLUE] = data->buffer[BU27008_DATA2];
 
-		if (*idev->active_scan_mask & BIT(BU27008_CLEAR))
-			raw[BU27008_CLEAR] = data->buffer[BU27008_DATA3];
+		if (*idev->active_scan_mask & BIT(BU27_CLEAR))
+			raw[BU27_CLEAR] = data->buffer[BU27008_DATA3];
 	} else {
-		if (*idev->active_scan_mask & BIT(BU27008_CLEAR))
-			raw[BU27008_CLEAR] = data->buffer[BU27008_DATA2];
+		if (*idev->active_scan_mask & BIT(BU27_CLEAR))
+			raw[BU27_CLEAR] = data->buffer[BU27008_DATA2];
 	}
-	if (*idev->active_scan_mask & BIT(BU27008_IR))
-		raw[BU27008_IR] = data->buffer[BU27008_DATA3];
+	if (*idev->active_scan_mask & BIT(BU27_IR))
+		raw[BU27_IR] = data->buffer[BU27008_DATA3];
 
 	iio_push_to_buffers_with_timestamp(idev, raw, pf->timestamp);
 err_read:
@@ -1207,8 +1260,8 @@ static int bu27008_buffer_preenable(struct iio_dev *idev)
 
 	pr_info("Enabling buffer, scan mask 0x%lx\n", *idev->active_scan_mask);
 	/* Configure channel selection */
-	if (*idev->active_scan_mask & BIT(BU27008_BLUE)) {
-		if (*idev->active_scan_mask & BIT(BU27008_CLEAR))
+	if (*idev->active_scan_mask & BIT(BU27_BLUE)) {
+		if (*idev->active_scan_mask & BIT(BU27_CLEAR))
 			chan_sel = BU27_BLUE2_CLEAR3;
 		else
 			chan_sel = BU27_BLUE2_IR3;
@@ -1223,7 +1276,7 @@ static int bu27008_buffer_preenable(struct iio_dev *idev)
 	if (ret)
 		return ret;
 
-	return bu27_meas_en(data);
+	return bu27_meas_set(data, true);
 }
 
 static int bu27008_buffer_postdisable(struct iio_dev *idev)
@@ -1232,7 +1285,7 @@ static int bu27008_buffer_postdisable(struct iio_dev *idev)
 
 	pr_info("Disabling buffer\n");
 
-	return bu27_meas_dis(data);
+	return bu27_meas_set(data, false);
 }
 
 static const struct iio_buffer_setup_ops bu27008_buffer_ops = {
@@ -1245,11 +1298,11 @@ static int bu27008_probe(struct i2c_client *i2c)
 	struct device *dev = &i2c->dev;
 	struct iio_trigger *indio_trig;
 	struct bu27008_data *data;
-	struct bu27_chip_data *cd;
+	const struct bu27_chip_data *cd;
 	struct regmap *regmap;
 	struct iio_dev *idev;
 	char *name;
-	int ret;
+	int ret, reg, part_id;
 
 	if (!i2c->irq) {
 		dev_err(dev, "No IRQ configured\n");
@@ -1266,16 +1319,9 @@ static int bu27008_probe(struct i2c_client *i2c)
 
 	data = iio_priv(idev);
 
-	switch () {
-	case BU27008:
-		cd = bu27008_chip;
-		break;
-	case bu27010:
-		cd = bu27010_chip;
-		break;
-	default:
+	cd = device_get_match_data(&i2c->dev);
+	if (!cd)
 		return -ENODEV;
-	}
 
 	data->cd = cd;
 
@@ -1306,6 +1352,12 @@ static int bu27008_probe(struct i2c_client *i2c)
 		return ret;
 
 	mutex_init(&data->mutex);
+	/*
+	 * As writing of this the gain_lock is unused on bu27008. It's still
+	 * just simpler to unconditionally initialize the lock on all ICs and
+	 * have it usable should it be needed.
+	 */
+	mutex_init(&data->gain_lock);
 	data->regmap = regmap;
 	data->dev = dev;
 	data->irq = i2c->irq;
@@ -1370,7 +1422,8 @@ static int bu27008_probe(struct i2c_client *i2c)
 }
 
 static const struct of_device_id bu27008_of_match[] = {
-	{ .compatible = "rohm,bu27008", },
+	{ .compatible = "rohm,bu27008", .data = &bu27008_chip },
+	{ .compatible = "rohm,bu27010", .data = &bu27010_chip },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, bu27008_of_match);
