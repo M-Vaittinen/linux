@@ -290,31 +290,18 @@ config JSA1212
 	  the module will be called jsa1212.
 
 config ROHM_BU27008
-	tristate "ROHM BU27008 color (RGB+C/IR) sensor"
+	tristate "ROHM BU27008 / BU27010 color (RGB+C/IR) sensor"
 	depends on I2C
 	select REGMAP_I2C
 	select IIO_GTS_HELPER
 	help
-	  Enable support for the ROHM BU27008 color sensor.
+	  Enable support for the ROHM BU27008 and BU27010 color sensors.
 	  The ROHM BU27008 is a sensor with 5 photodiodes (red, green,
 	  blue, clear and IR) with four configurable channels. Red and
 	  green being always available and two out of the rest three
 	  (blue, clear, IR) can be selected to be simultaneously measured.
-	  Typical application is adjusting LCD backlight of TVs,
-	  mobile phones and tablet PCs.
-
-config ROHM_BU27010
-	tristate "ROHM BU27010 color (RGB+C/IR + flicker) sensor"
-	depends on I2C
-	select REGMAP_I2C
-	select IIO_GTS_HELPER
-	help
-	  Enable support for the ROHM BU27010 color sensor.
-	  The ROHM BU27010 is a sensor with 6 photodiodes (red, green,
-	  blue, clear, IR and flickering detection) with five configurable
-	  channels. Red, green and flickering detection being always
-	  available and two out of the rest three (blue, clear, IR) can be
-	  selected to be simultaneously measured.
+	  The BU27010 adds a different gain settings and a flickering
+	  detection measurement.
 	  Typical application is adjusting LCD/OLED backlight of TVs,
 	  mobile phones and tablet PCs.
 
