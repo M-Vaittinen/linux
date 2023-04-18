@@ -336,10 +336,6 @@ struct bu27008_data;
 
 static int bu27010_chip_init(struct bu27008_data *data);
 static int bu27008_chip_init(struct bu27008_data *data);
-//static struct iio_gts *bu27008_get_gts(struct bu27008_data *data,
-//				       struct iio_chan_spec const *chan);
-//static struct iio_gts *bu27010_get_gts(struct bu27008_data *data,
-//				       struct iio_chan_spec const *chan);
 static int bu27008_get_gain_sel(struct bu27008_data *data, int *sel);
 static int bu27010_get_gain_sel(struct bu27008_data *data, int *sel);
 static int bu27008_write_gain_sel(struct bu27008_data *data, unsigned int sel);
@@ -433,8 +429,6 @@ static const struct regmap_config bu27010_regmap = {
 
 struct bu27_chip_data {
 	int (*chip_init)(struct bu27008_data *data);
-//	struct iio_gts *(*get_gts)(struct bu27008_data *data,
-//				   struct iio_chan_spec const *chan);
 	int (*get_gain_sel)(struct bu27008_data *data, int *sel);
 	int (*write_gain_sel)(struct bu27008_data *data, unsigned int sel);
 	const struct regmap_config *regmap_cfg;
@@ -460,7 +454,6 @@ struct bu27_chip_data {
 static const struct bu27_chip_data bu27010_chip = {
 	.name = "bu27010",
 	.chip_init = bu27010_chip_init,
-//	.get_gts = bu27010_get_gts,
 	.get_gain_sel = bu27010_get_gain_sel,
 	.write_gain_sel = bu27010_write_gain_sel,
 	.scale1x = BU27010_SCALE_1X,
@@ -485,7 +478,6 @@ static const struct bu27_chip_data bu27010_chip = {
 static const struct bu27_chip_data bu27008_chip = {
 	.name = "bu27008",
 	.chip_init = bu27008_chip_init,
-//	.get_gts = bu27008_get_gts,
 	.scale1x = BU27008_SCALE_1X,
 	.get_gain_sel = bu27008_get_gain_sel,
 	.write_gain_sel = bu27008_write_gain_sel,
@@ -688,7 +680,6 @@ static int bu27_set_gain(struct bu27008_data *data, int gain)
 		return ret;
 
 	return data->cd->write_gain_sel(data, ret);
-//bu27008_write_gain_sel(data, ret);
 }
 
 static int bu27_get_int_time_sel(struct bu27008_data *data, int *sel)
