@@ -43,9 +43,14 @@ struct bd2659_plat {
 
 #define BD2659_NUM_DYN_VOLTS 0xab
 #define BD2659_DYN_VOLT_STEP 5000 /* uV */
-static struct regulator_vrange buck123_vranges[] = {
+static struct regulator_vrange buck12_vranges[] = {
 	BD_RANGE(500000, BD2659_DYN_VOLT_STEP, 1, BD2659_NUM_DYN_VOLTS),
 	BD_RANGE(1350000, 0, BD2659_NUM_DYN_VOLTS + 1, 0xff),
+};
+
+static struct regulator_vrange buck3_vranges[] = {
+	BD_RANGE(1100000, BD2659_DYN_VOLT_STEP, 1, BD2659_NUM_DYN_VOLTS),
+	BD_RANGE(1850000, 0, BD2659_NUM_DYN_VOLTS + 1, 0xff),
 };
 
 static struct regulator_vrange buck4_vranges[] = {
@@ -55,9 +60,9 @@ static struct regulator_vrange buck4_vranges[] = {
 
 
 static struct bd2659_plat bd2659_reg_data[] = {
-	BD_DATA("BUCK1", buck123_vranges, BD2659_BUCK1_ID),
-	BD_DATA("BUCK2", buck123_vranges, BD2659_BUCK2_ID),
-	BD_DATA("BUCK3", buck123_vranges, BD2659_BUCK3_ID),
+	BD_DATA("BUCK1", buck12_vranges, BD2659_BUCK1_ID),
+	BD_DATA("BUCK2", buck12_vranges, BD2659_BUCK2_ID),
+	BD_DATA("BUCK3", buck3_vranges, BD2659_BUCK3_ID),
 	BD_DATA("BUCK4", buck4_vranges, BD2659_BUCK4_ID),
 };
 
@@ -159,7 +164,7 @@ static int bd2659_regulator_probe(struct udevice *dev)
 	int data_amnt = BD2659_REGULATOR_AMOUNT;
 	int ret, i, rev, vendor;
 	struct udevice *parent;
-	int buck4_vbase;
+	int buck34_vbase;
 
 	parent = dev_get_parent(dev);
 	if (!parent) {
@@ -184,13 +189,27 @@ static int bd2659_regulator_probe(struct udevice *dev)
 		if (!strcmp(dev->name, bd2659_reg_data[i].name)) {
 			int reg;
 
-			if (i == 3) {
-				ret = dev_read_u32(dev, OTP_PROP, &buck4_vbase);
+			/*
+			 * BUCKs 3 and 4 (2 and 3 in data-sheet) have an OTP
+			 * option to use a different voltage range. See if
+			 * non default range (low-limit) is given from
+			 * device-tree.
+			 */
+			if (i == 3 || i == 2) {
+				ret = dev_read_u32(dev, OTP_PROP, &buck34_vbase);
 				if (!ret) {
 					printf("Found %s\n", OTP_PROP);
-					buck4_vranges[0].min_volt = buck4_vbase;
-					buck4_vranges[1].min_volt = buck4_vbase +
-						(BD2659_NUM_DYN_VOLTS - 1 ) * BD2659_DYN_VOLT_STEP;
+					if (i == 3) {
+						buck4_vranges[0].min_volt = buck34_vbase;
+						buck4_vranges[1].min_volt = buck34_vbase +
+							(BD2659_NUM_DYN_VOLTS - 1 ) * BD2659_DYN_VOLT_STEP;
+					} else if (i == 2) {
+						buck3_vranges[0].min_volt = buck34_vbase;
+						buck3_vranges[1].min_volt = buck34_vbase +
+							(BD2659_NUM_DYN_VOLTS - 1 ) * BD2659_DYN_VOLT_STEP;
+					} else {
+						printf("Only buck3 and buck4 can have different Vrange\n");
+					}
 				} else {
 					printf("Not Found %s\n", OTP_PROP);
 				}
