@@ -42,6 +42,7 @@
 			};
 			BUCK3 {
 				regulator-name = "BUCK3";
+				rohm,otp-min-microvolt = <500000>;
 				regulator-min-microvolt = <500000>;
 				regulator-max-microvolt = <1350000>;
 		//		regulator-boot-on;
