@@ -185,7 +185,12 @@ static const struct iio_itime_sel_mul bu27010_itimes[] = {
  *
  * So, we ignore the fact that in theory we could support some per channel gain
  * configurations and just say the GAIN is shared by all channels and always set
- * the same gain for all channels.
+ * the same gain for all channels...
+ *
+ * ...Oh, except for the IR. Of course the IR channel want's to be different.
+ * Selector 0 represents gain 1X on all other channels, but on IR it repesents
+ * 2X. This means that changing from sel 0 => 1 is 1X => 4X on other channels
+ * but 2X => 4X on IR... So, screw the common scale.
  *
  * FLICKER detection has own gain setting but currently we don't support the
  * flicker detection at all.
