@@ -384,7 +384,8 @@ static int _bu27008_get_scale(struct bu27008_data *data, bool ir, int *val,
 	return iio_gts_get_scale(gts, gain, ret, val, val2);
 }
 
-static int bu27008_get_scale(struct bu27008_data *data, bool ir, int *val, int *val2)
+static int bu27008_get_scale(struct bu27008_data *data, bool ir, int *val,
+			     int *val2)
 {
 	int ret;
 
