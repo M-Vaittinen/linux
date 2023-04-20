@@ -283,15 +283,42 @@ static int bu27008_chan_read_data(struct bu27008_data *data, int reg, int *val)
 	return ret;
 }
 
-static int bu27008_get_gain(struct bu27008_data *data, struct iio_gts *gts, int *gain)
+static int bu27008_get_gain_sel(struct bu27008_data *data, struct iio_gts *gts,
+				int *sel)
 {
-	int ret, sel;
+	int ret, tmp;
 
-	ret = regmap_read(data->regmap, BU27008_REG_MODE_CONTROL2, &sel);
+	ret = regmap_read(data->regmap, BU27008_REG_MODE_CONTROL2, &tmp);
 	if (ret)
 		return ret;
 
-	sel = FIELD_GET(BU27008_MASK_RGBC_GAIN, sel);
+	/*
+	 * RGBC and IR gains have different bitmasks. See which one we
+	 * have here.
+	 */
+	if (gts == &data->gts) {
+		*sel = FIELD_GET(BU27008_MASK_RGBC_GAIN, tmp);
+	} else {
+		*sel = FIELD_GET(BU27008_MASK_RGBC_GAIN, tmp);
+		/*
+		 * IR gain is the lowest 3 bits so we can just clear + OR them
+		 * using the mask without the FIELD.
+		 */
+		*sel &= ~BU27008_MASK_IR_GAIN_LO;
+		*sel |= BU27008_MASK_IR_GAIN_LO & tmp;
+	}
+
+	return 0;
+}
+
+static int bu27008_get_gain(struct bu27008_data *data, struct iio_gts *gts,
+			    int *gain)
+{
+	int ret, sel;
+
+	ret = bu27008_get_gain_sel(data, gts, &sel);
+	if (ret)
+		return ret;
 
 	ret = iio_gts_find_gain_by_sel(gts, sel);
 
@@ -322,15 +349,16 @@ static int bu27008_write_gain_sel(struct bu27008_data *data, int sel)
 				  BU27008_MASK_RGBC_GAIN, regval);
 }
 
-static int bu27008_set_gain(struct bu27008_data *data, int gain)
+static int bu27008_set_gain(struct bu27008_data *data, struct iio_gts *gts,
+			    int gain)
 {
 	int ret;
 
-	ret = iio_gts_find_sel_by_gain(&data->gts, gain);
+	ret = iio_gts_find_sel_by_gain(&gts, gain);
 	if (ret < 0)
 		return ret;
 
-	return bu27008_write_gain_sel(data, ret);
+	return bu27008_write_gain_sel(data, &data->gts_ir == gts, ret);
 }
 
 static int bu27008_get_int_time_sel(struct bu27008_data *data, int *sel)
@@ -408,10 +436,17 @@ static int bu27008_set_int_time(struct bu27008_data *data, int time)
 				  BU27008_MASK_MEAS_MODE, ret);
 }
 
+static bool bu27008_gains_can_coexist(int rgbc_gain_sel, int ir_gain_sel)
+{
+	return rgbc_gain_sel & BU27010_SHARED_GAIN_SEL_BITS ==
+		ir_gain_sel & BU27010_SHARED_GAIN_SEL_BITS;
+}
+
 /* Try to change the time so that the scale is maintained */
 static int bu27008_try_set_int_time(struct bu27008_data *data, int int_time_new)
 {
-	int ret, old_time_sel, new_time_sel,  old_gain, new_gain;
+	int ret, old_time_sel, new_time_sel, old_gain, new_gain;
+	int ret2, old_ir_gain, new_ir_gain;
 
 	mutex_lock(&data->mutex);
 
@@ -436,8 +471,33 @@ static int bu27008_try_set_int_time(struct bu27008_data *data, int int_time_new)
 	if (ret)
 		goto unlock_out;
 
+	ret = bu27008_get_gain(data, &data->gts_ir, &old_ir_gain);
+	if (ret)
+		goto unlock_out;
+
 	ret = iio_gts_find_new_gain_sel_by_old_gain_time(&data->gts, old_gain,
 				old_time_sel, new_time_sel, &new_gain);
+
+	ret2 = iio_gts_find_new_gain_sel_by_old_gain_time(&data->gts_ir, old_ir_gain,
+				old_time_sel, new_time_sel, &new_ir_gain);
+
+	if (!ret && !ret2) {
+		/*
+		 * If we found gains which maintain both the IR and RGBC scale.
+		 * then we check if we can set them both at the same time.
+		 * If we do, then we set gains and go setting time.
+		 *
+		 * If we can't, then we just set the gains according to the
+		 * RGBC one and let the IR scale to jump.
+		 */
+		if (!bu27008_gains_can_coexist(new_gain, new_ir_gain))
+			new_ir_gain = new_gain;
+	}
+
+	/*
+	 * If we can't maintain the RGBC scale, then we go look gain that
+	 * allows us to stay closest to the old scale
+	 */
 	if (ret) {
 		int scale1, scale2;
 		bool ok;
@@ -447,6 +507,7 @@ static int bu27008_try_set_int_time(struct bu27008_data *data, int int_time_new)
 			"Can't support time %u with current scale %u %u\n",
 			int_time_new, scale1, scale2);
 
+		/* There was an error determining the new target gain */
 		if (new_gain < 0)
 			goto unlock_out;
 
@@ -469,9 +530,25 @@ static int bu27008_try_set_int_time(struct bu27008_data *data, int int_time_new)
 		}
 		new_gain = ret;
 		dev_dbg(data->dev, "scale changed, new gain %u\n", new_gain);
+		/*
+		 * So, we have new RGBC gain computed here. Let's still see if
+		 * we found IR gain which maintains IR scale with new time.
+		 * If we did (ret2 == 0), and if the new IR gain can be set
+		 * at the same time with the new RGBC gain, then we use it.
+		 * If we did not find suitable IR gain, or if the IR gain can't
+		 * be set together with the RGBC gain, then we set the same
+		 * selector to IR and RGBC gain and user-space just needs to
+		 * deal with this again.
+		 */
+		if (ret2 || !bu27008_gains_can_coexist(new_gain, new_ir_gain))
+			new_ir_gain = new_gain;
 	}
 
-	ret = bu27008_set_gain(data, new_gain);
+	ret = bu27008_set_gain(data, data->gts, new_gain);
+	if (ret)
+		goto unlock_out;
+
+	ret = bu27008_set_gain(data, data->gts_ir, new_ir_gain);
 	if (ret)
 		goto unlock_out;
 
@@ -599,9 +676,15 @@ static int bu27008_set_scale(struct bu27008_data *data,
 			     int val, int val2)
 {
 	int ret, gain_sel, time_sel, i;
+	struct iio_gts *chan_gts, *other_gts;
 
-	if (chan->scan_index == BU27008_IR)
-		return -EINVAL;
+	if (chan->scan_index == BU27008_IR) {
+		chan_gts = &data->gts_ir;
+		other_gts = &data->gts;
+	} else {
+		chan_gts = &data->gts;
+		other_gts = &data->gts_ir;
+	}
 
 	mutex_lock(&data->mutex);
 
@@ -610,8 +693,21 @@ static int bu27008_set_scale(struct bu27008_data *data,
 		goto unlock_out;
 
 
-	ret = iio_gts_find_gain_sel_for_scale_using_time(&data->gts, time_sel,
+	ret = iio_gts_find_gain_sel_for_scale_using_time(gts, time_sel,
 						val, val2 * 1000, &gain_sel);
+	if (!ret) {
+		int other_gain_sel;
+
+		ret = bu27008_get_gain_sel(data, other_gts, &other_gain_sel);
+		if (ret)
+			goto unlock_out;
+
+		/* We don't allow IR gain setting to cause 
+		if (!bu27008_gains_can_coexist(gain_sel, other_gain_sel))
+			if (chan->scan_index == BU27008_IR)
+				return -EINVAL;
+	}
+
 	if (ret) {
 		/* Could not support new scale with existing int-time */
 		int new_time_sel;
