@@ -375,7 +375,7 @@ static void test_iio_gts_total_gain_to_scale(struct kunit *test)
 
 static void test_iio_gts_chk_times(struct kunit *test, const int *vals)
 {
-	static const int expected[] = {50000, 100000, 200000, 400000};
+	static const int expected[] = {0, 50000, 0, 100000, 0, 200000, 0, 400000};
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(expected); i++)
@@ -463,9 +463,9 @@ static void test_iio_gts_avail_test(struct kunit *test)
 	if (ret)
 		return;
 
-	KUNIT_EXPECT_EQ(test, IIO_VAL_INT, type);
-	KUNIT_EXPECT_EQ(test, 4, len);
-	if (len < 4)
+	KUNIT_EXPECT_EQ(test, IIO_VAL_INT_PLUS_MICRO, type);
+	KUNIT_EXPECT_EQ(test, 8, len);
+	if (len < 8)
 		return;
 
 	test_iio_gts_chk_times(test, vals);
