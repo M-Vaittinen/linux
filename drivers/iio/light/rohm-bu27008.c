@@ -39,7 +39,11 @@
 #define BU27008_REG_MODE_CONTROL3	0x43
 #define BU27008_MASK_VALID		BIT(7)
 #define BU27008_MASK_INT_EN		BIT(1)
+#define BU27008_INT_EN			BU27008_MASK_INT_EN
+#define BU27008_INT_DIS			0
 #define BU27008_MASK_MEAS_EN		BIT(0)
+#define BU27008_MEAS_EN			BIT(0)
+#define BU27008_MEAS_DIS		0
 
 #define BU27008_REG_DATA0_LO		0x50
 #define BU27008_REG_DATA1_LO		0x52
@@ -200,7 +204,8 @@ struct bu27008_data {
 
 	/*
 	 * Prevent changing gain/time config when scale is read/written.
-	 * Prevent changing gain/time when raw data is read.
+	 * Similarly, protect the integration_time read/change sequence.
+	 * Prevent changing gain/time when data is read.
 	 */
 	struct mutex mutex;
 };
@@ -493,14 +498,10 @@ unlock_out:
 	return ret;
 }
 
-static int bu27008_meas_set(struct bu27008_data *data, bool enable)
+static int bu27008_meas_set(struct bu27008_data *data, int state)
 {
-	if (enable)
-		return regmap_set_bits(data->regmap, BU27008_REG_MODE_CONTROL3,
-				       BU27008_MASK_MEAS_EN);
-
-	return regmap_clear_bits(data->regmap, BU27008_REG_MODE_CONTROL3,
-				 BU27008_MASK_MEAS_EN);
+	return regmap_update_bits(data->regmap, BU27008_REG_MODE_CONTROL3,
+				  BU27008_MASK_MEAS_EN, state);
 }
 
 static int bu27008_chan_cfg(struct bu27008_data *data,
@@ -528,7 +529,7 @@ static int bu27008_read_one(struct bu27008_data *data, struct iio_dev *idev,
 	if (ret)
 		return ret;
 
-	ret = bu27008_meas_set(data, true);
+	ret = bu27008_meas_set(data, BU27008_MEAS_EN);
 	if (ret)
 		return ret;
 
@@ -542,7 +543,7 @@ static int bu27008_read_one(struct bu27008_data *data, struct iio_dev *idev,
 	if (!ret)
 		ret = IIO_VAL_INT;
 
-	if (bu27008_meas_set(data, false))
+	if (bu27008_meas_set(data, BU27008_MEAS_DIS))
 		dev_warn(data->dev, "measurement disabling failed\n");
 
 	return ret;
@@ -713,18 +714,21 @@ static int bu27008_chip_init(struct bu27008_data *data)
 	if (ret)
 		return dev_err_probe(data->dev, ret, "Sensor reset failed\n");
 
+	/*
+	 * The data-sheet does not tell how long performing the IC reset takes.
+	 * However, the data-sheet says the minimum time it takes the IC to be
+	 * able to take inputs after power is applied, is 100 uS. I'd assume
+	 * > 1 mS is enough.
+	 */
 	msleep(1);
 
 	return ret;
 }
 
-static int bu27008_set_drdy_irq(struct bu27008_data *data, bool state)
+static int bu27008_set_drdy_irq(struct bu27008_data *data, int state)
 {
-	if (state)
-		return regmap_set_bits(data->regmap, BU27008_REG_MODE_CONTROL3,
-					BU27008_MASK_INT_EN);
-	return regmap_clear_bits(data->regmap, BU27008_REG_MODE_CONTROL3,
-				 BU27008_MASK_INT_EN);
+	return regmap_update_bits(data->regmap, BU27008_REG_MODE_CONTROL3,
+				 BU27008_MASK_INT_EN, state);
 }
 
 static int bu27008_trigger_set_state(struct iio_trigger *trig,
@@ -733,7 +737,10 @@ static int bu27008_trigger_set_state(struct iio_trigger *trig,
 	struct bu27008_data *data = iio_trigger_get_drvdata(trig);
 	int ret = 0;
 
-	ret = bu27008_set_drdy_irq(data, state);
+	if (state)
+		ret = bu27008_set_drdy_irq(data, BU27008_INT_EN);
+	else
+		ret = bu27008_set_drdy_irq(data, BU27008_INT_DIS);
 	if (ret)
 		dev_err(data->dev, "Failed to set trigger state\n");
 
@@ -810,14 +817,14 @@ static int bu27008_buffer_preenable(struct iio_dev *idev)
 	if (ret)
 		return ret;
 
-	return bu27008_meas_set(data, true);
+	return bu27008_meas_set(data, BU27008_MEAS_EN);
 }
 
 static int bu27008_buffer_postdisable(struct iio_dev *idev)
 {
 	struct bu27008_data *data = iio_priv(idev);
 
-	return bu27008_meas_set(data, false);
+	return bu27008_meas_set(data, BU27008_MEAS_DIS);
 }
 
 static const struct iio_buffer_setup_ops bu27008_buffer_ops = {
