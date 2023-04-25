@@ -5,7 +5,6 @@
  * Copyright (c) 2023, ROHM Semiconductor.
  */
 
-#include <linux/bits.h>
 #include <linux/bitfield.h>
 #include <linux/device.h>
 #include <linux/i2c.h>
@@ -48,10 +47,6 @@
 #define BU27010_REG_MODE_CONTROL3	0x43
 #define BU27010_MASK_FLC_MODE		BIT(7)
 #define BU27010_MASK_FLC_GAIN		GENMASK(4, 0)
-
-#define BU27010_BLUE2_CLEAR3		0x0
-#define BU27010_CLEAR2_IR3		0x1
-#define BU27010_BLUE2_IR3		0x2
 
 #define BU27010_REG_MODE_CONTROL4	0x44
 #define BU27010_MASK_WTM_TH		GENMASK(3, 2)
@@ -103,14 +98,16 @@ enum {
 /* We can always measure red and green at same time */
 #define ALWAYS_SCANNABLE (BIT(BU27010_RED) | BIT(BU27010_GREEN))
 
-#define BU27010_CHAN_DATA_SIZE		2 /* Each channel has 16bits of data */
-#define BU27010_BUF_DATA_SIZE (BU27010_NUM_CHANS * BU27010_CHAN_DATA_SIZE)
-#define BU27010_HW_DATA_SIZE (BU27010_NUM_HW_CHANS * BU27010_CHAN_DATA_SIZE)
-#define NUM_U16_IN_TSTAMP (sizeof(s64) / sizeof(u16))
+#define BU27010_BLUE2_CLEAR3		0x0 /* buffer is R, G, B, C */
+#define BU27010_CLEAR2_IR3		0x1 /* buffer is R, G, C, IR */
+#define BU27010_BLUE2_IR3		0x2 /* buffer is R, G, B, IR */
 
 static const unsigned long bu27010_scan_masks[] = {
+	/* buffer is R, G, B, C */
+	ALWAYS_SCANNABLE | BIT(BU27010_BLUE) | BIT(BU27010_CLEAR),
+	/* buffer is R, G, C, IR */
 	ALWAYS_SCANNABLE | BIT(BU27010_CLEAR) | BIT(BU27010_IR),
-	ALWAYS_SCANNABLE | BIT(BU27010_CLEAR) | BIT(BU27010_BLUE),
+	/* buffer is R, G, B, IR */
 	ALWAYS_SCANNABLE | BIT(BU27010_BLUE) | BIT(BU27010_IR),
 	0
 };
@@ -243,8 +240,6 @@ struct bu27010_data {
 	 */
 	struct mutex gain_lock;
 	bool trigger_enabled;
-
-	__le16 buffer[BU27010_NUM_CHANS];
 };
 
 #define BU27010_REG_RESET	0x3f
@@ -885,48 +880,27 @@ static irqreturn_t bu27010_trigger_handler(int irq, void *p)
 	struct iio_poll_func *pf = p;
 	struct iio_dev *idev = pf->indio_dev;
 	struct bu27010_data *data = iio_priv(idev);
-	__le16 raw[BU27010_NUM_CHANS + NUM_U16_IN_TSTAMP];
+	struct {
+		__le16 chan[BU27010_NUM_HW_CHANS];
+		s64 ts __aligned(8);
+	} raw;
 	int ret, dummy;
 
 	memset(&raw, 0, sizeof(raw));
 
 	/*
-	 * After some measurements, it seems reading the
-	 * BU27010_REG_MODE_CONTROL3 debounces the IRQ line
+	 * TODO: check on BU27010 if this debounces the IRQ line.
 	 */
 	ret = regmap_read(data->regmap, BU27010_REG_MODE_CONTROL5, &dummy);
 	if (ret < 0)
 		goto err_read;
 
-	ret = regmap_bulk_read(data->regmap, BU27010_REG_DATA0_LO, data->buffer,
-			       BU27010_HW_DATA_SIZE);
+	ret = regmap_bulk_read(data->regmap, BU27010_REG_DATA0_LO, &raw.chan,
+			       sizeof(raw.chan));
 	if (ret < 0)
 		goto err_read;
 
-	/* Red and green are always in dedicated channels. */
-	if (*idev->active_scan_mask & BIT(BU27010_RED))
-		raw[BU27010_RED] = data->buffer[BU27010_RED];
-	if (*idev->active_scan_mask & BIT(BU27010_GREEN))
-		raw[BU27010_GREEN] = data->buffer[BU27010_GREEN];
-
- 	/*
- 	 * We need to check the scan mask to determine which of the
- 	 * BLUE/CLEAR/IR are enabled so we know which channel is used to
- 	 * measure which data.
-	 */
-	if (*idev->active_scan_mask & BIT(BU27010_BLUE)) {
-		raw[BU27010_BLUE] = data->buffer[BU27010_DATA2];
-
-		if (*idev->active_scan_mask & BIT(BU27010_CLEAR))
-			raw[BU27010_CLEAR] = data->buffer[BU27010_DATA3];
-	} else {
-		if (*idev->active_scan_mask & BIT(BU27010_CLEAR))
-			raw[BU27010_CLEAR] = data->buffer[BU27010_DATA2];
-	}
-	if (*idev->active_scan_mask & BIT(BU27010_IR))
-		raw[BU27010_IR] = data->buffer[BU27010_DATA3];
-
-	iio_push_to_buffers_with_timestamp(idev, raw, pf->timestamp);
+	iio_push_to_buffers_with_timestamp(idev, &raw, pf->timestamp);
 err_read:
 	iio_trigger_notify_done(idev->trig);
 
@@ -1006,8 +980,7 @@ static int bu27010_probe(struct i2c_client *i2c)
 	int ret;
 
 	if (!i2c->irq) {
-		dev_err(dev, "No IRQ configured\n");
-		return -EINVAL;
+		dev_warn(dev, "No IRQ configured\n");
 	}
 
 	regmap = devm_regmap_init_i2c(i2c, &bu27010_regmap);
@@ -1056,46 +1029,49 @@ static int bu27010_probe(struct i2c_client *i2c)
 	idev->num_channels = ARRAY_SIZE(bu27010_channels);
 	idev->name = "bu27010";
 	idev->info = &bu27010_info;
-	idev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_SOFTWARE;
+	idev->modes = INDIO_DIRECT_MODE;
 	idev->available_scan_masks = bu27010_scan_masks;
 
 	ret = bu27010_chip_init(data);
 	if (ret)
 		return ret;
 
-	ret = devm_iio_triggered_buffer_setup_ext(dev, idev,
-						  &iio_pollfunc_store_time,
-						  bu27010_trigger_handler,
-						  IIO_BUFFER_DIRECTION_IN,
-						  &bu27010_buffer_ops,
-						  NULL);
-	if (ret)
-		return dev_err_probe(data->dev, ret,
+	if (i2c->irq) {
+		ret = devm_iio_triggered_buffer_setup(dev, idev,
+						      &iio_pollfunc_store_time,
+						      bu27010_trigger_handler,
+						      &bu27010_buffer_ops);
+		if (ret)
+			return dev_err_probe(data->dev, ret,
 				     "iio_triggered_buffer_setup_ext FAIL\n");
 
-	indio_trig = devm_iio_trigger_alloc(dev, "%sdata-rdy-dev%d", idev->name,
-					    iio_device_id(idev));
-	if (!indio_trig)
-		return -ENOMEM;
+		indio_trig = devm_iio_trigger_alloc(dev, "%sdata-rdy-dev%d",
+						idev->name, iio_device_id(idev));
+		if (!indio_trig)
+			return -ENOMEM;
 
-	data->trig = indio_trig;
+		data->trig = indio_trig;
 
-	indio_trig->ops = &bu27010_trigger_ops;
-	iio_trigger_set_drvdata(indio_trig, data);
+		indio_trig->ops = &bu27010_trigger_ops;
+		iio_trigger_set_drvdata(indio_trig, data);
 
-	name = devm_kasprintf(data->dev, GFP_KERNEL, "%s-bu27010",
-			      dev_name(data->dev));
+		name = devm_kasprintf(data->dev, GFP_KERNEL, "%s-bu27010",
+				      dev_name(data->dev));
 
-	ret = devm_request_threaded_irq(data->dev, i2c->irq, bu27010_irq_handler,
-					&bu27010_irq_thread_handler,
-					IRQF_ONESHOT, name, idev->pollfunc);
-	if (ret)
-		return dev_err_probe(data->dev, ret, "Could not request IRQ\n");
+		ret = devm_request_threaded_irq(data->dev, i2c->irq,
+						bu27010_irq_handler,
+						&bu27010_irq_thread_handler,
+						IRQF_ONESHOT, name,
+						idev->pollfunc);
+		if (ret)
+			return dev_err_probe(data->dev, ret,
+					     "Could not request IRQ\n");
 
-	ret = devm_iio_trigger_register(dev, indio_trig);
-	if (ret)
-		return dev_err_probe(data->dev, ret,
-				     "Trigger registration failed\n");
+		ret = devm_iio_trigger_register(dev, indio_trig);
+		if (ret)
+			return dev_err_probe(data->dev, ret,
+					     "Trigger registration failed\n");
+	}
 
 	ret = devm_iio_device_register(data->dev, idev);
 	if (ret < 0)
@@ -1106,7 +1082,7 @@ static int bu27010_probe(struct i2c_client *i2c)
 }
 
 static const struct of_device_id bu27010_of_match[] = {
-	{ .compatible = "rohm,bu27010", },
+	{ .compatible = "rohm,bu27010" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, bu27010_of_match);
