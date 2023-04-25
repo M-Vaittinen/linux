@@ -5,7 +5,6 @@
  * Copyright (c) 2023, ROHM Semiconductor.
  */
 
-#include <linux/bits.h>
 #include <linux/bitfield.h>
 #include <linux/bitops.h>
 #include <linux/device.h>
@@ -944,7 +943,7 @@ static int bu27008_probe(struct i2c_client *i2c)
 }
 
 static const struct of_device_id bu27008_of_match[] = {
-	{ .compatible = "rohm,bu27008", },
+	{ .compatible = "rohm,bu27008" },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, bu27008_of_match);
