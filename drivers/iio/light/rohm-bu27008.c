@@ -364,7 +364,7 @@ static int bu27008_set_int_time_sel(struct bu27008_data *data, int sel)
 				  BU27008_MASK_MEAS_MODE, sel);
 }
 
-static int bu27008_get_int_time(struct bu27008_data *data)
+static int bu27008_get_int_time_us(struct bu27008_data *data)
 {
 	int ret, sel;
 
@@ -391,7 +391,7 @@ static int _bu27008_get_scale(struct bu27008_data *data, bool ir, int *val,
 	if (ret)
 		return ret;
 
-	ret = bu27008_get_int_time(data);
+	ret = bu27008_get_int_time_us(data);
 	if (ret < 0)
 		return ret;
 
@@ -440,11 +440,11 @@ static int bu27008_try_set_int_time(struct bu27008_data *data, int int_time_new)
 		ret = -EINVAL;
 		goto unlock_out;
 	}
+
+	/* If we already use requested time, then we're done */
 	new_time_sel = iio_gts_find_sel_by_int_time(&data->gts, int_time_new);
-	if (new_time_sel == old_time_sel) {
-		ret = 0;
+	if (new_time_sel == old_time_sel)
 		goto unlock_out;
-	}
 
 	ret = bu27008_get_gain(data, &data->gts, &old_gain);
 	if (ret)
@@ -532,11 +532,11 @@ static int bu27008_read_one(struct bu27008_data *data, struct iio_dev *idev,
 	if (ret)
 		return ret;
 
-	int_time = bu27008_get_int_time(data);
+	int_time = bu27008_get_int_time_us(data);
 	if (int_time < 0)
 		int_time = 400000;
 
-	msleep((int_time + 500) / 1000);
+	msleep(int_time / 1000);
 
 	ret = bu27008_chan_read_data(data, chan->address, val);
 	if (!ret)
@@ -579,7 +579,7 @@ static int bu27008_read_raw(struct iio_dev *idev,
 		return IIO_VAL_INT_PLUS_NANO;
 
 	case IIO_CHAN_INFO_INT_TIME:
-		ret = bu27008_get_int_time(data);
+		ret = bu27008_get_int_time_us(data);
 		if (ret < 0)
 			return ret;
 
@@ -593,11 +593,34 @@ static int bu27008_read_raw(struct iio_dev *idev,
 	}
 }
 
+static int bu27008_try_find_new_time_gain(struct bu27008_data *data, int val,
+					  int val2, int *gain_sel)
+{
+	/* Could not support new scale with existing int-time */
+	int i, ret, new_time_sel;
+
+	for (i = 0; i < data->gts.num_itime; i++) {
+		new_time_sel = data->gts.itime_table[i].sel;
+		ret = iio_gts_find_gain_sel_for_scale_using_time(&data->gts,
+					new_time_sel, val, val2 * 1000, gain_sel);
+		if (!ret)
+			break;
+	}
+	if (i == data->gts.num_itime) {
+		dev_err(data->dev, "Can't support scale %u %u\n", val,
+			val2);
+
+		return -EINVAL;
+	}
+
+	return bu27008_set_int_time_sel(data, new_time_sel);
+}
+
 static int bu27008_set_scale(struct bu27008_data *data,
 			     struct iio_chan_spec const *chan,
 			     int val, int val2)
 {
-	int ret, gain_sel, time_sel, i;
+	int ret, gain_sel, time_sel;
 
 	if (chan->scan_index == BU27008_IR)
 		return -EINVAL;
@@ -608,35 +631,13 @@ static int bu27008_set_scale(struct bu27008_data *data,
 	if (ret < 0)
 		goto unlock_out;
 
-
 	ret = iio_gts_find_gain_sel_for_scale_using_time(&data->gts, time_sel,
 						val, val2 * 1000, &gain_sel);
-	if (ret) {
-		/* Could not support new scale with existing int-time */
-		int new_time_sel;
+	if (ret)
+		ret = bu27008_try_find_new_time_gain(data, val, val2, &gain_sel);
 
-		for (i = 0; i < data->gts.num_itime; i++) {
-			new_time_sel = data->gts.itime_table[i].sel;
-			ret = iio_gts_find_gain_sel_for_scale_using_time(
-				&data->gts, new_time_sel, val, val2 * 1000,
-				&gain_sel);
-			if (!ret)
-				break;
-		}
-		if (i == data->gts.num_itime) {
-			dev_err(data->dev, "Can't support scale %u %u\n", val,
-				val2);
-
-			ret = -EINVAL;
-			goto unlock_out;
-		}
-
-		ret = bu27008_set_int_time_sel(data, new_time_sel);
-		if (ret)
-			goto unlock_out;
-	}
-
-	ret = bu27008_write_gain_sel(data, gain_sel);
+	if (!ret)
+		ret = bu27008_write_gain_sel(data, gain_sel);
 
 unlock_out:
 	mutex_unlock(&data->mutex);
@@ -842,9 +843,6 @@ static int bu27008_probe(struct i2c_client *i2c)
 	char *name;
 	int ret;
 
-	if (!i2c->irq)
-		dev_warn(dev, "No IRQ configured\n");
-
 	regmap = devm_regmap_init_i2c(i2c, &bu27008_regmap);
 	if (IS_ERR(regmap))
 		return dev_err_probe(dev, PTR_ERR(regmap),
@@ -932,6 +930,8 @@ static int bu27008_probe(struct i2c_client *i2c)
 		if (ret)
 			return dev_err_probe(dev, ret,
 					     "Trigger registration failed\n");
+	} else {
+		dev_warn(dev, "No IRQ configured\n");
 	}
 
 	ret = devm_iio_device_register(dev, idev);
