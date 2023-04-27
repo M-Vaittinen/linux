@@ -1275,6 +1275,13 @@ static int bu27034_chip_init(struct bu27034_data *data)
 		return dev_err_probe(data->dev, ret, "Sensor reset failed\n");
 
 	msleep(1);
+
+	ret = regmap_reinit_cache(data->regmap, &bu27034_regmap);
+	if (ret) {
+		dev_err(data->dev, "Failed to reinit reg cache\n");
+		return ret;
+	}
+
 	/*
 	 * Read integration time here to ensure it is in regmap cache. We do
 	 * this to speed-up the int-time acquisition in the start of the buffer
