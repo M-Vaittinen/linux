@@ -53,6 +53,7 @@
 /* If flicker is ever to be supported the IRQ must be handled as a field */
 #define BU27010_IRQ_DIS_ALL		GENMASK(1, 0)
 #define BU27010_DRDY_EN			BIT(0)
+#define BU27010_DRDY_DIS		0
 #define BU27010_MASK_INT_SEL		GENMASK(1, 0)
 
 #define BU27010_REG_MODE_CONTROL5	0x45
@@ -227,7 +228,6 @@ struct bu27010_data {
 	struct device *dev;
 	struct iio_gts gts;
 	struct iio_gts gts_ir;
-	int64_t timestamp;
 	int irq;
 	/*
 	 * Prevent changing gain/time config when scale is read/written.
@@ -239,7 +239,6 @@ struct bu27010_data {
 	 * to ensure the value is not read in the middle of writing.
 	 */
 	struct mutex gain_lock;
-	bool trigger_enabled;
 };
 
 #define BU27010_REG_RESET	0x3f
@@ -314,6 +313,7 @@ static int bu27010_chan_read_data(struct bu27010_data *data, int reg, int *val)
 static int bu27010_get_gain_sel(struct bu27010_data *data, int *sel)
 {
 	int ret;
+		int tmp;
 
 	/*
 	 * If we always "lock" the gain selectors for all channels to prevent
@@ -328,16 +328,28 @@ static int bu27010_get_gain_sel(struct bu27010_data *data, int *sel)
 	 */
 	mutex_lock(&data->gain_lock);
 	ret = regmap_read(data->regmap, BU27010_REG_MODE_CONTROL2, sel);
-	if (!ret) {
-		int tmp;
+	if (ret)
+		goto unlock_out;
 
-		*sel = FIELD_GET(BU27010_MASK_DATA0_GAIN, *sel);
+	pr_info("%s(): BU27010_REG_MODE_CONTROL2 0x%x\n", __func__, *sel);
 
-		ret = regmap_read(data->regmap, BU27010_REG_MODE_CONTROL1, &tmp);
-		*sel |= FIELD_GET(BU27010_MASK_RGB_GAIN, tmp) << (fls(BU27010_MASK_DATA0_GAIN) - 1);
-	}
+	*sel = FIELD_GET(BU27010_MASK_DATA0_GAIN, *sel);
 
-	*sel = FIELD_GET(BU27010_MASK_RGB_GAIN, *sel);
+	pr_info("%s(): DATA0 FIELD (bit[1:0]): 0x%x\n", __func__, *sel);
+
+	ret = regmap_read(data->regmap, BU27010_REG_MODE_CONTROL1, &tmp);
+	if (ret)
+		goto unlock_out;
+
+	pr_info("%s(): BU27010_REG_MODE_CONTROL1: 0x%x\n", __func__, tmp);
+	pr_info("%s(): RGBC FIELD (bit[3:0]): 0x%x\n", __func__, FIELD_GET(BU27010_MASK_RGB_GAIN, tmp));
+	pr_info("%s(): RGBC FIELD shifted: (bit[5:2]) FIELD << %u: 0x%x\n", __func__, fls(BU27010_MASK_DATA0_GAIN) - 1, FIELD_GET(BU27010_MASK_RGB_GAIN, tmp) << (fls(BU27010_MASK_DATA0_GAIN) - 1));
+
+
+	*sel |= FIELD_GET(BU27010_MASK_RGB_GAIN, tmp) << (fls(BU27010_MASK_DATA0_GAIN) - 1);
+
+	pr_info("%s(): Combined 0x%x\n", __func__, *sel);
+unlock_out:
 	mutex_unlock(&data->gain_lock);
 
 	return ret;
@@ -798,6 +810,8 @@ static int bu27010_chip_init(struct bu27010_data *data)
 	if (ret)
 		return dev_err_probe(data->dev, ret, "Sensor powering failed\n");
 
+	pr_info("Wrote power-upi r:0x%x v:0x%x\n", BU27010_REG_POWER, BU27010_MASK_POWER);
+
 	msleep(1);
 	/* Reset */
 	ret = regmap_set_bits(data->regmap, BU27010_REG_SYSTEM_CONTROL,
@@ -806,6 +820,12 @@ static int bu27010_chip_init(struct bu27010_data *data)
 		return dev_err_probe(data->dev, ret, "Sensor reset failed\n");
 
 	msleep(1);
+
+	ret = regmap_reinit_cache(data->regmap, &bu27010_regmap);
+	if (ret) {
+		dev_err(data->dev, "Failed to reinit reg cache\n");
+		return ret;
+	}
 
 	/*
 	 * The IRQ enabling on BU27010 is done in a peculiar way. The IRQ
@@ -828,31 +848,30 @@ static int bu27010_chip_init(struct bu27010_data *data)
 				 BU27010_IRQ_DIS_ALL);
 }
 
-static int bu27010_set_drdy_irq(struct bu27010_data *data, bool state)
+static int bu27010_set_drdy_irq(struct bu27010_data *data, int state)
 {
-	if (state)
-		return regmap_set_bits(data->regmap, BU27010_REG_MODE_CONTROL4,
-				       BU27010_DRDY_EN);
-	return regmap_clear_bits(data->regmap, BU27010_REG_MODE_CONTROL4,
-				 BU27010_DRDY_EN);
+	return regmap_update_bits(data->regmap, BU27010_REG_MODE_CONTROL4,
+				  BU27010_DRDY_EN, state);
 }
 
 static int bu27010_trigger_set_state(struct iio_trigger *trig,
 				     bool state)
 {
 	struct bu27010_data *data = iio_trigger_get_drvdata(trig);
-	int ret = 0;
+	int ret;
 
-	pr_info("trigger %s requested\n", state ? "enable" : "disable");
+	/* TODO: Do we need locking ? */
 	mutex_lock(&data->mutex);
 
-	if (data->trigger_enabled != state) {
-		pr_info("%s trigger IRQ\n", state? "enabling" : "disabling");
-		data->trigger_enabled = state;
-		ret = bu27010_set_drdy_irq(data, state);
-		if (ret)
-			dev_err(data->dev, "Failed to set trigger state\n");
-	}
+	pr_info("%s trigger IRQ\n", state? "enabling" : "disabling");
+	if (state)
+		ret = bu27010_set_drdy_irq(data, BU27010_DRDY_EN);
+	else
+		ret = bu27010_set_drdy_irq(data, BU27010_DRDY_DIS);
+
+	if (ret)
+		dev_err(data->dev, "Failed to set trigger state\n");
+
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -861,19 +880,6 @@ static int bu27010_trigger_set_state(struct iio_trigger *trig,
 static const struct iio_trigger_ops bu27010_trigger_ops = {
 	.set_trigger_state = bu27010_trigger_set_state,
 };
-
-static irqreturn_t bu27010_irq_handler(int irq, void *private)
-{
-	struct iio_dev *idev = private;
-	struct bu27010_data *data = iio_priv(idev);
-
-	data->timestamp = iio_get_time_ns(idev);
-
-	if (data->trigger_enabled)
-		return IRQ_WAKE_THREAD;
-
-	return IRQ_NONE;
-}
 
 static irqreturn_t bu27010_trigger_handler(int irq, void *p)
 {
@@ -912,19 +918,10 @@ static irqreturn_t bu27010_irq_thread_handler(int irq, void *p)
 	struct iio_poll_func *pf = p;
 	struct iio_dev *idev = pf->indio_dev;
 	struct bu27010_data *data = iio_priv(idev);
-	irqreturn_t ret = IRQ_NONE;
 
-	pr_info("IRQ-handler\n");
-	mutex_lock(&data->mutex);
+	iio_trigger_poll_chained(data->trig);
 
-	if (data->trigger_enabled) {
-		iio_trigger_poll_chained(data->trig);
-		ret = IRQ_HANDLED;
-	}
-
-	mutex_unlock(&data->mutex);
-
-	return ret;
+	return IRQ_HANDLED;
 }
 
 static int bu27010_buffer_preenable(struct iio_dev *idev)
@@ -1059,7 +1056,7 @@ static int bu27010_probe(struct i2c_client *i2c)
 				      dev_name(data->dev));
 
 		ret = devm_request_threaded_irq(data->dev, i2c->irq,
-						bu27010_irq_handler,
+						iio_pollfunc_store_time,
 						&bu27010_irq_thread_handler,
 						IRQF_ONESHOT, name,
 						idev->pollfunc);
