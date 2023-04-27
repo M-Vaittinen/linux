@@ -23,9 +23,19 @@
 #include <linux/iio/triggered_buffer.h>
 
 #define BU27008_REG_SYSTEM_CONTROL	0x40
-#define BU27008_MASK_SW_RESET		BIT(7)
 #define BU27008_MASK_PART_ID		GENMASK(5, 0)
 #define BU27008_ID			0x1a
+/*
+ * we can't allow SW_RESET to be cached as the write needs to go to HW
+ * regardless the existing value. The regmap_update_bits() is fundamentally
+ * incompatible with the idea of read-modify-write cycle as (volatile) register
+ * value may be changed between read and write. (I assume this is why) the
+ * regmap_update_bits() seem to be always using the cache.
+ *
+ * Thus, we use the regmap_write() for reset, and since the part-ID is in same
+ * reguister as the reset bit, we do always write both.
+ */
+#define BU27008_SW_RESET		(BIT(7) | BU27008_ID)
 #define BU27008_REG_MODE_CONTROL1	0x41
 #define BU27008_MASK_MEAS_MODE		GENMASK(2, 0)
 #define BU27008_MASK_CHAN_SEL		GENMASK(3, 2)
@@ -709,8 +719,8 @@ static int bu27008_chip_init(struct bu27008_data *data)
 {
 	int ret;
 
-	ret = regmap_update_bits(data->regmap, BU27008_REG_SYSTEM_CONTROL,
-			   BU27008_MASK_SW_RESET, BU27008_MASK_SW_RESET);
+	ret = regmap_write(data->regmap, BU27008_REG_SYSTEM_CONTROL,
+			   BU27008_SW_RESET);
 	if (ret)
 		return dev_err_probe(data->dev, ret, "Sensor reset failed\n");
 
