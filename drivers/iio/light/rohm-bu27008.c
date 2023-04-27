@@ -722,6 +722,12 @@ static int bu27008_chip_init(struct bu27008_data *data)
 	 */
 	msleep(1);
 
+	ret = regmap_reinit_cache(data->regmap, &bu27008_regmap);
+	if (ret) {
+		dev_err(data->dev, "Failed to reinit reg cache\n");
+		return ret;
+	}
+
 	return ret;
 }
 
