@@ -22,10 +22,10 @@
 
 #define BU27010_ID			0x1b
 #define BU27010_REG_POWER		0x3e
-#define BU27010_MASK_POWER		BIT(0)
+#define BU27010_POWER_ON		BIT(0)
 
 #define BU27010_REG_RESET		0x3f
-#define BU27010_MASK_RESET		BIT(0)
+#define BU27010_RESET			BIT(0)
 
 #define BU27010_MASK_MEAS_EN		BIT(1)
 #define BU27010_MASK_CHAN_SEL		GENMASK(7, 6)
@@ -805,17 +805,16 @@ static int bu27010_chip_init(struct bu27010_data *data)
 	int ret;
 
 	/* Power */
-	ret = regmap_set_bits(data->regmap, BU27010_REG_POWER,
-			      BU27010_MASK_POWER);
+	ret = regmap_write(data->regmap, BU27010_REG_POWER, BU27010_POWER_ON);
 	if (ret)
 		return dev_err_probe(data->dev, ret, "Sensor powering failed\n");
 
-	pr_info("Wrote power-upi r:0x%x v:0x%x\n", BU27010_REG_POWER, BU27010_MASK_POWER);
+	pr_info("Wrote power-upi r:0x%x v:0x%x\n", BU27010_REG_POWER, BU27010_POWER_ON);
 
 	msleep(1);
 	/* Reset */
-	ret = regmap_set_bits(data->regmap, BU27010_REG_SYSTEM_CONTROL,
-			      BU27010_MASK_SW_RESET);
+	ret = regmap_write(data->regmap, BU27010_REG_SYSTEM_CONTROL,
+			      BU27010_RESET);
 	if (ret)
 		return dev_err_probe(data->dev, ret, "Sensor reset failed\n");
 
