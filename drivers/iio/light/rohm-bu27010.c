@@ -241,11 +241,10 @@ struct bu27010_data {
 	struct mutex gain_lock;
 };
 
-#define BU27010_REG_RESET	0x3f
 /* Regmap configs */
 static const struct regmap_range bu27010_volatile_ranges[] = {
 	{
-		.range_min = BU27010_REG_RESET,			/* RSTB */
+		.range_min = BU27010_REG_POWER,			/* RSTB */
 		.range_max = BU27010_REG_SYSTEM_CONTROL,	/* RESET */
 	}, {
 		.range_min = BU27010_REG_MODE_CONTROL5,		/* VALID bits */
@@ -331,24 +330,14 @@ static int bu27010_get_gain_sel(struct bu27010_data *data, int *sel)
 	if (ret)
 		goto unlock_out;
 
-	pr_info("%s(): BU27010_REG_MODE_CONTROL2 0x%x\n", __func__, *sel);
-
 	*sel = FIELD_GET(BU27010_MASK_DATA0_GAIN, *sel);
-
-	pr_info("%s(): DATA0 FIELD (bit[1:0]): 0x%x\n", __func__, *sel);
 
 	ret = regmap_read(data->regmap, BU27010_REG_MODE_CONTROL1, &tmp);
 	if (ret)
 		goto unlock_out;
 
-	pr_info("%s(): BU27010_REG_MODE_CONTROL1: 0x%x\n", __func__, tmp);
-	pr_info("%s(): RGBC FIELD (bit[3:0]): 0x%x\n", __func__, FIELD_GET(BU27010_MASK_RGB_GAIN, tmp));
-	pr_info("%s(): RGBC FIELD shifted: (bit[5:2]) FIELD << %u: 0x%x\n", __func__, fls(BU27010_MASK_DATA0_GAIN) - 1, FIELD_GET(BU27010_MASK_RGB_GAIN, tmp) << (fls(BU27010_MASK_DATA0_GAIN) - 1));
-
-
 	*sel |= FIELD_GET(BU27010_MASK_RGB_GAIN, tmp) << (fls(BU27010_MASK_DATA0_GAIN) - 1);
 
-	pr_info("%s(): Combined 0x%x\n", __func__, *sel);
 unlock_out:
 	mutex_unlock(&data->gain_lock);
 
@@ -805,16 +794,18 @@ static int bu27010_chip_init(struct bu27010_data *data)
 	int ret;
 
 	/* Power */
-	ret = regmap_write(data->regmap, BU27010_REG_POWER, BU27010_POWER_ON);
+//	ret = regmap_write(data->regmap, BU27010_REG_POWER, BU27010_POWER_ON);
+	ret = regmap_update_bits(data->regmap, BU27010_REG_POWER, BU27010_POWER_ON, BU27010_POWER_ON);
 	if (ret)
 		return dev_err_probe(data->dev, ret, "Sensor powering failed\n");
 
-	pr_info("Wrote power-upi r:0x%x v:0x%x\n", BU27010_REG_POWER, BU27010_POWER_ON);
-
 	msleep(1);
 	/* Reset */
+	ret = regmap_update_bits(data->regmap, BU27010_REG_RESET, BU27010_RESET, BU27010_RESET);
+/*
 	ret = regmap_write(data->regmap, BU27010_REG_SYSTEM_CONTROL,
 			      BU27010_RESET);
+*/
 	if (ret)
 		return dev_err_probe(data->dev, ret, "Sensor reset failed\n");
 
