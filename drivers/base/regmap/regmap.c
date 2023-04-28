@@ -3234,25 +3234,65 @@ static int _regmap_update_bits(struct regmap *map, unsigned int reg,
 	if (change)
 		*change = false;
 
-	if (regmap_volatile(map, reg) && map->reg_update_bits) {
-		reg += map->reg_base;
-		reg >>= map->format.reg_downshift;
-		ret = map->reg_update_bits(map->bus_context, reg, mask, val);
-		if (ret == 0 && change)
-			*change = true;
-	} else {
-		ret = _regmap_read(map, reg, &orig);
-		if (ret != 0)
-			return ret;
-
-		tmp = orig & ~mask;
-		tmp |= val & mask;
-
-		if (force_write || (tmp != orig)) {
-			ret = _regmap_write(map, reg, tmp);
+	if (regmap_volatile(map, reg)) {
+		if (map->reg_update_bits) {
+			reg += map->reg_base;
+			reg >>= map->format.reg_downshift;
+			ret = map->reg_update_bits(map->bus_context, reg, mask, val);
 			if (ret == 0 && change)
 				*change = true;
+
+			return ret;
 		}
+		/*
+		 * In many cases the volatile registers are expected to be
+		 * written to regardless of the existing value (because, the
+		 * value of a volatile register can't be trusted to stay the
+		 * same during RMW cycle). In fact, it is questionable if the
+		 * volatile registers and regmap_update_bits() conceptually
+		 * make sense without device specific map->reg_update_bits.
+		 *
+		 * Yet, there are devices where some register contains a
+		 * 'fixed part' and a 'volatile part'. For example the ROHM
+		 * BU27008 RGBC sensor has a register with part-ID (fixed) and
+		 * a reset bit which, should be written to no matter what the
+		 * cached value is - and which is cleared by hardware. In such
+		 * case using regmap_update_bits() with this register marked
+		 * volatile kind of makes sense. Doing a RMW-cycle is Ok as the
+		 * static part of the register can be read. The other option
+		 * is to hard-code the static part in driver. This can hit
+		 * to problems though. For example the fixed part-ID may
+		 * actually change, should the driver ever support a variant
+		 * with different part ID.
+		 *
+		 * In such case the read + modify could be done by caller, and
+		 * caller could then use regmap_write() directly.
+		 *
+		 * However, there may be some similar use-cases already in-tree
+		 * - potentially not even noticing that the write might never
+		 * get in HW when using regmap_update_bits() with volatile
+		 * registers if the force_write was not used here. Thus, set
+		 * the force_write here even though it may cause some
+		 * performance penalty. Still, it's probably easier to optimize
+		 * the sepcial cases with performance critical volatile
+		 * registers than spot all the errors caused by writes to
+		 * volatile registers not reaching the HW (once in a blue moon
+		 * when tmp == orig).
+		 */
+		force_write = true;
+	}
+
+	ret = _regmap_read(map, reg, &orig);
+	if (ret != 0)
+		return ret;
+
+	tmp = orig & ~mask;
+	tmp |= val & mask;
+
+	if (force_write || (tmp != orig)) {
+		ret = _regmap_write(map, reg, tmp);
+		if (ret == 0 && change)
+			*change = true;
 	}
 
 	return ret;
