@@ -41,7 +41,6 @@ obj-$(CONFIG_PA12203001)	+= pa12203001.o
 obj-$(CONFIG_ROHM_BU27008)	+= rohm-bu27008.o
 obj-$(CONFIG_ROHM_BU27010)	+= rohm-bu27010.o
 obj-$(CONFIG_ROHM_BU27034)	+= rohm-bu27034.o
-obj-$(CONFIG_ROHM_BU27008)	+= rohm-bu27008.o
 obj-$(CONFIG_RPR0521)		+= rpr0521.o
 obj-$(CONFIG_SI1133)		+= si1133.o
 obj-$(CONFIG_SI1145)		+= si1145.o
