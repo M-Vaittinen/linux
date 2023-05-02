@@ -952,7 +952,7 @@ static int bu27008_probe(struct i2c_client *i2c)
 		/* set default trigger */
 		idev->trig = iio_trigger_get(itrig);
 	} else {
-		dev_warn(dev, "No IRQ configured\n");
+		dev_info(dev, "No IRQ, buffered mode disabled\n");
 	}
 
 	ret = devm_iio_device_register(dev, idev);
