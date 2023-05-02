@@ -382,8 +382,7 @@ static int bu27008_get_int_time_us(struct bu27008_data *data)
 	if (ret)
 		return ret;
 
-	return iio_gts_find_int_time_by_sel(&data->gts,
-					    sel & BU27008_MASK_MEAS_MODE);
+	return iio_gts_find_int_time_by_sel(&data->gts, sel);
 }
 
 static int _bu27008_get_scale(struct bu27008_data *data, bool ir, int *val,
@@ -603,10 +602,10 @@ static int bu27008_read_raw(struct iio_dev *idev,
 	}
 }
 
+/* Called if the new scale could not be supported with existing int-time */
 static int bu27008_try_find_new_time_gain(struct bu27008_data *data, int val,
 					  int val2, int *gain_sel)
 {
-	/* Could not support new scale with existing int-time */
 	int i, ret, new_time_sel;
 
 	for (i = 0; i < data->gts.num_itime; i++) {
@@ -617,8 +616,7 @@ static int bu27008_try_find_new_time_gain(struct bu27008_data *data, int val,
 			break;
 	}
 	if (i == data->gts.num_itime) {
-		dev_err(data->dev, "Can't support scale %u %u\n", val,
-			val2);
+		dev_err(data->dev, "Can't support scale %u %u\n", val, val2);
 
 		return -EINVAL;
 	}
@@ -643,9 +641,12 @@ static int bu27008_set_scale(struct bu27008_data *data,
 
 	ret = iio_gts_find_gain_sel_for_scale_using_time(&data->gts, time_sel,
 						val, val2 * 1000, &gain_sel);
-	if (ret)
+	if (ret) {
 		ret = bu27008_try_find_new_time_gain(data, val, val2, &gain_sel);
+		if (ret)
+			goto unlock_out;
 
+	}
 	if (!ret)
 		ret = bu27008_write_gain_sel(data, gain_sel);
 
@@ -663,8 +664,8 @@ static int bu27008_write_raw(struct iio_dev *idev,
 	int ret;
 
 	/*
-	 * We should not allow changing scale when measurement is ongoing.
-	 * This could make values in buffer inconsistent.
+	 * Do not allow changing scale when measurement is ongoing as doing so
+	 * could make values in the buffer inconsistent.
 	 */
 	ret = iio_device_claim_direct_mode(idev);
 	if (ret)
@@ -797,16 +798,7 @@ static irqreturn_t bu27008_trigger_handler(int irq, void *p)
 err_read:
 	iio_trigger_notify_done(idev->trig);
 
-	return IRQ_HANDLED;
-}
-
-static irqreturn_t bu27008_irq_thread_handler(int irq, void *p)
-{
-	struct iio_poll_func *pf = p;
-	struct iio_dev *idev = pf->indio_dev;
-	struct bu27008_data *data = iio_priv(idev);
-
-	iio_trigger_poll_chained(data->trig);
+	enable_irq(data->irq);
 
 	return IRQ_HANDLED;
 }
@@ -847,6 +839,18 @@ static const struct iio_buffer_setup_ops bu27008_buffer_ops = {
 	.preenable = bu27008_buffer_preenable,
 	.postdisable = bu27008_buffer_postdisable,
 };
+
+static irqreturn_t bu27008_data_rdy_poll(int irq, void *private)
+{
+	/*
+	 * The BU27008 keeps IRQ asserted until we read the VALID bit from
+	 * a register. We need to keep the IRQ disabled until this
+	 */
+	disable_irq_nosync(irq);
+	iio_trigger_poll(private);
+
+	return IRQ_HANDLED;
+}
 
 static int bu27008_probe(struct i2c_client *i2c)
 {
@@ -933,19 +937,20 @@ static int bu27008_probe(struct i2c_client *i2c)
 		name = devm_kasprintf(dev, GFP_KERNEL, "%s-bu27008",
 				      dev_name(dev));
 
-		ret = devm_request_threaded_irq(dev, i2c->irq,
-						iio_pollfunc_store_time,
-						&bu27008_irq_thread_handler,
-						IRQF_ONESHOT, name, idev->pollfunc);
+		ret = devm_request_irq(dev, i2c->irq,
+				       &bu27008_data_rdy_poll,
+				       0, name, itrig);
 		if (ret)
 			return dev_err_probe(dev, ret,
 					     "Could not request IRQ\n");
-
 
 		ret = devm_iio_trigger_register(dev, itrig);
 		if (ret)
 			return dev_err_probe(dev, ret,
 					     "Trigger registration failed\n");
+
+		/* set default trigger */
+		idev->trig = iio_trigger_get(itrig);
 	} else {
 		dev_warn(dev, "No IRQ configured\n");
 	}
