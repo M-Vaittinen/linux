@@ -793,21 +793,40 @@ static int bu27010_chip_init(struct bu27010_data *data)
 {
 	int ret;
 
-	/* Power */
-//	ret = regmap_write(data->regmap, BU27010_REG_POWER, BU27010_POWER_ON);
-	ret = regmap_update_bits(data->regmap, BU27010_REG_POWER, BU27010_POWER_ON, BU27010_POWER_ON);
+	/*
+	 * SW reset, we need to do this in case the sensor was already
+	 * powered and released from reset.
+	 *
+	 * Note: The SWRESET will return sensor to the state where power is
+	 * disabled and IC is in reset. Hence the power-on and reset release
+	 * must be performed _after_ the SW-reset.
+	 *
+	 * Finally, writing the SWRESET seems to work even when the IC is not
+	 * powered or released from reset. (Powered in this context means
+	 * writing power-on to the power-on register, naturally the power must
+	 * be physically connected to the IC so that the I2C works).
+	 */
+	ret = regmap_write_bits(data->regmap, BU27010_REG_SYSTEM_CONTROL,
+			      BU27010_MASK_SW_RESET, BU27010_MASK_SW_RESET);
+	if (ret)
+		return dev_err_probe(data->dev, ret, "Sensor SWRESET failed\n");
+
+	msleep(1);
+
+	/* Power on */
+	ret = regmap_write_bits(data->regmap, BU27010_REG_POWER, BU27010_POWER_ON,
+				BU27010_POWER_ON);
 	if (ret)
 		return dev_err_probe(data->dev, ret, "Sensor powering failed\n");
 
 	msleep(1);
-	/* Reset */
-	ret = regmap_update_bits(data->regmap, BU27010_REG_RESET, BU27010_RESET, BU27010_RESET);
-/*
-	ret = regmap_write(data->regmap, BU27010_REG_SYSTEM_CONTROL,
-			      BU27010_RESET);
-*/
+
+	/* Release from reset */
+	ret = regmap_write_bits(data->regmap, BU27010_REG_RESET, BU27010_RESET,
+				BU27010_RESET);
 	if (ret)
-		return dev_err_probe(data->dev, ret, "Sensor reset failed\n");
+		return dev_err_probe(data->dev, ret,
+				     "Sensor reset release failed\n");
 
 	msleep(1);
 
