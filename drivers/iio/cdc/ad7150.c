@@ -567,8 +567,7 @@ static int ad7150_probe(struct i2c_client *client)
 		if (chip->interrupts[1] < 0)
 			return chip->interrupts[1];
 	}
-	if (chip->interrupts[0] &&
-	    (id->driver_data == AD7151 || chip->interrupts[1])) {
+	if (id->driver_data == AD7151 || chip->interrupts[1]) {
 		irq_set_status_flags(chip->interrupts[0], IRQ_NOAUTOEN);
 		ret = devm_request_threaded_irq(&client->dev,
 						chip->interrupts[0],
