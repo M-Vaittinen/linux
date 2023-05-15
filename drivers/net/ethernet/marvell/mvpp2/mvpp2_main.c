@@ -5833,7 +5833,7 @@ static int mvpp2_multi_queue_vectors_init(struct mvpp2_port *port,
 			v->irq = of_irq_get_byname(port_node, irqname);
 		else
 			v->irq = fwnode_irq_get(port->fwnode, i);
-		if (v->irq <= 0) {
+		if (v->irq < 0) {
 			ret = -EINVAL;
 			goto err;
 		}
@@ -6764,7 +6764,7 @@ static int mvpp2_port_probe(struct platform_device *pdev,
 		err = -EPROBE_DEFER;
 		goto err_deinit_qvecs;
 	}
-	if (port->port_irq <= 0)
+	if (port->port_irq < 0)
 		/* the link irq is optional */
 		port->port_irq = 0;
 
