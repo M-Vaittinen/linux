@@ -4201,8 +4201,6 @@ static int __init ingenic_gpio_probe(struct ingenic_pinctrl *jzpc,
 	err = fwnode_irq_get(fwnode, 0);
 	if (err < 0)
 		return err;
-	if (!err)
-		return -EINVAL;
 	jzgc->irq = err;
 
 	girq = &jzgc->gc.irq;
