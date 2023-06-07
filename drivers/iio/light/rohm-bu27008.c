@@ -211,7 +211,33 @@ static const struct iio_chan_spec bu27008_channels[] = {
 	IIO_CHAN_SOFT_TIMESTAMP(BU27008_NUM_CHANS),
 };
 
+struct bu27008_data;
+
+struct bu27_chip_data {
+	const char *name;
+	int (*chip_init)(struct bu27008_data *data);
+	int (*get_gain_sel)(struct bu27008_data *data, int *sel);
+	int (*write_gain_sel)(struct bu27008_data *data, int sel);
+	const struct regmap_config *regmap_cfg;
+	const struct iio_gain_sel_pair *gains;
+	const struct iio_gain_sel_pair *gains_ir;
+	int num_gains;
+	int num_gains_ir;
+	int scale1x;
+
+	int drdy_en_reg;
+	int drdy_en_mask;
+	int meas_en_reg;
+	int meas_en_mask;
+	int valid_reg;
+	int chan_sel_reg;
+	int chan_sel_mask;
+	int int_time_mask;
+	u8 part_id;
+};
+
 struct bu27008_data {
+	const struct bu27_chip_data *cd;
 	struct regmap *regmap;
 	struct iio_trigger *trig;
 	struct device *dev;
@@ -282,6 +308,32 @@ static const struct regmap_config bu27008_regmap = {
 	.disable_locking = true,
 };
 
+static int bu27008_chip_init(struct bu27008_data *data);
+static int bu27008_write_gain_sel(struct bu27008_data *data, int sel);
+static int bu27008_get_gain_sel(struct bu27008_data *data, int *sel);
+
+static const struct bu27_chip_data bu27008_chip = {
+	.name = "bu27008",
+	.chip_init = bu27008_chip_init,
+	.scale1x = BU27008_SCALE_1X,
+	.get_gain_sel = bu27008_get_gain_sel,
+	.write_gain_sel = bu27008_write_gain_sel,
+	.part_id = BU27008_ID,
+	.regmap_cfg = &bu27008_regmap,
+	.drdy_en_reg = BU27008_REG_MODE_CONTROL3,
+	.drdy_en_mask = BU27008_MASK_INT_EN,
+	.valid_reg = BU27008_REG_MODE_CONTROL3,
+	.meas_en_reg = BU27008_REG_MODE_CONTROL3,
+	.meas_en_mask = BU27008_MASK_MEAS_EN,
+	.chan_sel_reg = BU27008_REG_MODE_CONTROL3,
+	.chan_sel_mask = BU27008_MASK_CHAN_SEL,
+	.int_time_mask = BU27008_MASK_MEAS_MODE,
+	.gains = &bu27008_gains[0],
+	.num_gains = ARRAY_SIZE(bu27008_gains),
+	.gains_ir = &bu27008_gains_ir[0],
+	.num_gains_ir = ARRAY_SIZE(bu27008_gains_ir),
+};
+
 #define BU27008_MAX_VALID_RESULT_WAIT_US	50000
 #define BU27008_VALID_RESULT_WAIT_QUANTA_US	1000
 
@@ -290,7 +342,7 @@ static int bu27008_chan_read_data(struct bu27008_data *data, int reg, int *val)
 	int ret, valid;
 	__le16 tmp;
 
-	ret = regmap_read_poll_timeout(data->regmap, BU27008_REG_MODE_CONTROL3,
+	ret = regmap_read_poll_timeout(data->regmap, data->cd->valid_reg,
 				       valid, (valid & BU27008_MASK_VALID),
 				       BU27008_VALID_RESULT_WAIT_QUANTA_US,
 				       BU27008_MAX_VALID_RESULT_WAIT_US);
@@ -306,15 +358,39 @@ static int bu27008_chan_read_data(struct bu27008_data *data, int reg, int *val)
 	return ret;
 }
 
+static int bu27008_get_gain_sel(struct bu27008_data *data, int *sel)
+{
+	int ret;
+
+	/*
+	 * If we always "lock" the gain selectors for all channels to prevent
+	 * unsupported configs, then it does not matter which channel is used
+	 * we can just return selector from any of them.
+	 *
+	 * This, however is not true if we decide to support only 4X and 16X
+	 * and then individual gains for channels. Currently this is not the
+	 * case.
+	 *
+	 * If we some day decide to support individual gains, then we need to
+	 * have channel information here.
+	 */
+
+	ret = regmap_read(data->regmap, BU27008_REG_MODE_CONTROL2, sel);
+	if (ret)
+		return ret;
+
+	*sel = FIELD_GET(BU27008_MASK_RGBC_GAIN, *sel);
+
+	return 0;
+}
+
 static int bu27008_get_gain(struct bu27008_data *data, struct iio_gts *gts, int *gain)
 {
 	int ret, sel;
 
-	ret = regmap_read(data->regmap, BU27008_REG_MODE_CONTROL2, &sel);
+	ret = bu27008_get_gain_sel(data, &sel);
 	if (ret)
 		return ret;
-
-	sel = FIELD_GET(BU27008_MASK_RGBC_GAIN, sel);
 
 	ret = iio_gts_find_gain_by_sel(gts, sel);
 	if (ret < 0) {
@@ -384,15 +460,21 @@ static int bu27008_get_int_time_sel(struct bu27008_data *data, int *sel)
 	int ret, val;
 
 	ret = regmap_read(data->regmap, BU27008_REG_MODE_CONTROL1, &val);
-	*sel = FIELD_GET(BU27008_MASK_MEAS_MODE, val);
+
+	val &= data->cd->int_time_mask;
+	val >>= ffs(data->cd->int_time_mask) - 1;
+
+	*sel = val;
 
 	return ret;
 }
 
 static int bu27008_set_int_time_sel(struct bu27008_data *data, int sel)
 {
+	sel <<= ffs(data->cd->int_time_mask) - 1;
+
 	return regmap_update_bits(data->regmap, BU27008_REG_MODE_CONTROL1,
-				  BU27008_MASK_MEAS_MODE, sel);
+				  data->cd->int_time_mask, sel);
 }
 
 static int bu27008_get_int_time_us(struct bu27008_data *data)
@@ -448,8 +530,7 @@ static int bu27008_set_int_time(struct bu27008_data *data, int time)
 	if (ret < 0)
 		return ret;
 
-	return regmap_update_bits(data->regmap, BU27008_REG_MODE_CONTROL1,
-				  BU27008_MASK_MEAS_MODE, ret);
+	return bu27008_set_int_time_sel(data, ret);
 }
 
 /* Try to change the time so that the scale is maintained */
@@ -527,10 +608,13 @@ unlock_out:
 	return ret;
 }
 
-static int bu27008_meas_set(struct bu27008_data *data, int state)
+static int bu27008_meas_set(struct bu27008_data *data, bool enable)
 {
-	return regmap_update_bits(data->regmap, BU27008_REG_MODE_CONTROL3,
-				  BU27008_MASK_MEAS_EN, state);
+	if (enable)
+		return regmap_set_bits(data->regmap, data->cd->meas_en_reg,
+				       data->cd->meas_en_mask);
+	return regmap_clear_bits(data->regmap, data->cd->meas_en_reg,
+				 data->cd->meas_en_mask);
 }
 
 static int bu27008_chan_cfg(struct bu27008_data *data,
@@ -543,9 +627,15 @@ static int bu27008_chan_cfg(struct bu27008_data *data,
 	else
 		chan_sel = BU27008_CLEAR2_IR3;
 
-	chan_sel = FIELD_PREP(BU27008_MASK_CHAN_SEL, chan_sel);
+	/*
+	 * prepare bitfield for channel sel. The FIELD_PREP works only when
+	 * mask is constant. In our case the mask is assigned based on the
+	 * chip type. Hence the open-coded FIELD_PREP here. We don't bother
+	 * zeroing the irrelevant bits though - update_bits takes care of that.
+	 */
+	chan_sel <<= ffs(data->cd->chan_sel_mask) - 1;
 
-	return regmap_update_bits(data->regmap, BU27008_REG_MODE_CONTROL3,
+	return regmap_update_bits(data->regmap, data->cd->chan_sel_reg,
 				  BU27008_MASK_CHAN_SEL, chan_sel);
 }
 
@@ -558,7 +648,7 @@ static int bu27008_read_one(struct bu27008_data *data, struct iio_dev *idev,
 	if (ret)
 		return ret;
 
-	ret = bu27008_meas_set(data, BU27008_MEAS_EN);
+	ret = bu27008_meas_set(data, true);
 	if (ret)
 		return ret;
 
@@ -574,7 +664,7 @@ static int bu27008_read_one(struct bu27008_data *data, struct iio_dev *idev,
 	if (!ret)
 		ret = IIO_VAL_INT;
 
-	if (bu27008_meas_set(data, BU27008_MEAS_DIS))
+	if (bu27008_meas_set(data, false))
 		dev_warn(data->dev, "measurement disabling failed\n");
 
 	return ret;
@@ -762,10 +852,10 @@ static int bu27008_update_scan_mode(struct iio_dev *idev,
 		chan_sel = BU27008_CLEAR2_IR3;
 	}
 
-	chan_sel = FIELD_PREP(BU27008_MASK_CHAN_SEL, chan_sel);
+	chan_sel <<= ffs(data->cd->chan_sel_mask) - 1;
 
-	return regmap_update_bits(data->regmap, BU27008_REG_MODE_CONTROL3,
-				 BU27008_MASK_CHAN_SEL, chan_sel);
+	return regmap_update_bits(data->regmap, data->cd->chan_sel_reg,
+				  data->cd->chan_sel_mask, chan_sel);
 }
 
 static const struct iio_info bu27008_info = {
@@ -794,29 +884,25 @@ static int bu27008_chip_init(struct bu27008_data *data)
 	 */
 	msleep(1);
 
-	ret = regmap_reinit_cache(data->regmap, &bu27008_regmap);
+	ret = regmap_reinit_cache(data->regmap, data->cd->regmap_cfg);
 	if (ret)
 		dev_err(data->dev, "Failed to reinit reg cache\n");
 
 	return ret;
 }
 
-static int bu27008_set_drdy_irq(struct bu27008_data *data, int state)
-{
-	return regmap_update_bits(data->regmap, BU27008_REG_MODE_CONTROL3,
-				 BU27008_MASK_INT_EN, state);
-}
-
-static int bu27008_trigger_set_state(struct iio_trigger *trig,
-				     bool state)
+static int bu27008_trigger_set_state(struct iio_trigger *trig, bool state)
 {
 	struct bu27008_data *data = iio_trigger_get_drvdata(trig);
 	int ret;
 
+
 	if (state)
-		ret = bu27008_set_drdy_irq(data, BU27008_INT_EN);
+		ret = regmap_set_bits(data->regmap, data->cd->drdy_en_reg,
+				      data->cd->drdy_en_mask);
 	else
-		ret = bu27008_set_drdy_irq(data, BU27008_INT_DIS);
+		ret = regmap_clear_bits(data->regmap, data->cd->drdy_en_reg,
+					data->cd->drdy_en_mask);
 	if (ret)
 		dev_err(data->dev, "Failed to set trigger state\n");
 
@@ -852,7 +938,7 @@ static irqreturn_t bu27008_trigger_handler(int irq, void *p)
 	 * After some measurements, it seems reading the
 	 * BU27008_REG_MODE_CONTROL3 debounces the IRQ line
 	 */
-	ret = regmap_read(data->regmap, BU27008_REG_MODE_CONTROL3, &dummy);
+	ret = regmap_read(data->regmap, data->cd->valid_reg, &dummy);
 	if (ret < 0)
 		goto err_read;
 
@@ -872,14 +958,14 @@ static int bu27008_buffer_preenable(struct iio_dev *idev)
 {
 	struct bu27008_data *data = iio_priv(idev);
 
-	return bu27008_meas_set(data, BU27008_MEAS_EN);
+	return bu27008_meas_set(data, true);
 }
 
 static int bu27008_buffer_postdisable(struct iio_dev *idev)
 {
 	struct bu27008_data *data = iio_priv(idev);
 
-	return bu27008_meas_set(data, BU27008_MEAS_DIS);
+	return bu27008_meas_set(data, false);
 }
 
 static const struct iio_buffer_setup_ops bu27008_buffer_ops = {
@@ -952,11 +1038,6 @@ static int bu27008_probe(struct i2c_client *i2c)
 	struct iio_dev *idev;
 	int ret;
 
-	regmap = devm_regmap_init_i2c(i2c, &bu27008_regmap);
-	if (IS_ERR(regmap))
-		return dev_err_probe(dev, PTR_ERR(regmap),
-				     "Failed to initialize Regmap\n");
-
 	idev = devm_iio_device_alloc(dev, sizeof(*data));
 	if (!idev)
 		return -ENOMEM;
@@ -967,23 +1048,33 @@ static int bu27008_probe(struct i2c_client *i2c)
 
 	data = iio_priv(idev);
 
+	data->cd = device_get_match_data(&i2c->dev);
+	if (!data->cd)
+		return -ENODEV;
+
+	regmap = devm_regmap_init_i2c(i2c, data->cd->regmap_cfg);
+	if (IS_ERR(regmap))
+		return dev_err_probe(dev, PTR_ERR(regmap),
+				     "Failed to initialize Regmap\n");
+
+
 	ret = regmap_read(regmap, BU27008_REG_SYSTEM_CONTROL, &reg);
 	if (ret)
 		return dev_err_probe(dev, ret, "Failed to access sensor\n");
 
 	part_id = FIELD_GET(BU27008_MASK_PART_ID, reg);
 
-	if (part_id != BU27008_ID)
+	if (part_id != data->cd->part_id)
 		dev_warn(dev, "unknown device 0x%x\n", part_id);
 
-	ret = devm_iio_init_iio_gts(dev, BU27008_SCALE_1X, 0, bu27008_gains,
-				    ARRAY_SIZE(bu27008_gains), bu27008_itimes,
+	ret = devm_iio_init_iio_gts(dev, data->cd->scale1x, 0, data->cd->gains,
+				    data->cd->num_gains, bu27008_itimes,
 				    ARRAY_SIZE(bu27008_itimes), &data->gts);
 	if (ret)
 		return ret;
 
-	ret = devm_iio_init_iio_gts(dev, BU27008_SCALE_1X, 0, bu27008_gains_ir,
-				    ARRAY_SIZE(bu27008_gains_ir), bu27008_itimes,
+	ret = devm_iio_init_iio_gts(dev, data->cd->scale1x, 0, data->cd->gains_ir,
+				    data->cd->num_gains_ir, bu27008_itimes,
 				    ARRAY_SIZE(bu27008_itimes), &data->gts_ir);
 	if (ret)
 		return ret;
@@ -993,14 +1084,14 @@ static int bu27008_probe(struct i2c_client *i2c)
 	data->dev = dev;
 	data->irq = i2c->irq;
 
-	idev->channels = bu27008_channels;
-	idev->num_channels = ARRAY_SIZE(bu27008_channels);
-	idev->name = "bu27008";
+	idev->channels = /* data->cd->cspec; */ &bu27008_channels[0];
+	idev->num_channels = /* data->cd->num_channels; */ ARRAY_SIZE(bu27008_channels);
+	idev->name = data->cd->name;
 	idev->info = &bu27008_info;
 	idev->modes = INDIO_DIRECT_MODE;
 	idev->available_scan_masks = bu27008_scan_masks;
 
-	ret = bu27008_chip_init(data);
+	ret = data->cd->chip_init(data);
 	if (ret)
 		return ret;
 
@@ -1021,7 +1112,7 @@ static int bu27008_probe(struct i2c_client *i2c)
 }
 
 static const struct of_device_id bu27008_of_match[] = {
-	{ .compatible = "rohm,bu27008" },
+	{ .compatible = "rohm,bu27008", .data = &bu27008_chip },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, bu27008_of_match);
