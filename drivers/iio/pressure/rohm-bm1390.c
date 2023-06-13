@@ -30,7 +30,14 @@
 #define BM1390_RESET_RELEASE		BM1390_MASK_RESET
 #define BM1390_RESET			0x00
 #define BM1390_REG_MODE_CTRL		0x14
+#define BM1390_MASK_DRDY_EN		BIT(4)
+#define BM1390_MASK_WMI_EN		BIT(2)
 #define BM1390_MASK_AVE_NUM		GENMASK(7, 5)
+/*
+ * Data-sheet states that when the IIR is used, the AVE_NUM must be set to
+ * value 110b
+ */
+#define BM1390_IIR_AVE_NUM		0x06
 #define BM1390_REG_FIFO_CTRL		0x15
 #define BM1390_MASK_IIR_MODE		GENMASK(1, 0)
 #define BM1390_IIR_MODE_OFF		0x0
@@ -123,7 +130,7 @@ enum {
 };
 
 struct bm1390_data_buf {
-	__be32 pressure;
+	u32 pressure;
 	__be16 temp;
 	s64 ts __aligned(8);
 };
@@ -168,7 +175,7 @@ static const struct iio_chan_spec bm1390_channels[] = {
 			.sign = 'u',
 			.realbits = 22,
 			.storagebits = 32,
-			.endianness = IIO_BE,
+			.endianness = IIO_LE,
 		},
 	},
 	{
@@ -197,10 +204,8 @@ static int bm1390_read_temp(struct bm1390_data *data, int *temp)
 	s16 val;
 	bool negative;
 
-	mutex_lock(&data->mutex);
 	ret = regmap_bulk_read(data->regmap, BM1390_REG_TEMP_HI, &temp_reg,
 			       sizeof(temp_reg));
-	mutex_unlock(&data->mutex);
 	if (ret)
 		return ret;
 
@@ -231,7 +236,7 @@ static int bm1390_read_temp(struct bm1390_data *data, int *temp)
 	return 0;
 }
 
-static int __bm1390_pressure_read(struct bm1390_data *data, __be32 *pressure)
+static int bm1390_pressure_read(struct bm1390_data *data, u32 *pressure)
 {
 	int ret;
 	u8 raw[3];
@@ -241,23 +246,9 @@ static int __bm1390_pressure_read(struct bm1390_data *data, __be32 *pressure)
 	if (ret < 0)
 		return ret;
 
-	*pressure = (__force __be32)(raw[0] >> 2 | raw[1] << 6 | raw[2] << 14);
+	*pressure = (u32)(raw[2] >> 2 | raw[1] << 6 | raw[0] << 14);
 
 	return 0;
-}
-
-static int bm1390_pressure_read(struct bm1390_data *data, int *pressure)
-{
-	__be32 raw_pressure;
-	int ret;
-
-	ret = __bm1390_pressure_read(data, &raw_pressure);
-	if (ret)
-		return ret;
-
-	*pressure = be32_to_cpu(raw_pressure);
-
-	return IIO_VAL_INT;
 }
 
  /* The enum values map directly to register bits */
@@ -269,13 +260,7 @@ enum bm1390_meas_mode {
 
 static int bm1390_meas_set(struct bm1390_data *data, enum bm1390_meas_mode mode)
 {
-	int ret;
-
-	mutex_lock(&data->mutex);
-	ret = regmap_set_bits(data->regmap, BM1390_REG_MODE_CTRL, mode);
-	mutex_unlock(&data->mutex);
-
-	return ret;
+	return regmap_set_bits(data->regmap, BM1390_REG_MODE_CTRL, mode);
 }
 
 /*
@@ -294,7 +279,11 @@ static int bm1390_read_data(struct bm1390_data *data,
 	*val2 = 0;
 
 	mutex_lock(&data->mutex);
-	ret = bm1390_meas_set(data, BM1390_MEAS_MODE_1SHOT);
+	/*
+	 * We use 'continuous mode' even for raw read because according to the
+	 * data-sheet an one-shot mode can't be used with IIR filter
+	 */
+	ret = bm1390_meas_set(data, BM1390_MEAS_MODE_CONTINUOUS);
 	if (ret)
 		goto unlock_out;
 
@@ -302,9 +291,11 @@ static int bm1390_read_data(struct bm1390_data *data,
 	case IIO_PRESSURE:
 		msleep(BM1390_MAX_MEAS_TIME_MS);
 		ret = bm1390_pressure_read(data, val);
+		break;
 	case IIO_TEMP:
 		msleep(BM1390_MAX_MEAS_TIME_MS);
 		ret = bm1390_read_temp(data, val);
+		break;
 	default:
 		ret = -EINVAL;
 	}
@@ -339,13 +330,23 @@ static int bm1390_get_oversampling_ratio(struct bm1390_data *data, int *ratio)
 	if (ret)
 		return ret;
 
+	pr_info("Read BM1390_REG_MODE_CTRL 0x%x, val 0x%x\n", BM1390_REG_MODE_CTRL, tmp);
+
 	tmp = FIELD_GET(BM1390_MASK_AVE_NUM, tmp);
+
+	pr_info("AVE_NUM field value %u\n", tmp);
+
 	for (i = 0; i < ARRAY_SIZE(bm1390_oversampling_ratios); i++) {
+
+		pr_info("Compare AVE_NUM %u to %u\n", tmp, bm1390_oversampling_ratios[i].reg);
+
 		if (bm1390_oversampling_ratios[i].reg == tmp) {
 			*ratio = bm1390_oversampling_ratios[i].ratio;
 			return IIO_VAL_INT;
 		}
 	}
+
+	dev_dbg(data->dev, "bad oversampling ratio %u\n", tmp);
 
 	return -EINVAL;
 }
@@ -363,11 +364,21 @@ static int bm1390_read_raw(struct iio_dev *idev,
 		if (chan->type == IIO_TEMP)
 			*val2 = 31250;
 		else if (chan->type == IIO_PRESSURE)
-			*val2 = 100000;
+			/*
+ 			 * pressure in hPa is register value divided by 2048.
+ 			 * This means kPa is 1/20480 times the register value,
+ 			 * which equals to 48.828125 * 10 ^ -6
+ 			 * 0.000048828125. This is 48828 nano kPa.
+ 			 *
+ 			 * When we scale this using IIO_VAL_INT_PLUS_NANO we
+ 			 * get 48828 - which means we lose some accuracy. Well,
+ 			 * let's try to live with that.
+ 			 */
+			*val2 = 48828;
 		else
 			return -EINVAL;
 
-		return IIO_VAL_INT_PLUS_MICRO;
+		return IIO_VAL_INT_PLUS_NANO;
 	case IIO_CHAN_INFO_RAW:
 
 		ret = iio_device_claim_direct_mode(idev);
@@ -376,6 +387,10 @@ static int bm1390_read_raw(struct iio_dev *idev,
 
 		ret = bm1390_read_data(data, chan, val, val2);
 		iio_device_release_direct_mode(idev);
+		if (!ret)
+			return IIO_VAL_INT;
+
+		return ret;
 
 	case IIO_CHAN_INFO_OVERSAMPLING_RATIO:
 		return bm1390_get_oversampling_ratio(data, val);
@@ -460,7 +475,7 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 
 	/* TODO: If we can, do bulk-read. */
 	for (i = 0; i < smp_lvl; i++) {
-		ret = __bm1390_pressure_read(data, &buffer.pressure);
+		ret = bm1390_pressure_read(data, &buffer.pressure);
 		if (ret)
 			break;
 
@@ -616,7 +631,12 @@ static int bm1390_chip_init(struct bm1390_data *data)
 		return ret;
 	}
 
-	/* Default IIR filter to "middle" */
+	/* Default to use IIR filter in "middle" mode */
+	ret = regmap_update_bits(data->regmap, BM1390_REG_MODE_CTRL,
+				 BM1390_MASK_AVE_NUM, BM1390_IIR_AVE_NUM);
+	if (ret)
+		return ret;
+
 	ret = regmap_update_bits(data->regmap, BM1390_REG_FIFO_CTRL,
 				 BM1390_MASK_IIR_MODE, BM1390_IIR_MODE_MID);
 
@@ -646,6 +666,9 @@ static int bm1390_fifo_enable(struct iio_dev *idev)
 	if (ret)
 		goto unlock_out;
 
+	/* Enable WMI_IRQ */
+	ret = regmap_set_bits(data->regmap, BM1390_REG_MODE_CTRL,
+				 BM1390_MASK_WMI_EN);
 	/* Enable FIFO */
 	ret = regmap_set_bits(data->regmap, BM1390_REG_FIFO_CTRL,
 			      BM1390_MASK_FIFO_EN);
@@ -673,6 +696,9 @@ static int bm1390_fifo_disable(struct iio_dev *idev)
 	if (ret)
 		goto unlock_out;
 
+	/* Disable WMI_IRQ */
+	ret = regmap_clear_bits(data->regmap, BM1390_REG_MODE_CTRL,
+				 BM1390_MASK_WMI_EN);
 	ret = bm1390_meas_set(data, BM1390_MEAS_MODE_STOP);
 
 unlock_out:
@@ -715,7 +741,7 @@ static irqreturn_t bm1390_trigger_handler(int irq, void *p)
 	int ret;
 
 	mutex_lock(&data->mutex);
-	ret = __bm1390_pressure_read(data, &data->buf.pressure);
+	ret = bm1390_pressure_read(data, &data->buf.pressure);
 	if (ret)
 		goto err_read;
 	/*
@@ -786,9 +812,53 @@ static irqreturn_t bm1390_irq_thread_handler(int irq, void *private)
 	return ret;
 }
 
+static int bm1390_set_drdy_irq(struct bm1390_data*data, bool en)
+{
+	if (en)
+		return regmap_set_bits(data->regmap, BM1390_REG_MODE_CTRL,
+				       BM1390_MASK_DRDY_EN);
+	return regmap_clear_bits(data->regmap, BM1390_REG_MODE_CTRL,
+				 BM1390_MASK_DRDY_EN);
+}
+
+static int bm1390_trigger_set_state(struct iio_trigger *trig,
+				    bool state)
+{
+	struct bm1390_data *data = iio_trigger_get_drvdata(trig);
+	int ret = 0;
+
+	mutex_lock(&data->mutex);
+
+	if (data->trigger_enabled == state)
+		goto unlock_out;
+
+	if (data->state & BM1390_STATE_FIFO) {
+		dev_warn(data->dev, "Can't set trigger when FIFO enabled\n");
+		ret = -EBUSY;
+		goto unlock_out;
+	}
+
+//	ret = kx022a_turn_on_off_unlocked(data, false);
+//	if (ret)
+//		goto unlock_out;
+
+	data->trigger_enabled = state;
+	ret = bm1390_set_drdy_irq(data, state);
+//	if (ret)
+//		goto unlock_out;
+
+//	ret = kx022a_turn_on_off_unlocked(data, true);
+
+unlock_out:
+	mutex_unlock(&data->mutex);
+
+	return ret;
+
+}
+
 static const struct iio_trigger_ops bm1390_trigger_ops = {
 /* TODO: trigger_set_state */
-//	.set_trigger_state = bm1390_trigger_set_state,
+	.set_trigger_state = bm1390_trigger_set_state,
 };
 
 static int bm1390_setup_trigger(struct bm1390_data *data, struct iio_dev *idev,
@@ -798,7 +868,7 @@ static int bm1390_setup_trigger(struct bm1390_data *data, struct iio_dev *idev,
 	char *name;
 	int ret;
 
-	if (irq > 0) {
+	if (irq < 0) {
 		dev_warn(data->dev, "No IRQ - skipping buffering\n");
 		return 0;
 	}
@@ -881,6 +951,16 @@ static int bm1390_probe(struct i2c_client *i2c)
 
 	data->regmap = regmap;
 	data->dev = dev;
+	/*
+	 * Default watermark to WMI_MAX. We could also allow setting WMI to 0,
+	 * and interpret that as "WMI is disabled, use FIFO_FULL" but I've
+	 * no idea what is assumed if watermark is 0. Does it mean each sample
+	 * should trigger IRQ, or no samples should do that?
+	 *
+	 * Well, for now we just allow BM1390_WMI_MIN to BM1390_WMI_MAX and
+	 * discard every other configuration when triggered mode is not used.
+	 */
+	data->watermark = BM1390_WMI_MAX;
 	mutex_init(&data->mutex);
 
 	idev->channels = bm1390_channels;
