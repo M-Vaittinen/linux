@@ -30,6 +30,7 @@
 #define BM1390_RESET_RELEASE		BM1390_MASK_RESET
 #define BM1390_RESET			0x00
 #define BM1390_REG_MODE_CTRL		0x14
+#define BM1390_MASK_MEAS_MODE		GENMASK(1, 0)
 #define BM1390_MASK_DRDY_EN		BIT(4)
 #define BM1390_MASK_WMI_EN		BIT(2)
 #define BM1390_MASK_AVE_NUM		GENMASK(7, 5)
@@ -204,6 +205,7 @@ static int bm1390_read_temp(struct bm1390_data *data, int *temp)
 	s16 val;
 	bool negative;
 
+	pr_info("%s()\n", __func__);
 	ret = regmap_bulk_read(data->regmap, BM1390_REG_TEMP_HI, &temp_reg,
 			       sizeof(temp_reg));
 	if (ret)
@@ -241,6 +243,7 @@ static int bm1390_pressure_read(struct bm1390_data *data, u32 *pressure)
 	int ret;
 	u8 raw[3];
 
+	pr_info("%s()\n", __func__);
 	ret = regmap_bulk_read(data->regmap, BM1390_REG_PRESSURE_BASE,
 			       &raw[0], sizeof(raw));
 	if (ret < 0)
@@ -260,7 +263,9 @@ enum bm1390_meas_mode {
 
 static int bm1390_meas_set(struct bm1390_data *data, enum bm1390_meas_mode mode)
 {
-	return regmap_set_bits(data->regmap, BM1390_REG_MODE_CTRL, mode);
+	pr_info("%s() %d\n", __func__, mode);
+	return regmap_update_bits(data->regmap, BM1390_REG_MODE_CTRL,
+				  BM1390_MASK_MEAS_MODE, mode);
 }
 
 /*
@@ -278,6 +283,7 @@ static int bm1390_read_data(struct bm1390_data *data,
 
 	*val2 = 0;
 
+	pr_info("%s(): Acquiring LOCK\n", __func__);
 	mutex_lock(&data->mutex);
 	/*
 	 * We use 'continuous mode' even for raw read because according to the
@@ -301,6 +307,7 @@ static int bm1390_read_data(struct bm1390_data *data,
 	}
 	bm1390_meas_set(data, BM1390_MEAS_MODE_STOP);
 unlock_out:
+	pr_info("%s(): UNLOCK\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -324,8 +331,10 @@ static int bm1390_get_oversampling_ratio(struct bm1390_data *data, int *ratio)
 {
 	int ret, tmp, i;
 
+	pr_info("%s(): Acquiring LOCK\n", __func__);
 	mutex_lock(&data->mutex);
 	ret = regmap_read(data->regmap, BM1390_REG_MODE_CTRL, &tmp);
+	pr_info("%s(): UNLOCK\n", __func__);
 	mutex_unlock(&data->mutex);
 	if (ret)
 		return ret;
@@ -358,6 +367,7 @@ static int bm1390_read_raw(struct iio_dev *idev,
 	struct bm1390_data *data = iio_priv(idev);
 	int ret;
 
+	pr_info("%s()\n", __func__);
 	switch (mask) {
 	case IIO_CHAN_INFO_SCALE:
 		*val = 0;
@@ -408,16 +418,18 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 	/* The fifo holds maximum of 4 samples */
 	struct bm1390_data *data = iio_priv(idev);
 	struct bm1390_data_buf buffer;
-	bool renable = false;
 	int smp_lvl, ret, i;
 	u64 sample_period;
 	__be16 temp = 0;
 
+	pr_info("%s() irq %d\n", __func__, irq);
+	msleep(1);
 	/*
 	 * If the IC is accessed during FIFO read samples can be dropped.
 	 * Prevent access until FIFO_LVL is read
 	 */
-	mutex_lock(&data->mutex);
+//	pr_info("%s(): Acquiring LOCK\n", __func__);
+//	mutex_lock(&data->mutex);
 	if (test_bit(BM1390_CHAN_TEMP, idev->active_scan_mask)) {
 		ret = regmap_bulk_read(data->regmap, BM1390_REG_TEMP_HI, &temp,
 				       sizeof(temp));
@@ -442,30 +454,6 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 
 	if (!smp_lvl)
 		goto unlock_out;
-
-	/*
-	 * If we are being called from IRQ handler we know the stored timestamp
-	 * is fairly accurate for the last stored sample. Otherwise, if we are
-	 * called as a result of a read operation from userspace and hence
-	 * before the watermark interrupt was triggered, take a timestamp
-	 * now. We can fall anywhere in between two samples so the error in this
-	 * case is at most one sample period.
-	 */
-	if (!irq) {
-		/*
-		 * We need to have the IRQ disabled or we risk of messing-up
-		 * the timestamps. If we are ran from IRQ, then the
-		 * IRQF_ONESHOT has us covered - but if we are ran by the
-		 * user-space read we need to disable the IRQ to be on a safe
-		 * side. We do this usng synchronous disable so that if the
-		 * IRQ thread is being ran on other CPU we wait for it to be
-		 * finished.
-		 */
-		disable_irq(data->irq);
-		renable = true;
-
-		data->timestamp = iio_get_time_ns(idev);
-	}
 
 	sample_period = data->timestamp - data->old_timestamp;
 	do_div(sample_period, smp_lvl);
@@ -501,17 +489,45 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 		ret = smp_lvl;
 
 unlock_out:
-	if (renable)
-		enable_irq(data->irq);
 
-	mutex_unlock(&data->mutex);
+	pr_info("%s(): UNLOCK\n", __func__);
+	//mutex_unlock(&data->mutex);
 
 	return ret;
 }
 
 static int bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples)
 {
-	return __bm1390_fifo_flush(idev, samples, false);
+	struct bm1390_data *data = iio_priv(idev);
+	int ret;
+
+	pr_info("%s()\n", __func__);
+
+	/*
+	 * If fifo_flush is being called from IRQ handler we know the stored timestamp
+	 * is fairly accurate for the last stored sample. If we are
+	 * called as a result of a read operation from userspace and hence
+	 * before the watermark interrupt was triggered, take a timestamp
+	 * now. We can fall anywhere in between two samples so the error in this
+	 * case is at most one sample period.
+	 * We need to have the IRQ disabled or we risk of messing-up
+	 * the timestamps. If we are ran from IRQ, then the
+	 * IRQF_ONESHOT has us covered - but if we are ran by the
+	 * user-space read we need to disable the IRQ to be on a safe
+	 * side. We do this usng synchronous disable so that if the
+	 * IRQ thread is being ran on other CPU we wait for it to be
+	 * finished.
+	 */
+	disable_irq(data->irq);
+	data->timestamp = iio_get_time_ns(idev);
+
+	mutex_lock(&data->mutex);
+	ret = __bm1390_fifo_flush(idev, samples, false);
+	mutex_unlock(&data->mutex);
+
+	enable_irq(data->irq);
+
+	return ret;
 }
 
 static int bm1390_set_oversampling_ratio(struct bm1390_data *data, int ratio)
@@ -527,9 +543,11 @@ static int bm1390_set_oversampling_ratio(struct bm1390_data *data, int ratio)
 
 	val = FIELD_PREP(BM1390_MASK_AVE_NUM, bm1390_oversampling_ratios[i].reg);
 
+	pr_info("%s(): Acquiring LOCK\n", __func__);
 	mutex_lock(&data->mutex);
 	ret = regmap_update_bits(data->regmap, BM1390_REG_MODE_CTRL,
 				 BM1390_MASK_AVE_NUM, val);
+	pr_info("%s(): UNLOCK\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -539,10 +557,10 @@ static int bm1390_write_raw(struct iio_dev *idev,
 			    struct iio_chan_spec const *chan,
 			    int val, int val2, long mask)
 {
-
 	struct bm1390_data *data = iio_priv(idev);
 	int ret;
 
+	pr_info("%s()\n", __func__);
 	ret = iio_device_claim_direct_mode(idev);
 	if (ret)
 		return ret;
@@ -580,11 +598,14 @@ static int bm1390_set_watermark(struct iio_dev *idev, unsigned int val)
 {
 	struct bm1390_data *data = iio_priv(idev);
 
+	pr_info("%s()\n", __func__);
 	if (val < BM1390_WMI_MIN || val > BM1390_WMI_MAX)
 		return -EINVAL;
 
+	pr_info("%s(): Acquiring LOCK\n", __func__);
 	mutex_lock(&data->mutex);
 	data->watermark = val;
+	pr_info("%s(): UNLOCK\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return 0;
@@ -647,6 +668,7 @@ static int bm1390_fifo_set_wmi(struct bm1390_data *data)
 {
 	u8 regval;
 
+	pr_info("%s()\n", __func__);
 	regval = data->watermark - BM1390_WMI_MIN;
 	regval = FIELD_PREP(BM1390_MASK_FIFO_LEN, regval);
 
@@ -659,6 +681,7 @@ static int bm1390_fifo_enable(struct iio_dev *idev)
 	struct bm1390_data *data = iio_priv(idev);
 	int ret;
 
+	pr_info("%s(): Acquiring LOCK\n", __func__);
 	mutex_lock(&data->mutex);
 
 	/* Update watermark to HW */
@@ -675,10 +698,13 @@ static int bm1390_fifo_enable(struct iio_dev *idev)
 	if (ret)
 		goto unlock_out;
 
+	data->state = BM1390_STATE_FIFO;
+
 	data->old_timestamp = iio_get_time_ns(idev);
 	ret = bm1390_meas_set(data, BM1390_MEAS_MODE_CONTINUOUS);
 
 unlock_out:
+	pr_info("%s(): UNLOCK\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -689,6 +715,9 @@ static int bm1390_fifo_disable(struct iio_dev *idev)
 	struct bm1390_data *data = iio_priv(idev);
 	int ret;
 
+	msleep(1);
+
+	pr_info("%s(): Acquiring LOCK\n", __func__);
 	mutex_lock(&data->mutex);
 	/* Disable FIFO */
 	ret = regmap_clear_bits(data->regmap, BM1390_REG_FIFO_CTRL,
@@ -696,12 +725,18 @@ static int bm1390_fifo_disable(struct iio_dev *idev)
 	if (ret)
 		goto unlock_out;
 
+	data->state = BM1390_STATE_SAMPLE;
+
 	/* Disable WMI_IRQ */
 	ret = regmap_clear_bits(data->regmap, BM1390_REG_MODE_CTRL,
 				 BM1390_MASK_WMI_EN);
+	if(ret)
+		goto unlock_out;
+
 	ret = bm1390_meas_set(data, BM1390_MEAS_MODE_STOP);
 
 unlock_out:
+	pr_info("%s(): UNLOCK\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -709,6 +744,7 @@ unlock_out:
 
 static int bm1390_buffer_postenable(struct iio_dev *idev)
 {
+	pr_info("%s()\n", __func__);
 	/*
 	 * If we use data-ready trigger, then the IRQ masks should be handled by
 	 * trigger enable and the hardware buffer is not used but we just update
@@ -722,6 +758,7 @@ static int bm1390_buffer_postenable(struct iio_dev *idev)
 
 static int bm1390_buffer_predisable(struct iio_dev *idev)
 {
+	pr_info("%s()\n", __func__);
 	if (iio_device_get_current_mode(idev) == INDIO_BUFFER_TRIGGERED)
 		return 0;
 
@@ -740,7 +777,8 @@ static irqreturn_t bm1390_trigger_handler(int irq, void *p)
 	struct bm1390_data *data = iio_priv(idev);
 	int ret;
 
-	mutex_lock(&data->mutex);
+//	pr_info("%s(): Acquiring LOCK\n", __func__);
+//	mutex_lock(&data->mutex);
 	ret = bm1390_pressure_read(data, &data->buf.pressure);
 	if (ret)
 		goto err_read;
@@ -759,7 +797,8 @@ static irqreturn_t bm1390_trigger_handler(int irq, void *p)
 
 	iio_push_to_buffers_with_timestamp(idev, &data->buf, data->timestamp);
 err_read:
-	mutex_unlock(&data->mutex);
+//	pr_info("%s(): UNLOCK\n", __func__);
+//	mutex_unlock(&data->mutex);
 	iio_trigger_notify_done(idev->trig);
 
 	return IRQ_HANDLED;
@@ -774,46 +813,46 @@ static irqreturn_t bm1390_irq_handler(int irq, void *private)
 //	data->old_timestamp = data->timestamp;
 	data->timestamp = iio_get_time_ns(idev);
 
-	if (data->state & BM1390_STATE_FIFO || data->trigger_enabled)
+	pr_info("HWirg handler\n");
+	if (data->state == BM1390_STATE_FIFO || data->trigger_enabled)
 		return IRQ_WAKE_THREAD;
 
 	return IRQ_NONE;
 }
 
-/*
- * WMI and data-ready IRQs are acked when results are read. If we add
- * TILT/WAKE or other IRQs - then we may need to implement the acking
- * (which is racy).
- */
 static irqreturn_t bm1390_irq_thread_handler(int irq, void *private)
 {
 	struct iio_dev *idev = private;
 	struct bm1390_data *data = iio_priv(idev);
-	irqreturn_t ret = IRQ_NONE;
+	int ret;
 
-//	mutex_lock(&data->mutex);
+	pr_info("thread handler...\n");
+	mutex_lock(&data->mutex);
 
 	if (data->trigger_enabled) {
+		pr_info("handle trigger\n");
 		iio_trigger_poll_nested(data->trig);
 		ret = IRQ_HANDLED;
 	}
 
-	if (data->state & BM1390_STATE_FIFO) {
+	if (data->state == BM1390_STATE_FIFO) {
 		int ok;
 
-	/* TODO: Flush fifo */
+		pr_info("handle fifo\n");
 		ok = __bm1390_fifo_flush(idev, BM1390_TEMP_SIZE, true);
 		if (ok > 0)
 			ret = IRQ_HANDLED;
 	}
 
-//	mutex_unlock(&data->mutex);
+	mutex_unlock(&data->mutex);
 
 	return ret;
+//	return IRQ_NONE;
 }
 
 static int bm1390_set_drdy_irq(struct bm1390_data*data, bool en)
 {
+	pr_info("%s() %d\n", __func__, en);
 	if (en)
 		return regmap_set_bits(data->regmap, BM1390_REG_MODE_CTRL,
 				       BM1390_MASK_DRDY_EN);
@@ -827,29 +866,44 @@ static int bm1390_trigger_set_state(struct iio_trigger *trig,
 	struct bm1390_data *data = iio_trigger_get_drvdata(trig);
 	int ret = 0;
 
+	pr_info("%s(): Acquiring LOCK\n", __func__);
 	mutex_lock(&data->mutex);
 
 	if (data->trigger_enabled == state)
 		goto unlock_out;
 
-	if (data->state & BM1390_STATE_FIFO) {
+	if (data->state == BM1390_STATE_FIFO) {
 		dev_warn(data->dev, "Can't set trigger when FIFO enabled\n");
 		ret = -EBUSY;
 		goto unlock_out;
 	}
 
-//	ret = kx022a_turn_on_off_unlocked(data, false);
-//	if (ret)
-//		goto unlock_out;
-
 	data->trigger_enabled = state;
-	ret = bm1390_set_drdy_irq(data, state);
-//	if (ret)
-//		goto unlock_out;
 
-//	ret = kx022a_turn_on_off_unlocked(data, true);
+	if (state) {
+		ret = bm1390_meas_set(data, BM1390_MEAS_MODE_CONTINUOUS);
+	} else {
+		int dummy;
+
+		ret = bm1390_meas_set(data, BM1390_MEAS_MODE_STOP);
+
+		/*
+		 * We need to read the status register in order to ACK the
+		 * data-ready which may have been generated just before we
+		 * disabled the measurement.
+		 */
+		if (!ret)
+			ret = regmap_read(data->regmap, BM1390_REG_STATUS,
+					  &dummy);
+	}
+
+	ret = bm1390_set_drdy_irq(data, state);
+	if (ret)
+		goto unlock_out;
+
 
 unlock_out:
+	pr_info("%s(): UNLOCK\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -951,6 +1005,7 @@ static int bm1390_probe(struct i2c_client *i2c)
 
 	data->regmap = regmap;
 	data->dev = dev;
+	data->irq = i2c->irq;
 	/*
 	 * Default watermark to WMI_MAX. We could also allow setting WMI to 0,
 	 * and interpret that as "WMI is disabled, use FIFO_FULL" but I've
