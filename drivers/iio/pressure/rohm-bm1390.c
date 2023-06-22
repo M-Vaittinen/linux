@@ -62,7 +62,6 @@
 
 #define BM1390_ID			0x34
 
-
 /* Regmap configs */
 static const struct regmap_range bm1390_volatile_ranges[] = {
 	{
@@ -161,9 +160,7 @@ struct bm1390_data {
 	bool trigger_enabled;
 	u8 watermark;
 
-	/*
-	 * Prevent accessing sensor during FIFO read sequence
-	 */
+	/* Prevent accessing sensor during FIFO read sequence */
 	struct mutex mutex;
 };
 
@@ -461,7 +458,6 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 	if (samples && smp_lvl > samples)
 		smp_lvl = samples;
 
-	/* TODO: If we can, do bulk-read. */
 	for (i = 0; i < smp_lvl; i++) {
 		ret = bm1390_pressure_read(data, &buffer.pressure);
 		if (ret)
@@ -651,7 +647,10 @@ static int bm1390_chip_init(struct bm1390_data *data)
 		return ret;
 	}
 
-	/* Default to use IIR filter in "middle" mode */
+	/*
+	 * Default to use IIR filter in "middle" mode. Also the AVE_NUM must
+	 * be fixed when IIR us in use
+	 */
 	ret = regmap_update_bits(data->regmap, BM1390_REG_MODE_CTRL,
 				 BM1390_MASK_AVE_NUM, BM1390_IIR_AVE_NUM);
 	if (ret)
