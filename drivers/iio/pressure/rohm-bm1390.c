@@ -929,6 +929,7 @@ static int bm1390_probe(struct i2c_client *i2c)
 	struct device *dev;
 	unsigned int part_id;
 	int ret;
+	bool remove_me_i_am_a_hack_to_not_execute_incomplete_trigger_feature = true;
 
 	dev = &i2c->dev;
 
@@ -953,6 +954,8 @@ static int bm1390_probe(struct i2c_client *i2c)
 
 	if (part_id != BM1390_ID)
 		dev_warn(dev, "unknown device 0x%x\n", part_id);
+	else
+		remove_me_i_am_a_hack_to_not_execute_incomplete_trigger_feature = false;
 
 	data->regmap = regmap;
 	data->dev = dev;
@@ -979,9 +982,11 @@ static int bm1390_probe(struct i2c_client *i2c)
 	if (ret)
 		return dev_err_probe(dev, ret, "sensor init failed\n");
 
-	ret = bm1390_setup_trigger(data, idev, i2c->irq);
-	if (ret)
-		return ret;
+	if (!remove_me_i_am_a_hack_to_not_execute_incomplete_trigger_feature) {
+		ret = bm1390_setup_trigger(data, idev, i2c->irq);
+		if (ret)
+			return ret;
+	}
 
 	ret = devm_iio_device_register(dev, idev);
 	if (ret < 0)
