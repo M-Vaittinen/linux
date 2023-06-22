@@ -34,6 +34,7 @@
 #define BM1390_MASK_DRDY_EN		BIT(4)
 #define BM1390_MASK_WMI_EN		BIT(2)
 #define BM1390_MASK_AVE_NUM		GENMASK(7, 5)
+
 /*
  * Data-sheet states that when the IIR is used, the AVE_NUM must be set to
  * value 110b
@@ -64,6 +65,10 @@
 
 /* Regmap configs */
 static const struct regmap_range bm1390_volatile_ranges[] = {
+	{
+		.range_min = BM1390_REG_STATUS,
+		.range_max = BM1390_REG_STATUS,
+	},
 	{
 		.range_min = BM1390_REG_FIFO_LVL,
 		.range_max = BM1390_REG_TEMP_LO,
@@ -205,7 +210,6 @@ static int bm1390_read_temp(struct bm1390_data *data, int *temp)
 	s16 val;
 	bool negative;
 
-	pr_info("%s()\n", __func__);
 	ret = regmap_bulk_read(data->regmap, BM1390_REG_TEMP_HI, &temp_reg,
 			       sizeof(temp_reg));
 	if (ret)
@@ -243,7 +247,6 @@ static int bm1390_pressure_read(struct bm1390_data *data, u32 *pressure)
 	int ret;
 	u8 raw[3];
 
-	pr_info("%s()\n", __func__);
 	ret = regmap_bulk_read(data->regmap, BM1390_REG_PRESSURE_BASE,
 			       &raw[0], sizeof(raw));
 	if (ret < 0)
@@ -263,7 +266,6 @@ enum bm1390_meas_mode {
 
 static int bm1390_meas_set(struct bm1390_data *data, enum bm1390_meas_mode mode)
 {
-	pr_info("%s() %d\n", __func__, mode);
 	return regmap_update_bits(data->regmap, BM1390_REG_MODE_CTRL,
 				  BM1390_MASK_MEAS_MODE, mode);
 }
@@ -283,7 +285,6 @@ static int bm1390_read_data(struct bm1390_data *data,
 
 	*val2 = 0;
 
-	pr_info("%s(): Acquiring LOCK\n", __func__);
 	mutex_lock(&data->mutex);
 	/*
 	 * We use 'continuous mode' even for raw read because according to the
@@ -307,7 +308,6 @@ static int bm1390_read_data(struct bm1390_data *data,
 	}
 	bm1390_meas_set(data, BM1390_MEAS_MODE_STOP);
 unlock_out:
-	pr_info("%s(): UNLOCK\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -331,24 +331,15 @@ static int bm1390_get_oversampling_ratio(struct bm1390_data *data, int *ratio)
 {
 	int ret, tmp, i;
 
-	pr_info("%s(): Acquiring LOCK\n", __func__);
 	mutex_lock(&data->mutex);
 	ret = regmap_read(data->regmap, BM1390_REG_MODE_CTRL, &tmp);
-	pr_info("%s(): UNLOCK\n", __func__);
 	mutex_unlock(&data->mutex);
 	if (ret)
 		return ret;
 
-	pr_info("Read BM1390_REG_MODE_CTRL 0x%x, val 0x%x\n", BM1390_REG_MODE_CTRL, tmp);
-
 	tmp = FIELD_GET(BM1390_MASK_AVE_NUM, tmp);
 
-	pr_info("AVE_NUM field value %u\n", tmp);
-
 	for (i = 0; i < ARRAY_SIZE(bm1390_oversampling_ratios); i++) {
-
-		pr_info("Compare AVE_NUM %u to %u\n", tmp, bm1390_oversampling_ratios[i].reg);
-
 		if (bm1390_oversampling_ratios[i].reg == tmp) {
 			*ratio = bm1390_oversampling_ratios[i].ratio;
 			return IIO_VAL_INT;
@@ -367,7 +358,6 @@ static int bm1390_read_raw(struct iio_dev *idev,
 	struct bm1390_data *data = iio_priv(idev);
 	int ret;
 
-	pr_info("%s()\n", __func__);
 	switch (mask) {
 	case IIO_CHAN_INFO_SCALE:
 		*val = 0;
@@ -422,13 +412,10 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 	u64 sample_period;
 	__be16 temp = 0;
 
-	pr_info("%s() irq %d\n", __func__, irq);
-	msleep(1);
 	/*
 	 * If the IC is accessed during FIFO read samples can be dropped.
 	 * Prevent access until FIFO_LVL is read
 	 */
-//	pr_info("%s(): Acquiring LOCK\n", __func__);
 //	mutex_lock(&data->mutex);
 	if (test_bit(BM1390_CHAN_TEMP, idev->active_scan_mask)) {
 		ret = regmap_bulk_read(data->regmap, BM1390_REG_TEMP_HI, &temp,
@@ -490,7 +477,6 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 
 unlock_out:
 
-	pr_info("%s(): UNLOCK\n", __func__);
 	//mutex_unlock(&data->mutex);
 
 	return ret;
@@ -500,8 +486,6 @@ static int bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples)
 {
 	struct bm1390_data *data = iio_priv(idev);
 	int ret;
-
-	pr_info("%s()\n", __func__);
 
 	/*
 	 * If fifo_flush is being called from IRQ handler we know the stored timestamp
@@ -543,11 +527,9 @@ static int bm1390_set_oversampling_ratio(struct bm1390_data *data, int ratio)
 
 	val = FIELD_PREP(BM1390_MASK_AVE_NUM, bm1390_oversampling_ratios[i].reg);
 
-	pr_info("%s(): Acquiring LOCK\n", __func__);
 	mutex_lock(&data->mutex);
 	ret = regmap_update_bits(data->regmap, BM1390_REG_MODE_CTRL,
 				 BM1390_MASK_AVE_NUM, val);
-	pr_info("%s(): UNLOCK\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -560,7 +542,6 @@ static int bm1390_write_raw(struct iio_dev *idev,
 	struct bm1390_data *data = iio_priv(idev);
 	int ret;
 
-	pr_info("%s()\n", __func__);
 	ret = iio_device_claim_direct_mode(idev);
 	if (ret)
 		return ret;
@@ -598,14 +579,11 @@ static int bm1390_set_watermark(struct iio_dev *idev, unsigned int val)
 {
 	struct bm1390_data *data = iio_priv(idev);
 
-	pr_info("%s()\n", __func__);
 	if (val < BM1390_WMI_MIN || val > BM1390_WMI_MAX)
 		return -EINVAL;
 
-	pr_info("%s(): Acquiring LOCK\n", __func__);
 	mutex_lock(&data->mutex);
 	data->watermark = val;
-	pr_info("%s(): UNLOCK\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return 0;
@@ -668,7 +646,6 @@ static int bm1390_fifo_set_wmi(struct bm1390_data *data)
 {
 	u8 regval;
 
-	pr_info("%s()\n", __func__);
 	regval = data->watermark - BM1390_WMI_MIN;
 	regval = FIELD_PREP(BM1390_MASK_FIFO_LEN, regval);
 
@@ -681,7 +658,6 @@ static int bm1390_fifo_enable(struct iio_dev *idev)
 	struct bm1390_data *data = iio_priv(idev);
 	int ret;
 
-	pr_info("%s(): Acquiring LOCK\n", __func__);
 	mutex_lock(&data->mutex);
 
 	/* Update watermark to HW */
@@ -704,7 +680,6 @@ static int bm1390_fifo_enable(struct iio_dev *idev)
 	ret = bm1390_meas_set(data, BM1390_MEAS_MODE_CONTINUOUS);
 
 unlock_out:
-	pr_info("%s(): UNLOCK\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -717,7 +692,6 @@ static int bm1390_fifo_disable(struct iio_dev *idev)
 
 	msleep(1);
 
-	pr_info("%s(): Acquiring LOCK\n", __func__);
 	mutex_lock(&data->mutex);
 	/* Disable FIFO */
 	ret = regmap_clear_bits(data->regmap, BM1390_REG_FIFO_CTRL,
@@ -736,7 +710,6 @@ static int bm1390_fifo_disable(struct iio_dev *idev)
 	ret = bm1390_meas_set(data, BM1390_MEAS_MODE_STOP);
 
 unlock_out:
-	pr_info("%s(): UNLOCK\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -744,7 +717,6 @@ unlock_out:
 
 static int bm1390_buffer_postenable(struct iio_dev *idev)
 {
-	pr_info("%s()\n", __func__);
 	/*
 	 * If we use data-ready trigger, then the IRQ masks should be handled by
 	 * trigger enable and the hardware buffer is not used but we just update
@@ -758,7 +730,6 @@ static int bm1390_buffer_postenable(struct iio_dev *idev)
 
 static int bm1390_buffer_predisable(struct iio_dev *idev)
 {
-	pr_info("%s()\n", __func__);
 	if (iio_device_get_current_mode(idev) == INDIO_BUFFER_TRIGGERED)
 		return 0;
 
@@ -777,27 +748,16 @@ static irqreturn_t bm1390_trigger_handler(int irq, void *p)
 	struct bm1390_data *data = iio_priv(idev);
 	int ret;
 
-//	pr_info("%s(): Acquiring LOCK\n", __func__);
 //	mutex_lock(&data->mutex);
 	ret = bm1390_pressure_read(data, &data->buf.pressure);
 	if (ret)
 		goto err_read;
-	/*
-	 * TODO: This needs to be divided by 32. Do we need to do endianes
-	 * conversion here or can we just use the scale?
-	 *
-	 * TODO: I'd say we should use the scale. We should never divide the
-	 * temperature in-kernel, let's just populate the scale entry.
-	 *
-	 * reg / 32 = temp C means the scale is 1/32 => 0.03125.
-	 * This means 31250 MICROs
-	 */
+
 	ret = regmap_bulk_read(data->regmap, BM1390_REG_TEMP_HI,
 			       &data->buf.temp, BM1390_TEMP_SIZE);
 
 	iio_push_to_buffers_with_timestamp(idev, &data->buf, data->timestamp);
 err_read:
-//	pr_info("%s(): UNLOCK\n", __func__);
 //	mutex_unlock(&data->mutex);
 	iio_trigger_notify_done(idev->trig);
 
@@ -813,7 +773,6 @@ static irqreturn_t bm1390_irq_handler(int irq, void *private)
 //	data->old_timestamp = data->timestamp;
 	data->timestamp = iio_get_time_ns(idev);
 
-	pr_info("HWirg handler\n");
 	if (data->state == BM1390_STATE_FIFO || data->trigger_enabled)
 		return IRQ_WAKE_THREAD;
 
@@ -824,13 +783,11 @@ static irqreturn_t bm1390_irq_thread_handler(int irq, void *private)
 {
 	struct iio_dev *idev = private;
 	struct bm1390_data *data = iio_priv(idev);
-	int ret;
+	int ret = IRQ_NONE;
 
-	pr_info("thread handler...\n");
 	mutex_lock(&data->mutex);
 
 	if (data->trigger_enabled) {
-		pr_info("handle trigger\n");
 		iio_trigger_poll_nested(data->trig);
 		ret = IRQ_HANDLED;
 	}
@@ -838,7 +795,6 @@ static irqreturn_t bm1390_irq_thread_handler(int irq, void *private)
 	if (data->state == BM1390_STATE_FIFO) {
 		int ok;
 
-		pr_info("handle fifo\n");
 		ok = __bm1390_fifo_flush(idev, BM1390_TEMP_SIZE, true);
 		if (ok > 0)
 			ret = IRQ_HANDLED;
@@ -847,12 +803,10 @@ static irqreturn_t bm1390_irq_thread_handler(int irq, void *private)
 	mutex_unlock(&data->mutex);
 
 	return ret;
-//	return IRQ_NONE;
 }
 
 static int bm1390_set_drdy_irq(struct bm1390_data*data, bool en)
 {
-	pr_info("%s() %d\n", __func__, en);
 	if (en)
 		return regmap_set_bits(data->regmap, BM1390_REG_MODE_CTRL,
 				       BM1390_MASK_DRDY_EN);
@@ -866,7 +820,6 @@ static int bm1390_trigger_set_state(struct iio_trigger *trig,
 	struct bm1390_data *data = iio_trigger_get_drvdata(trig);
 	int ret = 0;
 
-	pr_info("%s(): Acquiring LOCK\n", __func__);
 	mutex_lock(&data->mutex);
 
 	if (data->trigger_enabled == state)
@@ -903,7 +856,6 @@ static int bm1390_trigger_set_state(struct iio_trigger *trig,
 
 
 unlock_out:
-	pr_info("%s(): UNLOCK\n", __func__);
 	mutex_unlock(&data->mutex);
 
 	return ret;
@@ -911,7 +863,6 @@ unlock_out:
 }
 
 static const struct iio_trigger_ops bm1390_trigger_ops = {
-/* TODO: trigger_set_state */
 	.set_trigger_state = bm1390_trigger_set_state,
 };
 
