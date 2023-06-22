@@ -161,7 +161,9 @@ struct bm1390_data {
 	bool trigger_enabled;
 	u8 watermark;
 
-	/* Prevent changing oversampling when measurement is running */
+	/*
+	 * Prevent accessing sensor during FIFO read sequence
+	 */
 	struct mutex mutex;
 };
 
@@ -416,7 +418,6 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 	 * If the IC is accessed during FIFO read samples can be dropped.
 	 * Prevent access until FIFO_LVL is read
 	 */
-//	mutex_lock(&data->mutex);
 	if (test_bit(BM1390_CHAN_TEMP, idev->active_scan_mask)) {
 		ret = regmap_bulk_read(data->regmap, BM1390_REG_TEMP_HI, &temp,
 				       sizeof(temp));
@@ -476,8 +477,6 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 		ret = smp_lvl;
 
 unlock_out:
-
-	//mutex_unlock(&data->mutex);
 
 	return ret;
 }
@@ -748,7 +747,6 @@ static irqreturn_t bm1390_trigger_handler(int irq, void *p)
 	struct bm1390_data *data = iio_priv(idev);
 	int ret;
 
-//	mutex_lock(&data->mutex);
 	ret = bm1390_pressure_read(data, &data->buf.pressure);
 	if (ret)
 		goto err_read;
@@ -758,7 +756,6 @@ static irqreturn_t bm1390_trigger_handler(int irq, void *p)
 
 	iio_push_to_buffers_with_timestamp(idev, &data->buf, data->timestamp);
 err_read:
-//	mutex_unlock(&data->mutex);
 	iio_trigger_notify_done(idev->trig);
 
 	return IRQ_HANDLED;
@@ -770,7 +767,6 @@ static irqreturn_t bm1390_irq_handler(int irq, void *private)
 	struct iio_dev *idev = private;
 	struct bm1390_data *data = iio_priv(idev);
 
-//	data->old_timestamp = data->timestamp;
 	data->timestamp = iio_get_time_ns(idev);
 
 	if (data->state == BM1390_STATE_FIFO || data->trigger_enabled)
