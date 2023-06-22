@@ -206,7 +206,7 @@ static const unsigned long bm1390_scan_masks[] = {
 
 static int bm1390_read_temp(struct bm1390_data *data, int *temp)
 {
-	u8 temp_reg[2];
+	u8 temp_reg[2] __aligned(2);
 	__be16 *temp_raw;
 	int ret;
 	s16 val;
