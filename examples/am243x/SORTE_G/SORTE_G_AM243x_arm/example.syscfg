@@ -1,0 +1,133 @@
+/**
+ * These arguments were used when this file was generated. They will be automatically applied on subsequent loads
+ * via the GUI or CLI. Run CLI with '--help' for additional information on how to override these arguments.
+ * @cliArgs --device "AM243x_ALX_beta" --package "ALX" --part "ALX" --context "r5fss0-0" --product "MCU_PLUS_SDK_AM243x@08.03.00"
+ * @versions {"tool":"1.13.0+2553"}
+ */
+
+/**
+ * Import the modules used in this configuration.
+ */
+const led        = scripting.addModule("/board/led/led", {}, false);
+const led1       = led.addInstance();
+const pruicss    = scripting.addModule("/drivers/pruicss/pruicss", {}, false);
+const pruicss1   = pruicss.addInstance();
+const debug_log  = scripting.addModule("/kernel/dpl/debug_log");
+const mpu_armv7  = scripting.addModule("/kernel/dpl/mpu_armv7", {}, false);
+const mpu_armv71 = mpu_armv7.addInstance();
+const mpu_armv72 = mpu_armv7.addInstance();
+const mpu_armv73 = mpu_armv7.addInstance();
+const mpu_armv74 = mpu_armv7.addInstance();
+const mpu_armv75 = mpu_armv7.addInstance();
+const timer      = scripting.addModule("/kernel/dpl/timer", {}, false);
+const timer1     = timer.addInstance();
+
+/**
+ * Write custom configuration values to the imported modules.
+ */
+led1.$name = "CONFIG_LED0";
+led1.name  = "TPIC2810";
+
+const i2c             = scripting.addModule("/drivers/i2c/i2c", {}, false);
+const i2c1            = i2c.addInstance({}, false);
+i2c1.$name            = "CONFIG_I2C0";
+led1.peripheralDriver = i2c1;
+
+pruicss1.$name                                            = "CONFIG_PRU_ICSS0";
+pruicss1.iepSyncMode                                      = true;
+pruicss1.coreClk                                          = 250000000;
+pruicss1.instance                                         = "ICSSG1";
+pruicss1.AdditionalICSSSettings.create(1);
+pruicss1.AdditionalICSSSettings[0].$name                  = "CONFIG_PRU_ICSS_GPIO0";
+pruicss1.AdditionalICSSSettings[0].PRU_ICSSG0_PRU.$assign = "PRU_ICSSG0_PRU0";
+pruicss1.intcMapping.create(11);
+pruicss1.intcMapping[0].$name                             = "CONFIG_ICSS1_INTC_MAPPING0";
+pruicss1.intcMapping[1].$name                             = "CONFIG_ICSS1_INTC_MAPPING1";
+pruicss1.intcMapping[1].event                             = "41";
+pruicss1.intcMapping[1].channel                           = "1";
+pruicss1.intcMapping[2].$name                             = "CONFIG_ICSS1_INTC_MAPPING2";
+pruicss1.intcMapping[2].event                             = "53";
+pruicss1.intcMapping[2].channel                           = "0";
+pruicss1.intcMapping[3].$name                             = "CONFIG_ICSS1_INTC_MAPPING3";
+pruicss1.intcMapping[3].event                             = "40";
+pruicss1.intcMapping[3].channel                           = "1";
+pruicss1.intcMapping[4].$name                             = "CONFIG_ICSS1_INTC_MAPPING4";
+pruicss1.intcMapping[4].event                             = "39";
+pruicss1.intcMapping[4].channel                           = "1";
+pruicss1.intcMapping[5].$name                             = "CONFIG_ICSS1_INTC_MAPPING5";
+pruicss1.intcMapping[5].event                             = "52";
+pruicss1.intcMapping[5].channel                           = "0";
+pruicss1.intcMapping[6].$name                             = "CONFIG_ICSS1_INTC_MAPPING6";
+pruicss1.intcMapping[6].event                             = "51";
+pruicss1.intcMapping[6].channel                           = "0";
+pruicss1.intcMapping[7].$name                             = "CONFIG_ICSS1_INTC_MAPPING7";
+pruicss1.intcMapping[7].event                             = "26";
+pruicss1.intcMapping[7].channel                           = "3";
+pruicss1.intcMapping[7].host                              = "1";
+pruicss1.intcMapping[8].$name                             = "CONFIG_ICSS1_INTC_MAPPING8";
+pruicss1.intcMapping[8].event                             = "27";
+pruicss1.intcMapping[8].channel                           = "4";
+pruicss1.intcMapping[8].host                              = "0";
+pruicss1.intcMapping[9].$name                             = "CONFIG_ICSS1_INTC_MAPPING9";
+pruicss1.intcMapping[9].channel                           = "7";
+pruicss1.intcMapping[9].event                             = "35";
+pruicss1.intcMapping[10].$name                            = "CONFIG_ICSS1_INTC_MAPPING10";
+pruicss1.intcMapping[10].event                            = "42";
+pruicss1.intcMapping[10].channel                          = "8";
+
+debug_log.enableUartLog        = true;
+debug_log.uartLog.$name        = "CONFIG_UART_CONSOLE";
+debug_log.uartLog.UART.$assign = "USART0";
+
+mpu_armv71.$name             = "CONFIG_MPU_REGION0";
+mpu_armv71.size              = 31;
+mpu_armv71.attributes        = "Device";
+mpu_armv71.accessPermissions = "Supervisor RD+WR, User RD";
+mpu_armv71.allowExecute      = false;
+
+mpu_armv72.$name             = "CONFIG_MPU_REGION1";
+mpu_armv72.size              = 15;
+mpu_armv72.accessPermissions = "Supervisor RD+WR, User RD";
+
+mpu_armv73.$name             = "CONFIG_MPU_REGION2";
+mpu_armv73.baseAddr          = 0x41010000;
+mpu_armv73.size              = 15;
+mpu_armv73.accessPermissions = "Supervisor RD+WR, User RD";
+
+mpu_armv74.$name             = "CONFIG_MPU_REGION3";
+mpu_armv74.accessPermissions = "Supervisor RD+WR, User RD";
+mpu_armv74.baseAddr          = 0x70000000;
+mpu_armv74.size              = 21;
+
+mpu_armv75.$name             = "CONFIG_MPU_REGION4";
+mpu_armv75.baseAddr          = 0x60000000;
+mpu_armv75.size              = 28;
+mpu_armv75.accessPermissions = "Supervisor RD, User RD";
+
+timer1.$name         = "CONFIG_TIMER0";
+timer1.startTimer    = true;
+timer1.timerCallback = "SORTE_G_callbackTimer";
+timer1.usecPerTick   = 10000;
+timer1.TIMER.$assign = "DMTIMER4";
+
+/**
+ * These are the reserved peripherals and settings in this configuration
+ */
+const iPRU_ICSSG1_MDIO1 = scripting.addPeripheral("PRU_ICSSG1_MDIO");
+iPRU_ICSSG1_MDIO1.$name = "MyPRU_ICSSG1_MDIO1";
+
+/**
+ * Pinmux solution for unlocked pins/peripherals. This ensures that minor changes to the automatic solver in a future
+ * version of the tool will not impact the pinmux you originally saw.  These lines can be completely deleted in order to
+ * re-solve from scratch.
+ */
+i2c1.I2C.$suggestSolution                                           = "I2C0";
+i2c1.I2C.SCL.$suggestSolution                                       = "ball.B16";
+i2c1.I2C.SDA.$suggestSolution                                       = "ball.B15";
+pruicss1.AdditionalICSSSettings[0].PRU_ICSSG0_IEP.$suggestSolution  = "PRU_ICSSG0_IEP1";
+pruicss1.AdditionalICSSSettings[0].PRU_ICSSG0_ECAP.$suggestSolution = "PRU_ICSSG0_ECAP0";
+debug_log.uartLog.UART.RXD.$suggestSolution                         = "ball.B10";
+debug_log.uartLog.UART.TXD.$suggestSolution                         = "ball.B11";
+iPRU_ICSSG1_MDIO1.$suggestSolution                                  = "PRU_ICSSG1_MDIO0";
+iPRU_ICSSG1_MDIO1.MDC.$suggestSolution                              = "ball.W1";
+iPRU_ICSSG1_MDIO1.MDIO.$suggestSolution                             = "ball.V2";

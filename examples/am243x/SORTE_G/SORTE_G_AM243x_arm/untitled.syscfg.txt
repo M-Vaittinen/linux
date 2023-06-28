@@ -1,0 +1,82 @@
+/**
+ * These arguments were used when this file was generated. They will be automatically applied on subsequent loads
+ * via the GUI or CLI. Run CLI with '--help' for additional information on how to override these arguments.
+ * @cliArgs --device "AM243x_ALX_beta" --package "ALX" --part "ALX"
+ * @versions {"tool":"1.13.0+2553"}
+ */
+
+/**
+ * These are the peripherals and settings in this configuration
+ */
+const iGPIO1                              = scripting.addPeripheral("GPIO");
+iGPIO1["20"].rx                           = false;
+iGPIO1["20"].$used                        = true;
+iGPIO1["70"].pu_pd                        = "pd";
+iGPIO1["70"].rx                           = false;
+iGPIO1["70"].$used                        = true;
+iGPIO1["73"].rx                           = false;
+iGPIO1["73"].$used                        = true;
+iGPIO1.$name                              = "MyGPIO1";
+iGPIO1.$assign                            = "GPIO0";
+const iGPIO2                              = scripting.addPeripheral("GPIO");
+iGPIO2["35"].pu_pd                        = "pu";
+iGPIO2["35"].rx                           = false;
+iGPIO2["35"].$used                        = true;
+iGPIO2.$name                              = "MyGPIO2";
+iGPIO2.$assign                            = "GPIO1";
+const iPRU_ICSSG1_IEP1                    = scripting.addPeripheral("PRU_ICSSG1_IEP");
+iPRU_ICSSG1_IEP1.$name                    = "MyPRU_ICSSG1_IEP1";
+iPRU_ICSSG1_IEP1.$assign                  = "PRU_ICSSG1_IEP0";
+iPRU_ICSSG1_IEP1.EDC_LATCH_IN0.$used      = false;
+iPRU_ICSSG1_IEP1.EDC_LATCH_IN1.$used      = false;
+iPRU_ICSSG1_IEP1.EDIO_DATA_IN_OUT28.$used = false;
+iPRU_ICSSG1_IEP1.EDIO_DATA_IN_OUT29.$used = false;
+iPRU_ICSSG1_IEP1.EDIO_DATA_IN_OUT30.$used = false;
+iPRU_ICSSG1_IEP1.EDIO_DATA_IN_OUT31.$used = false;
+const iPRU_ICSSG1_MDIO1                   = scripting.addPeripheral("PRU_ICSSG1_MDIO");
+iPRU_ICSSG1_MDIO1.$name                   = "MyPRU_ICSSG1_MDIO1";
+const iPRU_ICSSG1_RGMII1                  = scripting.addPeripheral("PRU_ICSSG1_RGMII");
+iPRU_ICSSG1_RGMII1.$name                  = "MyPRU_ICSSG1_RGMII1";
+const iPRU_ICSSG1_RGMII2                  = scripting.addPeripheral("PRU_ICSSG1_RGMII");
+iPRU_ICSSG1_RGMII2.$name                  = "MyPRU_ICSSG1_RGMII2";
+iPRU_ICSSG1_RGMII2.$assign                = "PRU_ICSSG1_RGMII2";
+
+/**
+ * Pinmux solution for unlocked pins/peripherals. This ensures that minor changes to the automatic solver in a future
+ * version of the tool will not impact the pinmux you originally saw.  These lines can be completely deleted in order to
+ * re-solve from scratch.
+ */
+iGPIO1["20"].$suggestSolution                   = "ball.Y15";
+iGPIO1["70"].$suggestSolution                   = "ball.AA11";
+iGPIO1["73"].$suggestSolution                   = "ball.W11";
+iGPIO2["35"].$suggestSolution                   = "ball.M4";
+iPRU_ICSSG1_IEP1.EDC_SYNC_OUT0.$suggestSolution = "ball.U3";
+iPRU_ICSSG1_IEP1.EDC_SYNC_OUT1.$suggestSolution = "ball.T2";
+iPRU_ICSSG1_MDIO1.$suggestSolution              = "PRU_ICSSG1_MDIO0";
+iPRU_ICSSG1_MDIO1.MDC.$suggestSolution          = "ball.W1";
+iPRU_ICSSG1_MDIO1.MDIO.$suggestSolution         = "ball.V2";
+iPRU_ICSSG1_RGMII1.$suggestSolution             = "PRU_ICSSG1_RGMII1";
+iPRU_ICSSG1_RGMII1.RD0.$suggestSolution         = "ball.V4";
+iPRU_ICSSG1_RGMII1.RD1.$suggestSolution         = "ball.W5";
+iPRU_ICSSG1_RGMII1.RD2.$suggestSolution         = "ball.AA4";
+iPRU_ICSSG1_RGMII1.RD3.$suggestSolution         = "ball.Y5";
+iPRU_ICSSG1_RGMII1.RXC.$suggestSolution         = "ball.Y2";
+iPRU_ICSSG1_RGMII1.RX_CTL.$suggestSolution      = "ball.AA5";
+iPRU_ICSSG1_RGMII1.TD0.$suggestSolution         = "ball.V5";
+iPRU_ICSSG1_RGMII1.TD1.$suggestSolution         = "ball.W2";
+iPRU_ICSSG1_RGMII1.TD2.$suggestSolution         = "ball.V6";
+iPRU_ICSSG1_RGMII1.TD3.$suggestSolution         = "ball.AA7";
+iPRU_ICSSG1_RGMII1.TXC.$suggestSolution         = "ball.W6";
+iPRU_ICSSG1_RGMII1.TX_CTL.$suggestSolution      = "ball.Y7";
+iPRU_ICSSG1_RGMII2.RD0.$suggestSolution         = "ball.AA10";
+iPRU_ICSSG1_RGMII2.RD1.$suggestSolution         = "ball.Y10";
+iPRU_ICSSG1_RGMII2.RD2.$suggestSolution         = "ball.Y11";
+iPRU_ICSSG1_RGMII2.RD3.$suggestSolution         = "ball.V12";
+iPRU_ICSSG1_RGMII2.RXC.$suggestSolution         = "ball.V10";
+iPRU_ICSSG1_RGMII2.RX_CTL.$suggestSolution      = "ball.Y12";
+iPRU_ICSSG1_RGMII2.TD0.$suggestSolution         = "ball.Y6";
+iPRU_ICSSG1_RGMII2.TD1.$suggestSolution         = "ball.AA8";
+iPRU_ICSSG1_RGMII2.TD2.$suggestSolution         = "ball.Y9";
+iPRU_ICSSG1_RGMII2.TD3.$suggestSolution         = "ball.W9";
+iPRU_ICSSG1_RGMII2.TXC.$suggestSolution         = "ball.Y8";
+iPRU_ICSSG1_RGMII2.TX_CTL.$suggestSolution      = "ball.V9";

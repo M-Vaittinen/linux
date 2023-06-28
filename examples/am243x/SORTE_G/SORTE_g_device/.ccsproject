@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<?ccsproject version="1.0"?>
+<projectOptions>
+	<ccsVersion value="8.3.0"/>
+	<deviceVariant value="TMS192C2026.AM6548.IDK_AM65x"/>
+	<deviceFamily value="PRU"/>
+	<deviceEndianness value="little"/>
+	<codegenToolVersion value="2.3.1"/>
+	<isElfFormat value="true"/>
+	<rts value="libc.a"/>
+	<createSlaveProjects value=""/>
+	<templateProperties value="id=com.ti.ccstudio.project.templates.emptyAssemblyOnly,isAssemblyOnly=true"/>
+	<filesToOpen value=""/>
+	<isTargetManual value="false"/>
+</projectOptions>

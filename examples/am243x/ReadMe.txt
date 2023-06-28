@@ -44,6 +44,14 @@ WHAT EXAMPLES ARE INCLUDED?
 
 	Ultrafast_broadside
 
+	SORTE_G (Simple Open Real-Time Ethernet at Gigabit rate)
+		This project consists of PRU firmware for device and controller side
+		to build a real-time Ethernet network with minimum latency and jitter.
+		It shows the usage of PRU for Ethernet using RGMII interface.
+
+		NOTE! The SORTE_G example can only be built in CCS at this point
+		in time, NOT with Makefiles.
+
 ADDITIONAL RESOURCES
 
 	For more information about the PRU, visit:

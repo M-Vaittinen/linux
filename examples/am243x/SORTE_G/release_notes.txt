@@ -1,0 +1,31 @@
+2020-05-26 Release 0.2 SORTE_G protocol
+Features and functions
+- 1 master
+- 12 devices (12 bytes IO data, no CRC)
+- 10us cycle time; max 16 devices with limited cable length (<100m)
+- 500ns TTS offset for master and devices: can be used for IO data preparation
+- SYNC jtter over 12 devices: ~40ns, no averaging filter in device
+- IO data validated in master/device
+- Tested accross 5 EVMs: master on single EVM, 3x device per 1 EVM
+- Rotary switch SW1 on PROC064 board: set to 1 -> Master is loaded to ICSS_G2
+- User interface via UART (USB port J42, lowest COM port is console port): 
+	- r - restart FW all ICSS_G
+	- 0 - stop PRU all ICSS_G
+	- 1 - start ICSS_G0
+	- 2 - start ICSS_G1
+	- 3 - start ICSS_G2
+- 8x LED output on PROC064: Process data LSB on ICSS_G0 (handled by ARM application)
+- Master statistic for IOEX receive timestamps for up to 16 device packets (ICSS DRAM0 offset 0x1000) min/average/max  (32-bit each entry)
+
+Open items /enhancements:
+- SYNC signal alignment accross 12 devices (now 80ns offset)
+- SYNC jitter enhancement through averaging filter
+- Transmit jitter enhancement: use ICSS_G clock (ECAP) for PHY clock
+- CRC on IO data packets (generation and validation)
+- disable forward error correction in Ethernet PHY to reduce latency by ~80ns per PHY
+- Error and retrain in IO exchange
+- VT100 user interface for device state&statistic
+- Integration of BER test
+
+
+
