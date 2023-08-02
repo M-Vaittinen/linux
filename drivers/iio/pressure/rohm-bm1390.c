@@ -127,6 +127,7 @@ static const struct regmap_config bm1390_regmap = {
 	.precious_table = &bm1390_precious_regs,
 	.max_register = BM1390_MAX_REGISTER,
 	.cache_type = REGCACHE_RBTREE,
+	.disable_locking = true,
 };
 
 enum {
@@ -370,24 +371,27 @@ static int bm1390_read_raw(struct iio_dev *idev,
 	switch (mask) {
 	case IIO_CHAN_INFO_SCALE:
 		*val = 0;
-		if (chan->type == IIO_TEMP)
-			*val2 = 31250;
-		else if (chan->type == IIO_PRESSURE)
+		if (chan->type == IIO_TEMP) {
+			*val2 = 31250000;
+
+			return IIO_VAL_INT_PLUS_MICRO;
+		} else if (chan->type == IIO_PRESSURE) {
 			/*
  			 * pressure in hPa is register value divided by 2048.
  			 * This means kPa is 1/20480 times the register value,
- 			 * which equals to 48.828125 * 10 ^ -6
- 			 * 0.000048828125. This is 48828 nano kPa.
+ 			 * which equals to 48828.125 * 10 ^ -9
+ 			 * This is 48828.125 nano kPa.
  			 *
  			 * When we scale this using IIO_VAL_INT_PLUS_NANO we
  			 * get 48828 - which means we lose some accuracy. Well,
  			 * let's try to live with that.
  			 */
 			*val2 = 48828;
-		else
-			return -EINVAL;
 
-		return IIO_VAL_INT_PLUS_NANO;
+			return IIO_VAL_INT_PLUS_NANO;
+		}
+
+		return -EINVAL;
 	case IIO_CHAN_INFO_RAW:
 
 		ret = iio_device_claim_direct_mode(idev);
@@ -946,7 +950,6 @@ static int bm1390_probe(struct i2c_client *i2c)
 	struct device *dev;
 	unsigned int part_id;
 	int ret;
-	bool remove_me_i_am_a_hack_to_not_execute_incomplete_trigger_feature = true;
 
 	dev = &i2c->dev;
 
@@ -971,8 +974,6 @@ static int bm1390_probe(struct i2c_client *i2c)
 
 	if (part_id != BM1390_ID)
 		dev_warn(dev, "unknown device 0x%x\n", part_id);
-	else
-		remove_me_i_am_a_hack_to_not_execute_incomplete_trigger_feature = false;
 
 	data->regmap = regmap;
 	data->dev = dev;
@@ -999,12 +1000,9 @@ static int bm1390_probe(struct i2c_client *i2c)
 	if (ret)
 		return dev_err_probe(dev, ret, "sensor init failed\n");
 
-	if (remove_me_i_am_a_hack_to_not_execute_incomplete_trigger_feature) {
-		dev_warn(data->dev, "registering trigger - feature not completed\n");
-		ret = bm1390_setup_trigger(data, idev, i2c->irq);
-		if (ret)
-			return ret;
-	}
+	ret = bm1390_setup_trigger(data, idev, i2c->irq);
+	if (ret)
+		return ret;
 
 	ret = devm_iio_device_register(dev, idev);
 	if (ret < 0)
