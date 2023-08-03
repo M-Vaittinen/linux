@@ -261,6 +261,8 @@ static int bm1390_pressure_read(struct bm1390_data *data, u32 *pressure)
 
 	*pressure = (u32)(raw[2] >> 2 | raw[1] << 6 | raw[0] << 14);
 
+	pr_info("raw: %u\n", *pressure);
+
 	return 0;
 }
 
@@ -370,12 +372,13 @@ static int bm1390_read_raw(struct iio_dev *idev,
 
 	switch (mask) {
 	case IIO_CHAN_INFO_SCALE:
-		*val = 0;
 		if (chan->type == IIO_TEMP) {
-			*val2 = 31250000;
+			*val = 31;
+			*val2 = 250000;
 
 			return IIO_VAL_INT_PLUS_MICRO;
 		} else if (chan->type == IIO_PRESSURE) {
+			*val = 0;
 			/*
  			 * pressure in hPa is register value divided by 2048.
  			 * This means kPa is 1/20480 times the register value,
@@ -427,20 +430,24 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 	u64 sample_period;
 	__be16 temp = 0;
 
-	/*
-	 * If the IC is accessed during FIFO read samples can be dropped.
-	 * Prevent access until FIFO_LVL is read
-	 */
+#ifdef DATA_READY_SHOULD_NOT_BE_USED_IN_FIFO_MODE__RIGHT
+	/* DRDY is acked by reading status reg */
+	ret = regmap_read(data->regmap, BM1390_REG_STATUS,
+			  &dummy);
+	if (ret)
+		return ret;
+#endif
+
 	if (test_bit(BM1390_CHAN_TEMP, idev->active_scan_mask)) {
 		ret = regmap_bulk_read(data->regmap, BM1390_REG_TEMP_HI, &temp,
 				       sizeof(temp));
 		if (ret)
-			goto unlock_out;
+			return ret;
 	}
 
 	ret = regmap_read(data->regmap, BM1390_REG_FIFO_LVL, &smp_lvl);
 	if (ret)
-		goto unlock_out;
+		return ret;
 
 	smp_lvl = FIELD_GET(BM1390_MASK_FIFO_LVL, smp_lvl);
 
@@ -454,7 +461,7 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 	}
 
 	if (!smp_lvl)
-		goto unlock_out;
+		return ret;
 
 	sample_period = data->timestamp - data->old_timestamp;
 	do_div(sample_period, smp_lvl);
@@ -463,6 +470,7 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 		smp_lvl = samples;
 
 	for (i = 0; i < smp_lvl; i++) {
+		pr_info("flushing smp %u\n", i);
 		ret = bm1390_pressure_read(data, &buffer.pressure);
 		if (ret)
 			break;
@@ -486,11 +494,9 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 	regmap_read(data->regmap, BM1390_REG_FIFO_LVL, &smp_lvl);
 
 	if (!ret)
-		ret = smp_lvl;
+		return ret;
 
-unlock_out:
-
-	return ret;
+	return smp_lvl;
 }
 
 static int bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples)
@@ -516,6 +522,10 @@ static int bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples)
 	disable_irq(data->irq);
 	data->timestamp = iio_get_time_ns(idev);
 
+	/*
+	 * If the IC is accessed during FIFO read samples can be dropped.
+	 * Prevent access until FIFO_LVL is read
+	 */
 	mutex_lock(&data->mutex);
 	ret = __bm1390_fifo_flush(idev, samples, false);
 	mutex_unlock(&data->mutex);
@@ -653,7 +663,7 @@ static int bm1390_chip_init(struct bm1390_data *data)
 
 	/*
 	 * Default to use IIR filter in "middle" mode. Also the AVE_NUM must
-	 * be fixed when IIR us in use
+	 * be fixed when IIR is in use
 	 */
 	ret = regmap_update_bits(data->regmap, BM1390_REG_MODE_CTRL,
 				 BM1390_MASK_AVE_NUM, BM1390_IIR_AVE_NUM);
@@ -770,8 +780,15 @@ static irqreturn_t bm1390_trigger_handler(int irq, void *p)
 	struct iio_poll_func *pf = p;
 	struct iio_dev *idev = pf->indio_dev;
 	struct bm1390_data *data = iio_priv(idev);
-	int ret;
+	int ret, dummy;
 
+	/* DRDY is acked by reading status reg */
+	ret = regmap_read(data->regmap, BM1390_REG_STATUS,
+			  &dummy);
+	if (ret)
+		return IRQ_NONE;
+
+	pr_info("DRDY trig\n");
 	ret = bm1390_pressure_read(data, &data->buf.pressure);
 	if (ret)
 		goto err_read;
@@ -994,7 +1011,7 @@ static int bm1390_probe(struct i2c_client *i2c)
 	idev->num_channels = ARRAY_SIZE(bm1390_channels);
 	idev->name = "bm1390";
 	idev->info = &bm1390_info;
-	idev->modes = INDIO_DIRECT_MODE /* | INDIO_BUFFER_SOFTWARE */;
+	idev->modes = INDIO_DIRECT_MODE  | INDIO_BUFFER_SOFTWARE;
 
 	ret = bm1390_chip_init(data);
 	if (ret)
