@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 Programmable Real-time Unit (PRU) Software Support Package
 ------------------------------------------------------------
 ============================================================
@@ -29,7 +30,13 @@ WHAT EXAMPLES ARE INCLUDED?
 
 	EXAMPLE
 	---------
-	TODO: Fill in examples
+
+	Getting started labs with RTOS and Code Composer Studio
+
+		MyFirst_PRU_Assembler_Program
+		MyFirst_PRU_C_Program
+		MyFirst_PRU_mixed_Program
+		PRU_driver_example
 
 ADDITIONAL RESOURCES
 

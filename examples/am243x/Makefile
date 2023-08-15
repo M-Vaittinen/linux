@@ -1,4 +1,6 @@
-SUBDIRS=
+SUBDIRS=MyFirst_PRU_Assembler_Program \
+	MyFirst_PRU_C_Program \
+	MyFirst_PRU_mixed_Program
 
 all: $(SUBDIRS)
 
