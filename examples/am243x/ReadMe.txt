@@ -38,6 +38,12 @@ WHAT EXAMPLES ARE INCLUDED?
 		MyFirst_PRU_mixed_Program
 		PRU_driver_example
 
+	PRU_FastGpio_PRG0
+
+	PRU_FastGpio_PRG1
+
+	Ultrafast_broadside
+
 ADDITIONAL RESOURCES
 
 	For more information about the PRU, visit:
