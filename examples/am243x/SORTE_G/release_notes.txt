@@ -1,3 +1,6 @@
+2023-09-19 Release
+Change ARM application to FreeRTOS (from bare-metal)
+
 2020-05-26 Release 0.2 SORTE_G protocol
 Features and functions
 - 1 master

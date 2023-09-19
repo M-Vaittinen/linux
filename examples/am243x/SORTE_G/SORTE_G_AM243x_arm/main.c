@@ -31,25 +31,73 @@
  */
 
 #include <stdlib.h>
+#include <kernel/dpl/DebugP.h>
 #include "ti_drivers_config.h"
 #include "ti_board_config.h"
-#include <drivers/pinmux.h>
+#include "FreeRTOS.h"
+#include "task.h"
 
-void sorte_main(void *args);
+#define MAIN_TASK_PRI  (configMAX_PRIORITIES-1)
 
-int main()
+#define MAIN_TASK_SIZE (16384U/sizeof(configSTACK_DEPTH_TYPE))
+StackType_t gMainTaskStack[MAIN_TASK_SIZE] __attribute__((aligned(32)));
+
+StaticTask_t gMainTaskObj;
+TaskHandle_t gMainTask;
+
+#define TERMINAL_TASK_PRI  (configMAX_PRIORITIES-3)
+#define TERMINAL_TASK_SIZE (16384U/sizeof(configSTACK_DEPTH_TYPE))
+StackType_t gTerminalTaskStack[TERMINAL_TASK_SIZE] __attribute__((aligned(32)));
+StaticTask_t gTerminalTaskObj;
+TaskHandle_t gTerminalTask;
+
+
+void sorte_g_main(void *args);
+void terminal(void *args);
+
+void freertos_main(void *args)
 {
-    System_init();
-    /* sysconfig 1.13 does not support pin-mux without software */
-    /* need to call separate pin-mux for SORTE protocol         */
-    Pinmux_init_sorte();
+    sorte_g_main(NULL);
 
+    vTaskDelete(NULL);
+}
+
+
+int main(void)
+{
+    /* init SOC specific modules */
+    System_init();
     Board_init();
 
-    sorte_main(NULL);
+    /* This task is created at highest priority, it should create more tasks and then delete itself */
+    gMainTask = xTaskCreateStatic( freertos_main,   /* Pointer to the function that implements the task. */
+                                  "freertos_main", /* Text name for the task.  This is to facilitate debugging only. */
+                                  MAIN_TASK_SIZE,  /* Stack depth in units of StackType_t typically uint32_t on 32b CPUs */
+                                  NULL,            /* We are not using the task parameter. */
+                                  MAIN_TASK_PRI,   /* task priority, 0 is lowest priority, configMAX_PRIORITIES-1 is highest */
+                                  gMainTaskStack,  /* pointer to stack base */
+                                  &gMainTaskObj ); /* pointer to statically allocated task object memory */
+    configASSERT(gMainTask != NULL);
 
-    Board_deinit();
-    System_deinit();
+    /* This task is the UART terminal to debug the SORTE_G application */
+    gTerminalTask = xTaskCreateStatic( terminal,   /* Pointer to the function that implements the task. */
+                                   "terminal", /* Text name for the task.  This is to facilitate debugging only. */
+                                   TERMINAL_TASK_SIZE,  /* Stack depth in units of StackType_t typically uint32_t on 32b CPUs */
+                                   NULL,            /* We are not using the task parameter. */
+                                   TERMINAL_TASK_PRI,   /* task priority, 0 is lowest priority, configMAX_PRIORITIES-1 is highest */
+                                   gTerminalTaskStack,  /* pointer to stack base */
+                                   &gTerminalTaskObj ); /* pointer to statically allocated task object memory */
+     configASSERT(gTerminalTask != NULL);
+
+
+    /* Start the scheduler to start the tasks executing. */
+    vTaskStartScheduler();
+
+    /* The following line should never be reached because vTaskStartScheduler()
+    will only return if there was not enough FreeRTOS heap memory available to
+    create the Idle and (if configured) Timer tasks.  Heap management, and
+    techniques for trapping heap exhaustion, are described in the book text. */
+    DebugP_assertNoLog(0);
 
     return 0;
 }
