@@ -71,14 +71,11 @@ static unsigned int size_from_channelarray(struct iio_channel_info *channels, in
 	}
 	/*
 	 * We wan't the data in next sample to also be properly aligned so
-	 * we'll add padding at the end if needed. TODO: should we use fixed
-	 * 8 byte alignment instead of the size of the biggest samnple?
+	 * we'll add padding at the end if needed.
 	 */
 	misalignment = bytes % max;
-	if (misalignment) {
-		printf("Misalignment %u. Adding Padding %u\n", misalignment,  max - misalignment);
+	if (misalignment)
 		bytes += max - misalignment;
-	}
 
 	return bytes;
 }
