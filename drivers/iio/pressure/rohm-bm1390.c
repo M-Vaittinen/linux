@@ -286,7 +286,7 @@ static int bm1390_read_data(struct bm1390_data *data,
 	}
 	warn = bm1390_meas_set(data, BM1390_MEAS_MODE_STOP);
 	if (warn)
-		dev_warn(data->dev, "Failed to stop measurementi (%d)\n", warn);
+		dev_warn(data->dev, "Failed to stop measurement (%d)\n", warn);
 unlock_out:
 	mutex_unlock(&data->mutex);
 
@@ -372,7 +372,7 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 
 	/*
 	 * After some testing it appears that the temperature is not readable
-	 * untill the FIFO access has been done after the WMI. Thus, we need
+	 * until the FIFO access has been done after the WMI. Thus, we need
 	 * to read the all pressure values to memory and read the temperature
 	 * only after that.
 	 */
@@ -415,7 +415,6 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 				       sizeof(temp));
 		if (ret)
 			return ret;
-		pr_info("Temp before reading the FIFO %u\n", be16_to_cpu(temp));
 	}
 
 	if (ret)
@@ -423,8 +422,7 @@ static int __bm1390_fifo_flush(struct iio_dev *idev, unsigned int samples,
 
 	for (i = 0; i < smp_lvl; i++) {
 		buffer[i].temp = temp;
-		iio_push_to_buffers_with_timestamp(idev, &buffer[i],
-						   buffer[i].ts);
+		iio_push_to_buffers(idev, &buffer[i]);
 	}
 
 	return smp_lvl;
@@ -474,9 +472,12 @@ static int bm1390_set_watermark(struct iio_dev *idev, unsigned int val)
 	return 0;
 }
 
+static const struct iio_info bm1390_noirq_info = {
+	.read_raw = &bm1390_read_raw,
+};
+
 static const struct iio_info bm1390_info = {
 	.read_raw = &bm1390_read_raw,
-	.validate_trigger = iio_validate_own_trigger,
 	.hwfifo_set_watermark = bm1390_set_watermark,
 	.hwfifo_flush_to_buffer = bm1390_fifo_flush,
 };
@@ -529,8 +530,8 @@ static int bm1390_fifo_set_wmi(struct bm1390_data *data)
 {
 	u8 regval;
 
-	regval = data->watermark - BM1390_WMI_MIN;
-	regval = FIELD_PREP(BM1390_MASK_FIFO_LEN, regval);
+	regval = FIELD_PREP(BM1390_MASK_FIFO_LEN,
+			    data->watermark - BM1390_WMI_MIN);
 
 	return regmap_update_bits(data->regmap, BM1390_REG_FIFO_CTRL,
 				  BM1390_MASK_FIFO_LEN, regval);
@@ -587,6 +588,10 @@ static int bm1390_fifo_disable(struct iio_dev *idev)
 	msleep(1);
 
 	mutex_lock(&data->mutex);
+	ret = bm1390_meas_set(data, BM1390_MEAS_MODE_STOP);
+	if (ret)
+		goto unlock_out;
+
 	/* Disable FIFO */
 	ret = regmap_clear_bits(data->regmap, BM1390_REG_FIFO_CTRL,
 				BM1390_MASK_FIFO_EN);
@@ -598,10 +603,6 @@ static int bm1390_fifo_disable(struct iio_dev *idev)
 	/* Disable WMI_IRQ */
 	ret = regmap_clear_bits(data->regmap, BM1390_REG_MODE_CTRL,
 				 BM1390_MASK_WMI_EN);
-	if (ret)
-		goto unlock_out;
-
-	ret = bm1390_meas_set(data, BM1390_MEAS_MODE_STOP);
 
 unlock_out:
 	mutex_unlock(&data->mutex);
@@ -872,8 +873,7 @@ static int bm1390_probe(struct i2c_client *i2c)
 	idev->channels = bm1390_channels;
 	idev->num_channels = ARRAY_SIZE(bm1390_channels);
 	idev->name = "bm1390";
-	idev->info = &bm1390_info;
-	idev->modes = INDIO_DIRECT_MODE | INDIO_BUFFER_SOFTWARE;
+	idev->modes = INDIO_DIRECT_MODE;
 
 	ret = bm1390_chip_init(data);
 	if (ret)
@@ -885,9 +885,13 @@ static int bm1390_probe(struct i2c_client *i2c)
 
 	/* No trigger if we don't have IRQ for data-ready and WMI */
 	if (i2c->irq > 0) {
+		idev->info = &bm1390_info;
+		idev->modes |= INDIO_BUFFER_SOFTWARE;
 		ret = bm1390_setup_trigger(data, idev, i2c->irq);
 		if (ret)
 			return ret;
+	} else {
+		idev->info = &bm1390_noirq_info;
 	}
 
 	ret = devm_iio_device_register(dev, idev);
