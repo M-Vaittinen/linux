@@ -413,7 +413,7 @@ static const unsigned long *iio_scan_mask_match(const unsigned long *av_masks,
 {
 	if (bitmap_empty(mask, masklength))
 		return NULL;
-	while (*av_masks) {
+	while (!bitmap_empty(av_masks, masklength)) {
 		if (strict) {
 			if (bitmap_equal(mask, av_masks, masklength))
 				return av_masks;
