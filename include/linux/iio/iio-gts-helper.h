@@ -183,6 +183,8 @@ int iio_gts_get_min_gain(struct iio_gts *gts);
 int iio_gts_find_int_time_by_sel(struct iio_gts *gts, int sel);
 int iio_gts_find_sel_by_int_time(struct iio_gts *gts, int time);
 
+int iio_gts_total_gain_to_scale_roof(struct iio_gts *gts, int total_gain,
+				int *scale_int, int *scale_nano);
 int iio_gts_total_gain_to_scale(struct iio_gts *gts, int total_gain,
 				int *scale_int, int *scale_nano);
 int iio_gts_find_gain_sel_for_scale_using_time(struct iio_gts *gts, int time_sel,
