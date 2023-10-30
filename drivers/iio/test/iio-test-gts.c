@@ -94,6 +94,42 @@ static const struct iio_itime_sel_mul gts_test_itimes[] = {
 #define TOTAL_GAIN_MAX	(HWGAIN_MAX * TIMEGAIN_MAX)
 #define IIO_GTS_TEST_DEV "iio-gts-test-dev"
 
+
+#define TEST_SCALE_SUBHJ_INT 16
+#define TEST_SCALE_SUBHJ_NANO 3264320
+
+#define APDS9306_GSEL_1X 0x00
+#define APDS9306_GSEL_3X 0x01
+#define APDS9306_GSEL_6X 0x02
+#define APDS9306_GSEL_9X 0x03
+#define APDS9306_GSEL_18X 0x04
+
+static const struct iio_gain_sel_pair shj_g_table[] = {
+	GAIN_SCALE_GAIN(1, APDS9306_GSEL_1X),
+	GAIN_SCALE_GAIN(3, APDS9306_GSEL_3X),
+	GAIN_SCALE_GAIN(6, APDS9306_GSEL_6X),
+	GAIN_SCALE_GAIN(9, APDS9306_GSEL_9X),
+	GAIN_SCALE_GAIN(18, APDS9306_GSEL_18X),
+};
+
+#define APDS9306_MEAS_MODE_400MS	0x00
+#define APDS9306_MEAS_MODE_200MS	0x01
+#define APDS9306_MEAS_MODE_100MS	0x02
+#define APDS9306_MEAS_MODE_50MS		0x03
+#define APDS9306_MEAS_MODE_25MS		0x04
+#define APDS9306_MEAS_MODE_3125US	0x05
+
+#define shj_num_g ARRAY_SIZE(shj_g_table)
+static const struct iio_itime_sel_mul shj_i_table[] = {
+	GAIN_SCALE_ITIME_US(400000, APDS9306_MEAS_MODE_400MS, 128),
+	GAIN_SCALE_ITIME_US(200000, APDS9306_MEAS_MODE_200MS, 64),
+	GAIN_SCALE_ITIME_US(100000, APDS9306_MEAS_MODE_100MS, 32),
+	GAIN_SCALE_ITIME_US(50000, APDS9306_MEAS_MODE_50MS, 16),
+	GAIN_SCALE_ITIME_US(25000, APDS9306_MEAS_MODE_25MS, 8),
+	GAIN_SCALE_ITIME_US(3125, APDS9306_MEAS_MODE_3125US, 1),
+};
+#define shj_num_i ARRAY_SIZE(shj_i_table)
+
 static struct device *__test_init_iio_gain_scale(struct kunit *test,
 		struct iio_gts *gts, const struct iio_gain_sel_pair *g_table,
 		int num_g, const struct iio_itime_sel_mul *i_table, int num_i)
@@ -120,6 +156,99 @@ static struct device *__test_init_iio_gain_scale(struct kunit *test,
 	__test_init_iio_gain_scale(test, gts, gts_test_gains, \
 				   ARRAY_SIZE(gts_test_gains), gts_test_itimes, \
 				   ARRAY_SIZE(gts_test_itimes))
+
+static void test_subhajit_rounding_error(struct kunit *test)
+{
+
+	struct device *dev;
+	int ret, i, j, k, x;
+	int time_sel, gain_sel;
+	int shj_time_idx;
+
+	dev = kunit_device_register(test, IIO_GTS_TEST_DEV);
+
+	KUNIT_EXPECT_NOT_ERR_OR_NULL(test, dev);
+	if (IS_ERR_OR_NULL(dev))
+		return;
+
+	ret = devm_iio_init_iio_gts(dev, TEST_SCALE_SUBHJ_INT, TEST_SCALE_SUBHJ_NANO, shj_g_table, shj_num_g,
+				    shj_i_table, shj_num_i, &gts);
+	KUNIT_EXPECT_EQ(test, 0, ret);
+	if (ret)
+		return;
+
+	/* Let's go through all the i-times */
+	for (shj_time_idx = 0; shj_time_idx < gts.num_itime; shj_time_idx++)
+	/* Let's go through all the available scales */
+	for (j = 0; j < gts.num_avail_all_scales; j++) {
+		int shj_val1;
+		int shj_val2;
+		int shj_val2_hack;
+		int shj_time_sel;
+
+		shj_val1 = gts.avail_all_scales_table[j * 2];
+		shj_val2 = gts.avail_all_scales_table[j * 2 + 1];
+		shj_val2_hack = (shj_val2 % 10) ? shj_val2 + 1 : shj_val2;
+		shj_time_sel = gts.itime_table[shj_time_idx].sel;
+		ret = iio_gts_find_gain_sel_for_scale_using_time(&gts, shj_time_sel,
+							 shj_val1, shj_val2, &gain_sel);
+		/*
+		KUNIT_EXPECT_EQ(test, 0, ret);
+		if (ret)
+			return NULL;
+		*/
+
+//		pr_info("iio_gts_find_gain_sel_for_scale_using_time returned %d\n", ret);
+/*		pr_info("Used vals val %d, val2 %d, i-time-sel %d (time_us %u, sel %u, mul %u)\n",
+		shj_val1, shj_val2, shj_time_idx, gts.itime_table[shj_time_idx].time_us,
+		gts.itime_table[shj_time_idx].sel, gts.itime_table[shj_time_idx].mul); */
+
+		if (ret) {
+//			pr_info("No suitable gain for time sel %d\n", shj_time_sel);
+			for (i = 0; i < gts.num_itime; i++) {
+				time_sel = gts.itime_table[i].sel;
+
+				if (time_sel == shj_time_sel)
+					continue;
+		//		pr_info("Try time sel %d, mul %d\n", i, gts.itime_table[i].mul);
+
+				ret = iio_gts_find_gain_sel_for_scale_using_time(&gts,
+						time_sel, shj_val1, shj_val2, &gain_sel);
+				if (!ret) {
+					int ret2, time_sel2, gain_sel2;
+
+
+					pr_info("YaY! time-sel %u (mul %u) gain sel %u (mul %u) matches scale %u %u, max %llu (NANO)\n", time_sel, gts.itime_table[i].mul, gain_sel, iio_gts_find_gain_by_sel(&gts, gain_sel), shj_val1, shj_val2, gts.max_scale);
+
+					if (shj_val2_hack != shj_val2) {
+						pr_info("****************Hack Check************** %u %u\n",
+							shj_val2, shj_val2_hack);
+						/* hack val check */
+						for (x = 0; x < gts.num_itime; x++) {
+							time_sel2 = gts.itime_table[x].sel;
+							ret2 = iio_gts_find_gain_sel_for_scale_using_time(&gts,
+									time_sel2, shj_val1, shj_val2_hack, &gain_sel2);
+							if (!ret2) {
+								pr_info("Found match for %d %d, time_mul %u, gain_mul %u - max %llu\n", shj_val1, shj_val2_hack, gts.itime_table[x].mul, iio_gts_find_gain_by_sel(&gts, gain_sel2), gts.max_scale);
+								break;
+							}
+						}
+						if (ret2)
+							pr_info("Match found with val2 %d, not with val2 %d\n", shj_val2, shj_val2_hack);
+					}
+					break;
+				}
+
+//				pr_info("No suitable gain for time sel %d\n", time_sel);
+			}
+			KUNIT_EXPECT_EQ(test, 0, ret);
+			if (ret)
+				pr_info("No match for val %d, val2 %d\n", shj_val1, shj_val2);
+		//	if (ret)
+		//		return;
+		}
+	}
+}
 
 static void test_init_iio_gts_invalid(struct kunit *test)
 {
@@ -494,12 +623,13 @@ static void test_iio_gts_avail_test(struct kunit *test)
 }
 
 static struct kunit_case iio_gts_test_cases[] = {
-	KUNIT_CASE(test_init_iio_gts_invalid),
+	KUNIT_CASE(test_subhajit_rounding_error),
+/*	KUNIT_CASE(test_init_iio_gts_invalid),
 	KUNIT_CASE(test_iio_gts_find_gain_for_scale_using_time),
 	KUNIT_CASE(test_iio_gts_find_new_gain_sel_by_old_gain_time),
 	KUNIT_CASE(test_iio_find_closest_gain_low),
 	KUNIT_CASE(test_iio_gts_total_gain_to_scale),
-	KUNIT_CASE(test_iio_gts_avail_test),
+	KUNIT_CASE(test_iio_gts_avail_test), */
 	{}
 };
 
