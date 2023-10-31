@@ -18,6 +18,32 @@
 #include <linux/iio/iio-gts-helper.h>
 #include <linux/iio/types.h>
 
+static int iio_gts_get_gain_32(u64 full, unsigned int scale)
+{
+	unsigned int full32 = (unsigned int) full;
+	unsigned int rem;
+	int result;
+
+	if (full == (u64)full32) {
+		unsigned int rem;
+
+		result = full32 / scale;
+		rem = full32 - scale * result;
+		if (rem >= scale / 2)
+			result++;
+
+		return result;
+	}
+
+	rem = do_div(full, scale);
+	if ((u64)rem >= scale / 2)
+		result = full + 1;
+	else
+		result = full;
+
+	return result;
+}
+
 /**
  * iio_gts_get_gain - Convert scale to total gain
  *
@@ -28,30 +54,42 @@
  *		scale is 64 100 000 000.
  * @scale:	Linearized scale to compute the gain for.
  *
- * Return:	(floored) gain corresponding to the scale. -EINVAL if scale
+ * Return:	(rounded) gain corresponding to the scale. -EINVAL if scale
  *		is invalid.
  */
 static int iio_gts_get_gain(const u64 max, const u64 scale)
 {
-	u64 full = max;
+	u64 full = max, half_div;
+	unsigned int scale32 = (unsigned int) scale;
 	int tmp = 1;
 
-	if (scale > full || !scale)
+	if (scale / 2 > full || !scale)
 		return -EINVAL;
+
+	/*
+	 * The loop-based implementation below will potentially run _long_
+	 * if we have a small scale and large 'max' - which may be needed when
+	 * GTS is used for channels returning specific units. Luckily we can
+	 * avoid the loop when scale is small and fits in 32 bits.
+	 */
+	if ((u64)scale32 == scale)
+		return iio_gts_get_gain_32(full, scale32);
 
 	if (U64_MAX - full < scale) {
 		/* Risk of overflow */
-		if (full - scale < scale)
+		if (full - scale / 2 < scale)
 			return 1;
 
 		full -= scale;
 		tmp++;
 	}
 
-	while (full > scale * (u64)tmp)
+	half_div = scale >> 2;
+
+	while (full + half_div >= scale * (u64)tmp)
 		tmp++;
 
-	return tmp;
+	return tmp - 1;
 }
 
 /**
@@ -117,19 +155,6 @@ static int iio_gts_linearize(int scale_whole, int scale_nano,
 	if (scaler > NANO || !scaler)
 		return -EINVAL;
 
-	if (scale_nano == 27783445 || scale_nano == 27783446) {
-		u64 help1;
-		long int help2;
-
-		pr_info("Linearizing: %u * %lu + (%u / (%lu / %lu))\n", scale_whole,
-			scaler, scale_nano, NANO, scaler);
-		help1 = scale_whole * scaler;
-		help2 = NANO / scaler;
-
-		pr_info("=> %llu + %u / %lu\n", help1, scale_nano, help2);
-		pr_info("=> %llu + %lu\n", help1, scale_nano / help2);
-		pr_info("=> %llu\n", help1 + (u64)(scale_nano / help2));
-	}
 	*lin_scale = (u64)scale_whole * (u64)scaler +
 		     (u64)(scale_nano / (NANO / scaler));
 
@@ -153,20 +178,15 @@ int iio_gts_total_gain_to_scale_roof(struct iio_gts *gts, int total_gain,
 				int *scale_int, int *scale_nano)
 {
 	u64 tmp;
-	int rem, ret;
+	int rem;
 
 	tmp = gts->max_scale;
 
 	rem = do_div(tmp, total_gain);
+	if (rem)
+		tmp ++;
 
-	ret = iio_gts_delinearize(tmp, NANO, scale_int, scale_nano);
-	if (!ret && rem) {
-		pr_info("upscaling %u %u => %u %u\n", *scale_int, *scale_nano,
-			*scale_int, *scale_nano + 1);
-		*scale_nano += 1;
-	}
-
-	return ret;
+	return iio_gts_delinearize(tmp, NANO, scale_int, scale_nano);
 }
 EXPORT_SYMBOL_NS_GPL(iio_gts_total_gain_to_scale_roof, IIO_GTS_HELPER);
 
@@ -187,10 +207,13 @@ int iio_gts_total_gain_to_scale(struct iio_gts *gts, int total_gain,
 				int *scale_int, int *scale_nano)
 {
 	u64 tmp;
+	int rem;
 
 	tmp = gts->max_scale;
 
-	do_div(tmp, total_gain);
+	rem = do_div(tmp, total_gain);
+	if (total_gain > 1 && rem >= total_gain / 2)
+		tmp += 1ULL;
 
 	return iio_gts_delinearize(tmp, NANO, scale_int, scale_nano);
 }
@@ -244,7 +267,7 @@ static int gain_to_scaletables(struct iio_gts *gts, int **gains, int **scales)
 		 * the scale division does not go even.
 		 */
 		for (j = 0; j < gts->num_hwgain; j++) {
-			ret = iio_gts_total_gain_to_scale_roof(gts, gains[i][j],
+			ret = iio_gts_total_gain_to_scale(gts, gains[i][j],
 							  &scales[i][2 * j],
 							  &scales[i][2 * j + 1]);
 			if (ret)
@@ -302,7 +325,7 @@ static int gain_to_scaletables(struct iio_gts *gts, int **gains, int **scales)
 	gts->num_avail_all_scales = new_idx;
 
 	for (i = 0; i < gts->num_avail_all_scales; i++) {
-		ret = iio_gts_total_gain_to_scale_roof(gts, all_gains[i],
+		ret = iio_gts_total_gain_to_scale(gts, all_gains[i],
 					&gts->avail_all_scales_table[i * 2],
 					&gts->avail_all_scales_table[i * 2 + 1]);
 
