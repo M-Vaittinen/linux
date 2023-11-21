@@ -14,6 +14,21 @@ $ git log --oneline
 copy the git hash of the commit you are interested in
 $ git show gitHash
 
+v6.3.0
+------
+Released 2023-11-21
+
+This release adds resources for using AM243x & AM64x PRU cores with cores
+running FreeRTOS:
+ * The RTOS Getting Started Labs
+ * Examples for using PRU GPIO and the broadside interface
+ * SORTE_G example (a custom networking interface)
+
+Bug fixes:
+ * AM64x & AM65x header files, fix the names of extended sections to be in the
+   format of
+   ConstantsTableName_0x100
+
 v6.2.0
 ------
 Released 2023-06-29
