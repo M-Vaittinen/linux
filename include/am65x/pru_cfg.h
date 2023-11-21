@@ -1474,7 +1474,6 @@ typedef struct {
 } cfgExt;
 
 volatile __far cfg CT_CFG __attribute__((cregister("PRU_CFG", near), peripheral));
-volatile __far cfgExt CT_CFG_EXT __attribute__((cregister("PRU_CFG_EXT", near), peripheral));
+volatile __far cfgExt CT_CFG_EXT __attribute__((cregister("PRU_CFG_0x100", near), peripheral));
 
 #endif /* _PRU_CFG_H_ */
-

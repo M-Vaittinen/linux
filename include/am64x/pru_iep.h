@@ -630,6 +630,10 @@ typedef struct {
 			uint32_t cmp15_1 : 32; // 31:0
 		} cmp15_reg1_bit;
 	}; // 0xfc
+} iep;
+
+// start the extended structure here
+typedef struct {
 
 	/* PRU_IEP_count_reset_val_reg0 register bit field */
 	union {
@@ -1077,12 +1081,11 @@ typedef struct {
 		} digio_exp_reg_bit;
 	}; // 0x318
 
-} iep;
+} iepExt;
 
 volatile __far iep CT_IEP0 __attribute__((cregister("PRU_IEP0", near), peripheral));
-volatile __far iepExt CT_IEP0_EXT __attribute__((cregister("PRU_IEP0_EXT", far), peripheral));
+volatile __far iepExt CT_IEP0_EXT __attribute__((cregister("PRU_IEP0_0x100", far), peripheral));
 volatile __far iep CT_IEP1 __attribute__((cregister("PRU_IEP1", near), peripheral));
-volatile __far iepExt CT_IEP1_EXT __attribute__((cregister("PRU_IEP1_EXT", far), peripheral));
+volatile __far iepExt CT_IEP1_EXT __attribute__((cregister("PRU_IEP1_0x100", far), peripheral));
 
 #endif /* _PRU_IEP_H_ */
-
