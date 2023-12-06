@@ -56,7 +56,7 @@
 
 	.global 	TSK_IOEX_STATE_FWD_BKN
 	.global		TSK_IOEX_STATE_CMP0_EVENT
-	.global		TSK_IOEX_STATE_TTS_COMPLETE_EVENT
+	.global		TSK_IOEX_STATE_TTS_START_EVENT
 	.global		TSK_IOEX_STATE_FWD_SOF
 	.global		TSK_IOEX_STATE_FWD_EOF
 
@@ -319,26 +319,32 @@ IOEX_STATE_CLR_CMP_EVENT:
 	ldi		R30.w0, 0x5555
 	ldi		R30.w0, 0xd555
 	mov		R30.b0, DEVICE_ADDR		; This adds 1 additional byte to INPUT_BYTES_COUNT
+	mov		R30.b1, DEVICE_STATUS
 ; Load the device input byte from memory
-; Check if length is >26 byte
+; Check if length is >24 byte
 	;ldi		R0.w0, INPUT_BYTES_COUNT
-	ldi		R0.w0, 0
-	lbco	&R0.b0,	ICSS_SHARED_RAM_CONST, DEVICE_INDATA_FRAME_BUFFER_SIZE, 1
-	qbgt	IOEX_CMP0_LOAD_DATA, R0.w0, 26
+	lbco	&R0.w0,	ICSS_SHARED_RAM_CONST, DEVICE_INDATA_FRAME_BUFFER_SIZE, 2
+	mov		R0.w2, R0.w0	; copy byte count to second register
+	qbgt	IOEX_CMP0_LOAD_DATA, R0.w0, IOEX_TTS_PACKET_SIZE-8	;
 ;IOEX_CMP0_MULTI_PAKET:
-	ldi		R0.w0, 26		; if INPUT_BYTES_COUNT length >26, we push data to TX FIFO multiple times
+	ldi		R0.w0, IOEX_TTS_PACKET_SIZE-8		; if INPUT_BYTES_COUNT length >IOEX_TTS_PACKET_SIZE (24), we push data to TX FIFO multiple times
 IOEX_CMP0_LOAD_DATA:
 ; load payload from PRU data memory
     ldi		TEMP_REG_1.w0, DEVICE_INDATA_FRAME_BUFFER_PTR
     lbco	&TEMP_REG_1.w0, ICSS_SHARED_RAM_CONST, TEMP_REG_1.w0, 2
     lbco	&R2.b0, PRU1_DMEM_CONST, TEMP_REG_1.w0, b0
 	ldi		R1.b0, &R2.b0
-	loop	IOEX_CMP0_SEND, R0.b0
+	qbbc	IOEX_SEND_WORDS, R0.b0, 0	;check if byte count is odd
 	mvib	TX_DATA_BYTE, *R1.b0++
-	nop		; DevNote: NOP?
+;	nop
+IOEX_SEND_WORDS:
+	lsr		R0.b0, R0.b0, 1		; divide byte count by 2
+	loop	IOEX_CMP0_SEND, R0.b0
+	mviw	TX_DATA_WORD, *R1.b0++
+;	nop		; DevNote: NOP?
 IOEX_CMP0_SEND:
-	; generate CRC and TX_EOF if  INPUT_BYTES_COUNT <=26
-	qblt	IOEX_CMP0_NO_CRC, R0.w0, 26
+	; generate CRC and TX_EOF if  INPUT_BYTES_COUNT <=24
+	qblt	IOEX_CMP0_NO_CRC, R0.w2, IOEX_TTS_PACKET_SIZE-8
 	; push CRC32
 	M_CMD16 (D_PUSH_CRC_MSWORD_CMD | D_PUSH_CRC_LSWORD_CMD | D_TX_EOF)
 IOEX_CMP0_NO_CRC:
@@ -357,69 +363,106 @@ IOEX_CMP0_NO_CRC:
 ; TSK_IOEX_STATE_TTS_COMPLETE_EVENT
 ;****************************
 ; triggered by CMP3/4 (TTS) event
-TSK_IOEX_STATE_TTS_COMPLETE_EVENT:
+TSK_IOEX_STATE_TTS_START_EVENT:
 	.if $defined(PRU0)
     xout    BANK0_ID, &r0, RANGE_R0_R19     ; save r0 - r19
 	.else
     xout    BANK1_ID, &r0, RANGE_R0_R19     ; save r0 - r19
 	.endif
-	; init previous FIFO level to -1
-	ldi		TEMP_REG_1.b1, 0xff
-	; init TX byte counter
-	;ldi		R1.w0, INPUT_BYTES_COUNT
-	ldi		R1.w0, 0
-	lbco	&R0.b0,	ICSS_SHARED_RAM_CONST, DEVICE_INDATA_FRAME_BUFFER_SIZE, 1
-	ldi		R1.w2, 26	; 26 bytes are already in the TX FIFO
+	; loading number of bytes to transmit
+	lbco	&R0.w0,	ICSS_SHARED_RAM_CONST, DEVICE_INDATA_FRAME_BUFFER_SIZE, 2
+	; if number of bytest to transmit is <= 24, packet and CRC was already pushed into TX FIFO at CMP0 task
+	qbge	IOEX_TTS_COMPLETE, R0.w0, IOEX_TTS_PACKET_SIZE-8
+
+	; calculate the loop for transmitting 32 byte chunks
+	sub		R0.w0, R0.w0, IOEX_TTS_PACKET_SIZE - 8	; this #of bytes amount was was already pushed into TX FIFO at CMP0 task
+	mov		R0.w2, R0.w0; backup the remaining packet size
+	qbgt	IOEX_TTS_SEND_LESS_Check, R0.w0, 32; Check if the remaining bytes to send is less than 32 or not?
+
+	; TEMP_REG_1.w0 is the pointer to the data in shared memory
+	ldi		TEMP_REG_1.w0, DEVICE_INDATA_FRAME_BUFFER_PTR
+    lbco	&TEMP_REG_1.w0, ICSS_SHARED_RAM_CONST, TEMP_REG_1.w0, 2
+    add		TEMP_REG_1.w0, TEMP_REG_1.w0, IOEX_TTS_PACKET_SIZE-8
+	lsr		R0.b0, R0.w0, 5; divide by 32
+
+	; start the loop for pushing 32 bytes of chunks to FIFO here
+IOEX_TTS_TX_LOOP:
+	qbeq	IOEX_TTS_SEND_LESS_Check, R0.b0, 0	; If the counter is zero goto check the remainig bytes to sent
+	sub		R0.b0, R0.b0, 1
+	lbco	&R2.b0, PRU1_DMEM_CONST, TEMP_REG_1.w0, 32
+	add		TEMP_REG_1.w0, TEMP_REG_1.w0, 32; update the pointer to load next 32 chunks of data in shared memory
+	ldi		R1.b0, &R2.b0
+
+	ldi		TEMP_REG_2.b1, 0xff; Initialize the previous FIFO level to -1
 IOEX_TTS_COMPLETE_CHECK_TXFIFOLEVEL:
 	.if $defined(PRU0)
-	lbco	&TEMP_REG_1.b0, ICSS_MII_RT_CONST, ICSS_MIIRT_TX_FIFO_LEVEL1, 1
+	lbco	&TEMP_REG_2.b0, ICSS_MII_RT_CONST, ICSS_MIIRT_TX_FIFO_LEVEL1, 1	; FIFO level is in nibbles (4-bits)
 	.else
-	lbco	&TEMP_REG_1.b0, ICSS_MII_RT_CONST, ICSS_MIIRT_TX_FIFO_LEVEL0, 1
+	lbco	&TEMP_REG_2.b0, ICSS_MII_RT_CONST, ICSS_MIIRT_TX_FIFO_LEVEL0, 1
 	.endif
-	qbeq	IOEX_TTS_TIMEOUT, TEMP_REG_1.b0, TEMP_REG_1.b1	; when new FIFO level does not increase, we detected a stuck -> update statistics and exit this function
-	mov		TEMP_REG_1.b1, TEMP_REG_1.b0
+	qbeq	IOEX_TTS_RECONFIGURE_MIIRT, TEMP_REG_2.b0, TEMP_REG_2.b1; Compare the current FIFO level with previous FIFO level, If they are equal, exit from loading data
+	mov		TEMP_REG_2.b1, TEMP_REG_2.b0; Update the current FIFO level
+	qble	IOEX_TTS_COMPLETE_CHECK_TXFIFOLEVEL, TEMP_REG_2.b0, (40-32)*2	; 1 byte is 2 nibbles
+	loop	IOEX_TTS_FIFO_FILL, 32/4
+	mvid	TX_DATA_DOUBLE, *R1.b0++
+IOEX_TTS_FIFO_FILL:
+	qbne	IOEX_TTS_TX_LOOP, R0.b0, 0
+	; e/o 32 byte chunk transmission
 
-	qble	IOEX_TTS_MULTI_FIFO_FILL, R1.w0, 26
-	; byte to transmit <=26 bytes: single FIFO fill in CMP0
-	qbne	IOEX_TTS_COMPLETE_CHECK_TXFIFOLEVEL, TEMP_REG_1.b0, 0
-	qba		IOEX_TTS_COMPLETE
-
-; multi FIFO fill
-IOEX_TTS_MULTI_FIFO_FILL:
-	qble	IOEX_TTS_COMPLETE_CHECK_TXFIFOLEVEL, TEMP_REG_1.b0, 40-16-4	; 40 bytes FIFO, 16 bytes data, 4 bytes CRC
-	; load next 16 bytes
-	sub		R0.b0, R1.w0, R1.w2
-	qble	IOEX_TTS_MULTI_CHECK_ALL_BYTES_SENT, R0.b0, 16
-	ldi		R0.w0, 16	; more than 16 bytes to sent, limit next send to 16 bytes
-IOEX_TTS_MULTI_CHECK_ALL_BYTES_SENT:
-	qbne	IOEX_TTS_MULTI_LOAD_DATA, R1.w0, R1.w2
-	; all bytes sent, wait for TXFIFO empty
-	qbne	IOEX_TTS_COMPLETE_CHECK_TXFIFOLEVEL, TEMP_REG_1.b0, 0
-	qba		IOEX_TTS_COMPLETE
-
-IOEX_TTS_MULTI_LOAD_DATA:
-; load payload from PRU data memory
-    ldi		TEMP_REG_1.w0, DEVICE_INDATA_FRAME_BUFFER_PTR
-    lbco	&TEMP_REG_1.w0, ICSS_SHARED_RAM_CONST, TEMP_REG_1.w0, 2
-    lbco	&R2.b0, PRU1_DMEM_CONST, TEMP_REG_1.w0, b0
+; now transmit bytes <32 bytes
+IOEX_TTS_SEND_LESS_Check:
+	ldi		TEMP_REG_2.b1, 0xff; Initialize the previous FIFO level to -1
+	AND		R0.b0, R0.w2, 0x1F
+	qbeq    IOEX_TTS_TRANSMIT_CRC, R0.b0, 0
+	; load the remaining bytes to registers
+	lbco	&R2.b0, PRU1_DMEM_CONST, TEMP_REG_1.w0, b0
 	ldi		R1.b0, &R2.b0
-	loop	IOEX_TTS_MULTI_SEND, R0.b0
+;IOEX_TTS_PUSH_8:
+	qbbc 	IOEX_TTS_PUSH_16, R0.b0, 0
 	mvib	TX_DATA_BYTE, *R1.b0++
-	nop		; DevNote: NOP needed?
-IOEX_TTS_MULTI_SEND:
-	add		R1.w0, R1.w0, R0.b0
-	; check if this is the last part of data: if yes, CRC/TX_EOF has to be generated.
-	qbne	IOEX_TTS_COMPLETE_CHECK_TXFIFOLEVEL, R1.w0, R1.w2
+IOEX_TTS_PUSH_16:
+	qbbc 	IOEX_TTS_PUSH_32, R0.b0, 1
+	mviw	TX_DATA_WORD, *R1.b0++
+IOEX_TTS_PUSH_32:
+	lsr R0.b0, R0.b0, 2
+	qbeq    IOEX_TTS_TRANSMIT_CRC, R0.b0, 0
+IOEX_TTS_PUSH_REMAINDER_CHECK_TXFIFOLEVEL:
+	.if $defined(PRU0)
+	lbco	&TEMP_REG_2.b0, ICSS_MII_RT_CONST, ICSS_MIIRT_TX_FIFO_LEVEL1, 1	; FIFO level is in nibbles (4-bits)
+	.else
+	lbco	&TEMP_REG_2.b0, ICSS_MII_RT_CONST, ICSS_MIIRT_TX_FIFO_LEVEL0, 1
+	.endif
+	qbeq	IOEX_TTS_RECONFIGURE_MIIRT, TEMP_REG_2.b0, TEMP_REG_2.b1; Compare the current FIFO level with previous FIFO level, If they are equal, exit from loading data
+	mov		TEMP_REG_2.b1, TEMP_REG_2.b0; Update the current FIFO level
+	qble	IOEX_TTS_PUSH_REMAINDER_CHECK_TXFIFOLEVEL, TEMP_REG_2.b0, (40-28)*2	;Check for FIFO level (31 bytes is the maximum, and 3 bytes will be transmitted above -> max leftover bytes is 28)
+	loop 	IOEX_TTS_TRANSMIT_CRC, R0.b0
+	mvid	TX_DATA_DOUBLE, *R1.b0++
 
-IOEX_TTS_MULTI_CRC:
+IOEX_TTS_TRANSMIT_CRC:
+	ldi		TEMP_REG_2.b1, 0xff; Initialize the previous FIFO level to -1
+IOEX_TTS_TRANSMIT_CRC1:
+	.if $defined(PRU0)
+	lbco	&TEMP_REG_2.b0, ICSS_MII_RT_CONST, ICSS_MIIRT_TX_FIFO_LEVEL1, 1
+	.else
+	lbco	&TEMP_REG_2.b0, ICSS_MII_RT_CONST, ICSS_MIIRT_TX_FIFO_LEVEL0, 1
+	.endif
+	qbeq	IOEX_TTS_RECONFIGURE_MIIRT, TEMP_REG_2.b0, TEMP_REG_2.b1; Compare the current FIFO level with previous FIFO level, If they are equal, exit from loading data
+	mov		TEMP_REG_2.b1, TEMP_REG_2.b0; Update the current FIFO level
+	qble	IOEX_TTS_TRANSMIT_CRC1, TEMP_REG_2.b0, (40-4-1)*2	; don't fill 40 bytes max into the TX FIFO, hence we add 1 saftey byte
 	M_CMD16 (D_PUSH_CRC_MSWORD_CMD | D_PUSH_CRC_LSWORD_CMD | D_TX_EOF)
-	qba		IOEX_TTS_COMPLETE_CHECK_TXFIFOLEVEL
 
-IOEX_TTS_TIMEOUT:
-	lbco	&TEMP_REG_1.w0, ICSS_SHARED_RAM_CONST, TTS_TIMEOUT_COUNT, 2
-	add		TEMP_REG_1.w0, TEMP_REG_1.w0, 1
-	sbco	&TEMP_REG_1.w0, ICSS_SHARED_RAM_CONST, TTS_TIMEOUT_COUNT, 2
 IOEX_TTS_COMPLETE:
+	; no need to re-initialzie FIFO LEVEL temp register
+	.if $defined(PRU0)
+	lbco	&TEMP_REG_2.b0, ICSS_MII_RT_CONST, ICSS_MIIRT_TX_FIFO_LEVEL1, 1
+	.else
+	lbco	&TEMP_REG_2.b0, ICSS_MII_RT_CONST, ICSS_MIIRT_TX_FIFO_LEVEL0, 1
+	.endif
+	qbeq	IOEX_TTS_RECONFIGURE_MIIRT, TEMP_REG_2.b0, TEMP_REG_2.b1; Compare the current FIFO level with previous FIFO level, If they are equal, exit from loading data
+	mov		TEMP_REG_2.b1, TEMP_REG_2.b0; Update the current FIFO level
+	qbne	IOEX_TTS_COMPLETE, TEMP_REG_2.b0, 0	; wait for TX FIFO is empty and packet is sent before reconfiguring MII_RT to fast forward
+
+IOEX_TTS_RECONFIGURE_MIIRT:
 	; configure local port to AF
 	M_SET_MIIRT_AF_LOCAL
 	; reset RX- and TX-FIFO and clear TX errors

@@ -260,9 +260,10 @@ INIT_RX_DIAG:
 	add 	r1.w0, r1.w0, CTRL_REG_OFFSET
 	sbco    &r1.b2, ICSS_DMEM0_CONST, r1.w0, 1
 	
-; set cycle time to 10 us 
+; set cycle time: time in ns - 1 IEP clock
 ; Save the Calculated Cycle Time in Device Data Memory
-    ldi32   TEMP_REG_1, 3996
+    ;ldi32   TEMP_REG_1, 3996
+    ldi32	TEMP_REG_1, 10000-4
 	ldi     TEMP_REG_2.w0, SORTE_REG_INTERFACE
 	add     TEMP_REG_2.w0, TEMP_REG_2.w0, PARAM_DATA_OFFSET
 	sbco    &TEMP_REG_1, ICSS_DMEM0_CONST, TEMP_REG_2.w0, 4
@@ -294,11 +295,6 @@ INIT_RX_DIAG:
 	sbco 	&r2.b0, ICSS_MII_RT_CONST, CSL_ICSS_G_PR1_MII_RT_PR1_MII_RT_CFG_RX_FRMS0, 1
 	sbco 	&r2.b0, ICSS_MII_RT_CONST, CSL_ICSS_G_PR1_MII_RT_PR1_MII_RT_CFG_RX_FRMS1, 1
 
-; test if there is an active link on the port
-
-; test if there is an active link on the port using mdio interface
-;    ldi     TEMP_REG_2.w0, MDIO_PHY_CONFIG_OFFSET
-;    lbco    &TEMP_REG_2.w0, C28, TEMP_REG_2.w0, 2
 
 LED_SET_STAT_RED:
 	ldi32	TEMP_REG_1, 0x00601040
@@ -308,10 +304,16 @@ LED_SET_STAT_RED:
 	sbbo	&TEMP_REG_2, TEMP_REG_1, 4, 4
 
 IDLE_WAIT_FOR_LINK_ACTIVE:
-    lbco    &TEMP_REG_1.b0, ICSS_MDIO_CONST, ICSS_MDIO_LINK, 1
+; test if there is an active link on the port
+
+; test if there is an active link on the port using mdio interface
+    ldi     TEMP_REG_2.w0, MDIO_PHY_CONFIG_OFFSET
+    lbco    &TEMP_REG_2.w0, C28, TEMP_REG_2.w0, 2
+
+    lbco    &TEMP_REG_1.w0, ICSS_MDIO_CONST, ICSS_MDIO_LINK, 2
 ; update to fit phy address
-    qbbc    IDLE_WAIT_FOR_LINK_ACTIVE,TEMP_REG_1.b0, 3
-;    qbbc    IDLE_WAIT_FOR_LINK_ACTIVE,TEMP_REG_1.b0, TEMP_REG_2.b0
+;    qbbc    IDLE_WAIT_FOR_LINK_ACTIVE,TEMP_REG_1.b0, 3
+    qbbc    IDLE_WAIT_FOR_LINK_ACTIVE,TEMP_REG_1.w0, TEMP_REG_2.b1
 
 ; check if enabled, enabling done at startup of pru firmware.
     lbco    &TEMP_REG_1.b0, ICSS_DMEM0_CONST, CTRL_REG_OFFSET , 1

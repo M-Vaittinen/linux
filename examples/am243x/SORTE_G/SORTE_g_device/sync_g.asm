@@ -447,10 +447,10 @@ SYNC_HANDLER_WRITE_VALUES:
 	; threshold value if >= xx
 	;qbge	SYNC_HANDLER_AVERAGE_DONE, TEMP_REG_2, 11
 	mov		TEMP_REG_4, TEMP_REG_2
-	qbge	sync_debug_update_buffer, TEMP_REG_2, 11
+	qbge	sync_debug_update_buffer, TEMP_REG_2, 3
 	; limit compensation value to 4; When compensation <30, then use delta time
 	;qble	SYNC_HANDLER_SET_COMP, TEMP_REG_2, 30
-	ldi		TEMP_REG_2.w0, 3
+	;ldi		TEMP_REG_2.w0, 3
 
 	; filter
 	;lsr		TEMP_REG_2, TEMP_REG_2, 2

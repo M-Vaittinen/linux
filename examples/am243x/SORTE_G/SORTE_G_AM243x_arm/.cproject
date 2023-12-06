@@ -25,7 +25,7 @@
 								<listOptionValue builtIn="false" value="CCS_MBS_VERSION=6.1.3"/>
 								<listOptionValue builtIn="false" value="RUNTIME_SUPPORT_LIBRARY="/>
 								<listOptionValue builtIn="false" value="OUTPUT_TYPE=executable"/>
-								<listOptionValue builtIn="false" value="PRODUCTS=sysconfig:1.14.0;com.ti.MCU_PLUS_SDK_AM243X:8.6.0.45;"/>
+								<listOptionValue builtIn="false" value="PRODUCTS=sysconfig:1.14.0;com.ti.MCU_PLUS_SDK_AM243X:8.6.0.48;"/>
 								<listOptionValue builtIn="false" value="PRODUCT_MACRO_IMPORTS={&quot;sysconfig&quot;:[&quot;${SYSCONFIG_TOOL_INCLUDE_PATH}&quot;,&quot;${SYSCONFIG_TOOL_LIBRARY_PATH}&quot;,&quot;${SYSCONFIG_TOOL_LIBRARIES}&quot;,&quot;${SYSCONFIG_TOOL_SYMBOLS}&quot;,&quot;${SYSCONFIG_TOOL_SYSCONFIG_MANIFEST}&quot;],&quot;com.ti.MCU_PLUS_SDK_AM243X&quot;:[&quot;${COM_TI_MCU_PLUS_SDK_AM243X_INCLUDE_PATH}&quot;,&quot;${COM_TI_MCU_PLUS_SDK_AM243X_LIBRARY_PATH}&quot;,&quot;${COM_TI_MCU_PLUS_SDK_AM243X_LIBRARIES}&quot;,&quot;${COM_TI_MCU_PLUS_SDK_AM243X_SYMBOLS}&quot;,&quot;${COM_TI_MCU_PLUS_SDK_AM243X_SYSCONFIG_MANIFEST}&quot;]}"/>
 							</option>
 							<option id="com.ti.ccstudio.buildDefinitions.core.OPT_CODEGEN_VERSION.1511697655" name="Compiler version" superClass="com.ti.ccstudio.buildDefinitions.core.OPT_CODEGEN_VERSION" value="TICLANG_2.1.3.LTS" valueType="string"/>

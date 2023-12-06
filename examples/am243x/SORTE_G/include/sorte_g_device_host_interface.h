@@ -14,8 +14,8 @@
 #define DEVICE_IOEX_DATA_FRAME_BUFFER_BASE       0x0000      //
 
 #define DEVICE_INDATA_FRAME_BUFFER_LOCATION      0x0000      // INDATA -> slave to master data
-#define DEVICE_OUTDATA_FRAME_BUFFER_LOCATION     0x0040      // OUTDATA -> master to slave data
-#define DEVICE_MASTER_FRAME_BUFFER_LOCATION      0x0080      // frame buffer for the master frame
+#define DEVICE_OUTDATA_FRAME_BUFFER_LOCATION     0x0100      // OUTDATA -> master to slave data
+#define DEVICE_MASTER_FRAME_BUFFER_LOCATION      0x0180      // frame buffer for the master frame
 
 #define DEVICE_ADDR_OFFSET      0x0024      // .field8
 

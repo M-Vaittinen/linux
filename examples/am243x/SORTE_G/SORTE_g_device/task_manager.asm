@@ -81,7 +81,7 @@
 	.global 	TSK_IOEX_STATE_FWD_BKN
 	.global		TSK_IOEX_STATE_FWD_EOF
 	.global		TSK_IOEX_STATE_CMP0_EVENT
-	.global		TSK_IOEX_STATE_TTS_COMPLETE_EVENT
+	.global		TSK_IOEX_STATE_TTS_START_EVENT
 
   	.global		FN_TASK_MANAGER_SETUP
 
@@ -466,7 +466,7 @@ TMG_IOEX_TO_MASTER:	; TX - device to master direction
 	; set task entry pointers
 	ldi     TEMP_REG_3.w0, $CODE(TSK_IOEX_STATE_CMP0_EVENT)
     sbbo    &TEMP_REG_3.w0, TEMP_REG_2, CSL_ICSS_G_PR1_TASKS_MGR_RTU1_PR1_TASKS_MGR_RTU1_MMR_TS1_PC_S0, 2
-	ldi     TEMP_REG_3.w0, $CODE(TSK_IOEX_STATE_TTS_COMPLETE_EVENT)
+	ldi     TEMP_REG_3.w0, $CODE(TSK_IOEX_STATE_TTS_START_EVENT)
     sbbo    &TEMP_REG_3.w0, TEMP_REG_2, CSL_ICSS_G_PR1_TASKS_MGR_RTU1_PR1_TASKS_MGR_RTU1_MMR_TS1_PC_S1, 2
 
 	; wait for IEP warp-around to reconfigure ports
@@ -484,13 +484,15 @@ TMG_IOEX_WAIT_FOR_IEP_WRAP:
 	lbco	&TEMP_REG_1, ICSS_SHARED_RAM_CONST, TEMP_REG_1.w2, 4;
 	;sub		TEMP_REG_1, TEMP_REG_1, 4 ; adjust by 4ns as IEP starts from 0 / wrap-around
 	sbco	&TEMP_REG_1, ICSS_IEP_CONST, ICSS_IEP_CMP0_REG, 4
-	; configure TTS tigger - all devices start at 500ns
-	ldi32	TEMP_REG_1, 500
-	;qbeq	TMG_IOEX_TTS_WRITE_IEP, DEVICE_ADDR, 1
-	;lbco	&TEMP_REG_2.w0, ICSS_SHARED_RAM_CONST, LINE_DELAY_PREVIOUS, 2
-	; DEBUG
-	;ldi		TEMP_REG_1, 800
-	;add		TEMP_REG_1, TEMP_REG_1, TEMP_REG_2.w0
+	; configure TTS tigger
+	lbco	&TEMP_REG_2.w0,	ICSS_SHARED_RAM_CONST, TTS_BSPD, 2; load in data bytes sent by previous devices
+	ldi		TEMP_REG_1, 500
+	qbge	TMG_IOEX_TTS_WRITE_IEP, TEMP_REG_2.w0, IOEX_TTS_BSPD_LIMIT
+	; calculate TTS based on data bytes send by previous devices
+	sub		TEMP_REG_2.w0, TEMP_REG_2.w0, IOEX_TTS_BSPD_LIMIT
+	lsl		TEMP_REG_2, TEMP_REG_2.w0, 3
+	add		TEMP_REG_1, TEMP_REG_1, TEMP_REG_2
+	add		TEMP_REG_1, TEMP_REG_1, BRIDGE_DELAY_SYNC_IOEX
 
 TMG_IOEX_TTS_WRITE_IEP:
 	.if $defined(PRU0)
@@ -498,7 +500,6 @@ TMG_IOEX_TTS_WRITE_IEP:
 	.else
 	sbco	&TEMP_REG_1, ICSS_IEP_CONST, ICSS_IEP_CMP3_REG, 4
 	.endif
-
 
 	; set SYNC0 pulse width
 	ldi		TEMP_REG_1.w2, 125		; 500ns = 125 * 4ns
@@ -540,6 +541,7 @@ TMG_IOEX_FROM_MASTER: ; master to device direction
 
 	;DevNote: Clarify if e/o block is needed to receive the remaining bytes
 	;M_DISABLE_TXL2 ; disabling TXL2 not needed as state before does not use TXL2.
+	;M_ENABLE_TXL2
 	M_SET_MIIRT_AF_LOCAL_IOEX
 	; last slave needs specific configuration
 	qbbc	TMG_DONE, DEVICE_STATUS, LAST_DEVICE_FLAG

@@ -51,6 +51,8 @@ BRIDGE_DELAY_LINEDELAY .set 320     ; 0x3A in TXCFG START DELAY - 320ns
 BRIDGE_DELAY_SYNC_IOEX .set 160     ; 0x14 in TXCFG START DELAY - 160ns ; (80ns + 2x40 L0 FIFO); measured jitter from 156 - 168ns
 TTS_GUARD_DELAY     .set    35
 IEP_RW_ACCESS_CONST	.set	15		; read/write access to IEP timer
+IOEX_TTS_PACKET_SIZE    .set 32     ; numbers of bytes that are pushed into the TX L1 FIFO during IO_EX
+IOEX_TTS_BSPD_LIMIT     .set 40
 
 CYCLE_TIME_10US		.set	10000	; 10 usec cuycle time value
 

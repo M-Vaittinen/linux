@@ -68,8 +68,7 @@ PHY_STATUS_OFFSET		.set	0x0030		; .field16
 DEBUG_PRU0_SLAVE_STATE 	.set	0x0032		; .field8
 DEBUG_PRU1_SLAVE_STATE 	.set	0x0033		; .field8
 
-DEBUG_OFFSET_IN_PTR		.set	0x0034		; .field16
-DEBUG_OFFSET_OUT_PTR	.set	0x0036		; .field16
+TTS_BSPD                .set    0x0034      ; .field16 ; bytes send by previous devices, used for TTS calculation in IOEX
 
 SYNC_DELAY_1ST			.set	0x0038		; .field16
 DEBUG_BUFFER_OFFSET		.set	0x003A		; .field 16

@@ -108,6 +108,7 @@ enet_icss2.dualMacPortSelected            = "ENET_MAC_PORT_2";
 enet_icss2.QoS                            = 3;
 enet_icss2.LargePoolPktCount              = 16;
 enet_icss2.mdioMdcEnable                  = false;
+enet_icss2.PktPoolEnable                  = false;
 enet_icss2.txDmaChannel[0].$name          = "ENET_DMA_TX_CH1";
 enet_icss2.txDmaChannel[0].PacketsCount   = 8;
 enet_icss2.rxDmaChannel[0].$name          = "ENET_DMA_RX_CH1";

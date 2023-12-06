@@ -41,6 +41,7 @@
 	.if ! $defined (__icss_macros_inc)
 	.define "1", __icss_macros_inc
 
+	.asg    R30,    TX_DATA_DOUBLE
 	.asg	R30.w0,	TX_DATA_WORD
 	.asg	R30.b0,	TX_DATA_BYTE
 	.asg	R30.w2,	TX_DATA_WORD_MASK

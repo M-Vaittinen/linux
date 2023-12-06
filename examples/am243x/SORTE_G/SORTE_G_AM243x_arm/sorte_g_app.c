@@ -74,10 +74,10 @@ static void PRU_IsrFxn();
 #define Inter_packet_gap    0x10   // 16-bit
 #define T_in            0x12       // 16-bit
 #define T_out           0x14       // 16-bit
-#define Topology        0x15       // 8-bit
-#define Diagnostics     0x16       // 8-bit
-#define Alarm           0x17       // 8-bit
-#define Crc_mode        0x18       // 8-bit
+#define Topology        0x16       // 8-bit
+#define Diagnostics     0x17       // 8-bit
+#define Alarm           0x18       // 8-bit
+#define Crc_mode        0x19       // 8-bit
 
 #define OVERSAMPLING_1      (1+1)   // 4us
 #define OVERSAMPLING_10     (10+1)  // 40us
@@ -103,6 +103,19 @@ static void PRU_IsrFxn();
 #define SMA_WRAP_AROUND_64  0xFF    // 64 SMA values
 #define SMA_MULTIPLIER_64   6       // /64 SMA values
 
+// PHY address
+#define MDIO_PHY_CONFIG_OFFSET (0x04U)
+
+// MDIO on AM64GPEVM
+#define PHY1_ADDRESS        15
+#define PHY2_ADDRESS        3
+/*********************************************************
+ * Version 0.1 of the SORTE G test software from 18 Oct 23
+ *
+ *********************************************************/
+
+uint32_t SORTEG_VERSION_MAIN = 0;
+uint32_t SORTEG_VERSION_SUB = 001;
 void generic_pruss_init()
 {
     HwiP_Params     hwiPrms;
@@ -129,11 +142,15 @@ void generic_pruss_init()
     // set jumper J6-60 to J6-59 -> device
     ModeStatus = HW_RD_REG32(0x00601048);
     if((ModeStatus & (1<<(35-32))) == (1<<(35-32)))
+    {
         ModeStatus = 1; // controller
+        DebugP_log("\tCONTROLLER\r\n");
+    }
     else
+    {
         ModeStatus = 0; // device
-
-
+        DebugP_log("\tDEVICE\r\n");
+    }
     // enable/configure MDIO
     // ToDo - use SDK command for this
     HW_WR_REG32(icssgBaseAddr + CSL_ICSS_G_PR1_MDIO_V1P7_MDIO_REGS_BASE + 0x04, 0x400000ff);
@@ -198,12 +215,12 @@ void generic_pruss_init()
     HW_WR_REG32(gPru_ctrl, CTR_EN);
 
     // PHYs are configured for RGMII TX clock delay (register 0x0032, bit 1)
-    MDIO_phyRegRead(icssgBaseAddr + CSL_ICSS_G_PR1_MDIO_V1P7_MDIO_REGS_BASE, NULL, 3, 0x01, &temp16);
-    MDIO_phyRegRead(icssgBaseAddr + CSL_ICSS_G_PR1_MDIO_V1P7_MDIO_REGS_BASE, NULL, 15, 0x01, &temp16);
-    MDIO_phyExtRegWrite(icssgBaseAddr + CSL_ICSS_G_PR1_MDIO_V1P7_MDIO_REGS_BASE, NULL, 3, 0x32, 0xD2);
-    MDIO_phyRegWrite(icssgBaseAddr + CSL_ICSS_G_PR1_MDIO_V1P7_MDIO_REGS_BASE, NULL, 3, 0x1F, 0x4000);
-    MDIO_phyExtRegWrite(icssgBaseAddr + CSL_ICSS_G_PR1_MDIO_V1P7_MDIO_REGS_BASE, NULL, 15, 0x32, 0xD2);
-    MDIO_phyRegWrite(icssgBaseAddr + CSL_ICSS_G_PR1_MDIO_V1P7_MDIO_REGS_BASE, NULL, 15, 0x1F, 0x4000);
+    MDIO_phyRegRead(icssgBaseAddr + CSL_ICSS_G_PR1_MDIO_V1P7_MDIO_REGS_BASE, NULL, PHY1_ADDRESS, 0x01, &temp16);
+    MDIO_phyRegRead(icssgBaseAddr + CSL_ICSS_G_PR1_MDIO_V1P7_MDIO_REGS_BASE, NULL, PHY2_ADDRESS, 0x01, &temp16);
+    MDIO_phyExtRegWrite(icssgBaseAddr + CSL_ICSS_G_PR1_MDIO_V1P7_MDIO_REGS_BASE, NULL, PHY1_ADDRESS, 0x32, 0xD2);
+    MDIO_phyRegWrite(icssgBaseAddr + CSL_ICSS_G_PR1_MDIO_V1P7_MDIO_REGS_BASE, NULL, PHY1_ADDRESS, 0x1F, 0x4000);
+    MDIO_phyExtRegWrite(icssgBaseAddr + CSL_ICSS_G_PR1_MDIO_V1P7_MDIO_REGS_BASE, NULL, PHY2_ADDRESS, 0x32, 0xD2);
+    MDIO_phyRegWrite(icssgBaseAddr + CSL_ICSS_G_PR1_MDIO_V1P7_MDIO_REGS_BASE, NULL, PHY2_ADDRESS, 0x1F, 0x4000);
 
     if(enhancedlink_enable == 0)
     {
@@ -232,17 +249,20 @@ void generic_pruss_init()
         HW_WR_REG8(icssgBaseAddr + CSL_ICSS_G_DRAM0_SLV_RAM_REGS_BASE + PARAM_DATA_OFFSET + Diagnostics, 0);
         HW_WR_REG8(icssgBaseAddr + CSL_ICSS_G_DRAM0_SLV_RAM_REGS_BASE + PARAM_DATA_OFFSET + Alarm, 0);
         HW_WR_REG8(icssgBaseAddr + CSL_ICSS_G_DRAM0_SLV_RAM_REGS_BASE + PARAM_DATA_OFFSET + Crc_mode, 1);
+
+        // Configure share RAM
+        HW_WR_REG16(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE + MDIO_PHY_CONFIG_OFFSET, (PHY2_ADDRESS<<8) | (PHY1_ADDRESS<<0)); // set MDIO address: 0x0000.0880
     }
     else // device
     {
-#define MDIO_PHY_CONFIG_OFFSET (0x04U)
+
         // Configure share RAM
-        HW_WR_REG16(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE + MDIO_PHY_CONFIG_OFFSET, (3<<0) | (15<<8)); // set MDIO address: 0x0000.8008
-        HW_WR_REG8(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE + DEVICE_INDATA_FRAME_BUFFER_PTR, DEVICE_INDATA_FRAME_BUFFER_LOCATION);
-        HW_WR_REG8(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE + DEVICE_INDATA_FRAME_BUFFER_SIZE, 12); // 12 Bytes payload
-        HW_WR_REG8(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE + DEVICE_OUTDATA_FRAME_BUFFER_PTR, DEVICE_OUTDATA_FRAME_BUFFER_LOCATION);
-        HW_WR_REG8(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE + DEVICE_OUTDATA_FRAME_BUFFER_SIZE, 12); // 12 Bytes payload
-        HW_WR_REG8(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE + DEVICE_MASTER_FRAME_BUFFER_PTR, DEVICE_MASTER_FRAME_BUFFER_LOCATION);
+        HW_WR_REG16(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE + MDIO_PHY_CONFIG_OFFSET, (PHY1_ADDRESS<<8) | (PHY2_ADDRESS<<0)); // set MDIO address: 0x0000.0880
+        HW_WR_REG16(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE + DEVICE_INDATA_FRAME_BUFFER_PTR, DEVICE_INDATA_FRAME_BUFFER_LOCATION);
+        HW_WR_REG16(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE + DEVICE_INDATA_FRAME_BUFFER_SIZE, 200); // 12 Bytes payload
+        HW_WR_REG16(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE + DEVICE_OUTDATA_FRAME_BUFFER_PTR, DEVICE_OUTDATA_FRAME_BUFFER_LOCATION);
+        HW_WR_REG16(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE + DEVICE_OUTDATA_FRAME_BUFFER_SIZE, 12); // 12 Bytes payload
+        HW_WR_REG16(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE + DEVICE_MASTER_FRAME_BUFFER_PTR, DEVICE_MASTER_FRAME_BUFFER_LOCATION);
     }
     if(ModeStatus == 1) //controller
     {
@@ -259,6 +279,13 @@ void generic_pruss_init()
         /*Run firmware*/
         PRUICSS_enableCore(gPruIcss0Handle, PRUICSS_PRU0);
 //        DebugP_log("PRESS 1 to start Controller\r\n");
+
+        uint8_t SORTE_G_PRU_CONTROLLER_MAIN = 0;    // HW_WR_REG8(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE, CONTROLLER_SW_VERSION_MAIN);
+        uint8_t SORTE_G_PRU_CONTROLLER_SUB = 001;  // HW_WR_REG8(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE, CONTROLLER_SW_VERSION_SUB);
+
+        DebugP_log("\r\nSORTE_G Demo application for Controller PRU0 software\r\n");
+        DebugP_log("Version %d.%03d \n\r", SORTE_G_PRU_CONTROLLER_MAIN, SORTE_G_PRU_CONTROLLER_SUB);
+
     }
     else {
         /* load sorte_controller firmware */
@@ -275,13 +302,25 @@ void generic_pruss_init()
          /*Run firmware*/
          PRUICSS_enableCore(gPruIcss0Handle, PRUICSS_PRU0);
          PRUICSS_enableCore(gPruIcss0Handle, PRUICSS_PRU1);
+
+         uint8_t SORTE_G_PRU0_DEVICE_MAIN = 0   ;//HW_WR_REG8(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE, DEVICE_SW_VERSION_MAIN);
+         uint8_t SORTE_G_PRU0_DEVICE_SUB = 001  ;//HW_WR_REG8(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE, DEVICE_SW_VERSION_SUB);
+
+         uint8_t SORTE_G_PRU1_DEVICE_MAIN = 0   ;//HW_WR_REG8(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE, DEVICE_SW_VERSION_MAIN);
+         uint8_t SORTE_G_PRU1_DEVICE_SUB = 001  ;//HW_WR_REG8(icssgBaseAddr + CSL_ICSS_G_RAM_SLV_RAM_REGS_BASE, DEVICE_SW_VERSION_SUB);
+
+         DebugP_log("\r\nSORTE_G Demo application for Device PRU0 software\r\n");
+         DebugP_log("Version %d.%03d \n\r", SORTE_G_PRU0_DEVICE_MAIN, SORTE_G_PRU0_DEVICE_SUB);
+         DebugP_log("\r\nSORTE_G Demo application for Device PRU1 software\r\n");
+         DebugP_log("Version %d.%03d \n\r", SORTE_G_PRU1_DEVICE_MAIN, SORTE_G_PRU1_DEVICE_SUB);
     }
 
 }
 
 static void PRU_IsrFxn()
 {
-    PRUICSS_clearEvent(gPruIcss0Handle, 16);  // 16 is PRU0 intr[0]
+    int    status;
+    status = PRUICSS_clearEvent(gPruIcss0Handle, 16);  // 16 is PRU0 intr[0]
 }
 
 
