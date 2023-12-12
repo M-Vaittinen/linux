@@ -19,6 +19,9 @@ config RAID6_PQ_BENCHMARK
 	  Benchmark all available RAID6 PQ functions on init and choose the
 	  fastest one.
 
+config REGISTER_VAL_TABLES
+	tristate
+
 config LINEAR_RANGES
 	tristate
 
