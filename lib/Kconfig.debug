@@ -2701,6 +2701,18 @@ config RATIONAL_KUNIT_TEST
 
 	  If unsure, say N.
 
+config REGISTER_VAL_TABLES_TEST
+	tristate "KUnit test for register-val table helpers"
+	depends on KUNIT
+	select REGISTER_VAL_TABLES
+	help
+	  This builds the unit tests for register-value table helpers. Tests run
+	  on boot and  test the 'regtable'-helper's logic correctness.
+	  For more information on KUnit and unit tests in general please refer
+	  to the KUnit documentation in Documentation/dev-tools/kunit/.
+
+	  If unsure, say N.
+
 config MEMCPY_KUNIT_TEST
 	tristate "Test memcpy(), memmove(), and memset() functions at runtime" if !KUNIT_ALL_TESTS
 	depends on KUNIT
