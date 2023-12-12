@@ -6,6 +6,7 @@
 //
 // Author: Mark Brown <broonie@opensource.wolfsonmicro.com>
 
+#include <linux/bitfield.h>
 #include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/export.h>
@@ -13,6 +14,7 @@
 #include <linux/err.h>
 #include <linux/property.h>
 #include <linux/rbtree.h>
+#include <linux/regtable.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/log2.h>
@@ -1389,6 +1391,56 @@ void regmap_field_free(struct regmap_field *field)
 	kfree(field);
 }
 EXPORT_SYMBOL_GPL(regmap_field_free);
+
+/**
+ * regmap_table_value_set - update register to match human-understandable value
+ * @map:	Register map
+ * @table:	Table describing register-value, human-readable value relation
+ * value:	Human understandable value to configure in hardware.
+ *
+ * Return:	0 on success, negative errno on error.
+ */
+int regmap_table_value_set(struct regmap *map,
+			   const struct regmap_regval_table *table, int value)
+{
+	int ret, regval;
+
+	ret = regtable_find_reg(&table->table, value, &regval);
+	if (ret)
+		return ret;
+
+	return regmap_update_bits(map, table->reg, table->mask, regval);
+}
+EXPORT_SYMBOL_GPL(regmap_table_value_set);
+
+/**
+ * regmap_table_value_get - return human-understandable configuration
+ *
+ * Reads hardware or regmap cache for current hardware configuration and
+ * converts the read register value to human understandable entity.
+ * @map:	Register map
+ * @table:	Table describing register-value, human-readable value relation
+ * value:	Human understandable value to configure in hardware.
+ *
+ * Return:	0 on success, negative errno on error.
+ */
+int regmap_table_value_get(struct regmap *map,
+			   const struct regmap_regval_table *table, int *value)
+{
+	int ret, regval;
+
+	ret = regmap_read(map, table->reg, &regval);
+	if (ret)
+		return ret;
+
+	/*
+	 * Is this the correct assumption for regval? Should we do
+	 * regval << ffs(mask) - 1 after applying?
+	 */
+	return regtable_find_val(&table->table, regval & table->mask,
+				 value);
+}
+EXPORT_SYMBOL_GPL(regmap_table_value_get);
 
 /**
  * regmap_reinit_cache() - Reinitialise the current register cache

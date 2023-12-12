@@ -12,6 +12,7 @@
 
 #include <linux/list.h>
 #include <linux/rbtree.h>
+#include <linux/regtable.h>
 #include <linux/ktime.h>
 #include <linux/delay.h>
 #include <linux/err.h>
@@ -1456,6 +1457,43 @@ regmap_fields_force_update_bits(struct regmap_field *field, unsigned int id,
 	return regmap_fields_update_bits_base(field, id, mask, val,
 					      NULL, false, true);
 }
+
+struct regmap_regval_table {
+	const struct reg_val_table table;
+	int reg;
+	int mask;
+};
+
+/**
+ * REGMAP_REGVAL_TABLE - Initialize register value - physical value tables
+ *
+ * It is common for a few drivers to create table-based mapping from a physical
+ * value <=> register value, and implement set and get functions to utilize
+ * them. Typically these are used when a user requests driver to set some
+ * human understandable value, and driver converts this to a register value and
+ * writes it to hardware. Similarly, user requests for human understandable
+ * values need reading a register and converting the register value to human
+ * understandable value before returning it to user. This macro can be used
+ * to initialize tables of register-values and human-understandable values to
+ * be used with regmap accessor helpers.
+ *
+ * @_regval_table:	Table of register values matching human-readable values
+ * 			in _val_table.
+ * @_val_table:		Table of human-readable values matching register values
+ * 			in _regval_table.
+ * @_reg:		Control register associated with the values.
+ * @_mask:		Mask associated with the values.
+ */
+#define REGMAP_REGVAL_TABLE(_regval_table, _val_table, _reg, _mask) {		\
+	.table = REGVAL_TABLE((_regval_table), (_val_table)),			\
+	.reg = (_reg),								\
+	.mask = (_mask),							\
+}
+
+int regmap_table_value_set(struct regmap *map,
+			   const struct regmap_regval_table *table, int value);
+int regmap_table_value_get(struct regmap *map,
+			   const struct regmap_regval_table *table, int *value);
 
 /**
  * struct regmap_irq_type - IRQ type definitions.
