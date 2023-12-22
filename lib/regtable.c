@@ -25,7 +25,6 @@
  *
  * returns:	0 on success, negative errno if table is invalid or match is
  * 		not found.
- */
 int regtable_find_val(const struct reg_val_table *table, int reg, int *val)
 {
 	int i;
@@ -44,6 +43,7 @@ int regtable_find_val(const struct reg_val_table *table, int reg, int *val)
 	return -EINVAL;
 }
 EXPORT_SYMBOL_GPL(regtable_find_val);
+ */
 
 /**
  * regtable_find_reg - find a register setting matching given value.
@@ -58,7 +58,6 @@ EXPORT_SYMBOL_GPL(regtable_find_val);
  *
  * returns:	0 on success, negative errno if table is invalid or match is
  * 		not found.
- */
 int regtable_find_reg(const struct reg_val_table *table, int val, int *reg)
 {
 	int i;
@@ -77,6 +76,7 @@ int regtable_find_reg(const struct reg_val_table *table, int val, int *reg)
 	return -EINVAL;
 }
 EXPORT_SYMBOL_GPL(regtable_find_reg);
+ */
 
 /**
  * regtable_find_greater_than_val - find the closest greater val and reg
