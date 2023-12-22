@@ -16,14 +16,17 @@
  */
 static int g_reg_vals[] = { 5, 10, 15, 20, 25, 30 };
 static int g_vals[] = { 50, 100, 150, 200, 250, 300 };
+static u64 g_vals64[] = { 50, 100, 150, 200, 250, 300 };
 static const struct reg_val_table g_test_table = REGVAL_TABLE(g_reg_vals, g_vals);
+static const struct reg_val_table_64 g_test_table64 = REGVAL_TABLE64(g_reg_vals, g_vals64);
 
 #define REGTABLE_TEST_VAL_NOT_FOUND	12
 #define REGTABLE_TEST_REG_NOT_FOUND	12
 
 static void regtable_test_cmp_find_invalid(struct kunit *test)
 {
-	int ret, invalid, dummy;
+	int ret, invalid, dummy, *int_null = NULL;
+	struct reg_val_table *null_tbl = NULL;
 
 	invalid = g_vals[ARRAY_SIZE(g_vals) - 1];
 	ret = regtable_find_greater_than_val(&g_test_table, invalid, &dummy,
@@ -41,16 +44,16 @@ static void regtable_test_cmp_find_invalid(struct kunit *test)
 	ret = regtable_find_greater_than_val(NULL, 0, NULL, NULL);
 	KUNIT_EXPECT_EQ(test, -EINVAL, ret);
 
-	ret = regtable_find_val(NULL, 0, &dummy);
+	ret = regtable_find_val(null_tbl, 0, &dummy);
 	KUNIT_EXPECT_EQ(test, -EINVAL, ret);
 
-	ret = regtable_find_val(&g_test_table, 0, NULL);
+	ret = regtable_find_val(&g_test_table, 0, int_null);
 	KUNIT_EXPECT_EQ(test, -EINVAL, ret);
 
-	ret = regtable_find_reg(NULL, 0, &dummy);
+	ret = regtable_find_reg(null_tbl, 0, &dummy);
 	KUNIT_EXPECT_EQ(test, -EINVAL, ret);
 
-	ret = regtable_find_reg(&g_test_table, 0, NULL);
+	ret = regtable_find_reg(&g_test_table, 0, int_null);
 	KUNIT_EXPECT_EQ(test, -EINVAL, ret);
 }
 
@@ -99,15 +102,26 @@ static void regtable_test_cmp_find_smaller(struct kunit *test)
 static void regtable_test_find(struct kunit *test)
 {
 	int *testreg, *testval;
+	u64 *testval64, found64;
 	int ret, i, found;
 
 	for (i = 0; i < g_test_table.num_vals; i++) {
 		testreg = &g_reg_vals[i];
 		testval = &g_vals[i];
+		testval64 = &g_vals64[i];
 		ret = regtable_find_val(&g_test_table, *testreg, &found);
 		KUNIT_EXPECT_EQ(test, 0, ret);
 		KUNIT_EXPECT_EQ(test, found, *testval);
+
 		ret = regtable_find_reg(&g_test_table,  *testval, &found);
+		KUNIT_EXPECT_EQ(test, 0, ret);
+		KUNIT_EXPECT_EQ(test, found, *testreg);
+
+		ret = regtable_find_val(&g_test_table64, *testreg, &found64);
+		KUNIT_EXPECT_EQ(test, 0, ret);
+		KUNIT_EXPECT_EQ(test, found64, *testval64);
+
+		ret = regtable_find_reg(&g_test_table64,  *testval64, &found);
 		KUNIT_EXPECT_EQ(test, 0, ret);
 		KUNIT_EXPECT_EQ(test, found, *testreg);
 	}
