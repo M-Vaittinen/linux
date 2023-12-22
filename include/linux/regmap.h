@@ -1458,6 +1458,12 @@ regmap_fields_force_update_bits(struct regmap_field *field, unsigned int id,
 					      NULL, false, true);
 }
 
+struct regmap_regval_table_64 {
+	const struct reg_val_table_64 table;
+	int reg;
+	int mask;
+};
+
 struct regmap_regval_table {
 	const struct reg_val_table table;
 	int reg;
@@ -1486,6 +1492,12 @@ struct regmap_regval_table {
  */
 #define REGMAP_REGVAL_TABLE(_regval_table, _val_table, _reg, _mask) {		\
 	.table = REGVAL_TABLE((_regval_table), (_val_table)),			\
+	.reg = (_reg),								\
+	.mask = (_mask),							\
+}
+
+#define REGMAP_REGVAL_TABLE64(_regval_table, _val_table, _reg, _mask) {		\
+	.table = REGVAL_TABLE64((_regval_table), (_val_table)),			\
 	.reg = (_reg),								\
 	.mask = (_mask),							\
 }
