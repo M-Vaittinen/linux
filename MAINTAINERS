@@ -10310,6 +10310,7 @@ L:	linux-iio@vger.kernel.org
 S:	Maintained
 F:	drivers/iio/light/gain-time-scale-helper.c
 F:	drivers/iio/light/gain-time-scale-helper.h
+F:	drivers/iio/test/iio-test-gts.c
 
 IIO MULTIPLEXER
 M:	Peter Rosin <peda@axentia.se>
