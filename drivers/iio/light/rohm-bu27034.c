@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * BU27034 ROHM Ambient Light Sensor
+ * BU27034ANUC ROHM Ambient Light Sensor
  *
  * Copyright (c) 2023, ROHM Semiconductor.
  */
@@ -29,17 +29,15 @@
 
 #define BU27034_REG_MODE_CONTROL2	0x42
 #define BU27034_MASK_D01_GAIN		GENMASK(7, 3)
-//#define BU27034_MASK_D2_GAIN_HI		GENMASK(7, 6)
-//#define BU27034_MASK_D2_GAIN_LO		GENMASK(2, 0)
 
 #define BU27034_REG_MODE_CONTROL3	0x43
 #define BU27034_REG_MODE_CONTROL4	0x44
 #define BU27034_MASK_MEAS_EN		BIT(0)
 #define BU27034_MASK_VALID		BIT(7)
+#define BU27034_NUM_HW_DATA_CHANS	2
 #define BU27034_REG_DATA0_LO		0x50
 #define BU27034_REG_DATA1_LO		0x52
-//#define BU27034_REG_DATA2_LO		0x54
-//#define BU27034_REG_DATA2_HI		0x55
+#define BU27034_REG_DATA1_HI		0x53
 #define BU27034_REG_MANUFACTURER_ID	0x92
 #define BU27034_REG_MAX BU27034_REG_MANUFACTURER_ID
 
@@ -87,7 +85,6 @@ enum {
 	BU27034_CHAN_ALS,
 	BU27034_CHAN_DATA0,
 	BU27034_CHAN_DATA1,
-//	BU27034_CHAN_DATA2,
 	BU27034_NUM_CHANS
 };
 
@@ -97,40 +94,34 @@ static const unsigned long bu27034_scan_masks[] = {
 };
 
 /*
- * Available scales with gain 1x - 4096x, timings 55, 100, 200, 400 mS
+ * Available scales with gain 1x - 1024x, timings 55, 100, 200, 400 mS
  * Time impacts to gain: 1x, 2x, 4x, 8x.
  *
- * => Max total gain is HWGAIN * gain by integration time (8 * 4096) = 32768
+ * => Max total gain is HWGAIN * gain by integration time (8 * 1024) = 8192
+ * if 1x gain is scale 1, scale for 2x gain is 0.5, 4x => 0.25,
+ * ... 8192x => 0.0001220703125 => 122070.3125 nanos
  *
- * Using NANO precision for scale we must use scale 64x corresponding gain 1x
- * to avoid precision loss. (32x would result scale 976 562.5(nanos).
+ * Using NANO precision for scale, we must use scale 16x corresponding gain 1x
+ * to avoid precision loss. (8x would result scale 976 562.5(nanos).
  */
-#define BU27034_SCALE_1X	64
+#define BU27034_SCALE_1X	16
 
 /* See the data sheet for the "Gain Setting" table */
 #define BU27034_GSEL_1X		0x00 /* 00000 */
 #define BU27034_GSEL_4X		0x08 /* 01000 */
-//#define BU27034_GSEL_16X	0x0a /* 01010 */
 #define BU27034_GSEL_32X	0x0b /* 01011 */
-//#define BU27034_GSEL_64X	0x0c /* 01100 */
 #define BU27034_GSEL_256X	0x18 /* 11000 */
 #define BU27034_GSEL_512X	0x19 /* 11001 */
-//#define BU27034_GSEL_1024X	0x1a /* 11010 */
-//#define BU27034_GSEL_2048X	0x1b /* 11011 */
-#define BU27034_GSEL_4096X	0x1c /* 11100 */
+#define BU27034_GSEL_1024X	0x1a /* 11010 */
 
 /* Available gain settings */
 static const struct iio_gain_sel_pair bu27034_gains[] = {
 	GAIN_SCALE_GAIN(1, BU27034_GSEL_1X),
 	GAIN_SCALE_GAIN(4, BU27034_GSEL_4X),
-//	GAIN_SCALE_GAIN(16, BU27034_GSEL_16X),
 	GAIN_SCALE_GAIN(32, BU27034_GSEL_32X),
-//	GAIN_SCALE_GAIN(64, BU27034_GSEL_64X),
 	GAIN_SCALE_GAIN(256, BU27034_GSEL_256X),
 	GAIN_SCALE_GAIN(512, BU27034_GSEL_512X),
-//	GAIN_SCALE_GAIN(1024, BU27034_GSEL_1024X),
-//	GAIN_SCALE_GAIN(2048, BU27034_GSEL_2048X),
-	GAIN_SCALE_GAIN(4096, BU27034_GSEL_4096X),
+	GAIN_SCALE_GAIN(1024, BU27034_GSEL_1024X),
 };
 
 /*
@@ -197,7 +188,6 @@ static const struct iio_chan_spec bu27034_channels[] = {
 	 */
 	BU27034_CHAN_DATA(DATA0),
 	BU27034_CHAN_DATA(DATA1),
-//	BU27034_CHAN_DATA(DATA2, IIO_MOD_LIGHT_IR),
 	IIO_CHAN_SOFT_TIMESTAMP(4),
 };
 
@@ -211,18 +201,12 @@ struct bu27034_data {
 	struct mutex mutex;
 	struct iio_gts gts;
 	struct task_struct *task;
-	__le16 raw[2];
+	__le16 raw[BU27034_NUM_HW_DATA_CHANS];
 	struct {
 		u32 mlux;
-		__le16 channels[2];
+		__le16 channels[BU27034_NUM_HW_DATA_CHANS];
 		s64 ts __aligned(8);
 	} scan;
-};
-
-struct bu27034_result {
-	u16 ch0;
-	u16 ch1;
-//	u16 ch2;
 };
 
 static const struct regmap_range bu27034_volatile_ranges[] = {
@@ -590,102 +574,21 @@ unlock_out:
 }
 
 /*
- * for (D1/D0 < 0.87):
- * lx = 0.004521097 * D1 - 0.002663996 * D0 +
- *	0.00012213 * D1 * D1 / D0
+ * for (D1/D0 < 1.5):
+ *    lx = (0.001193 * D0 + (-0.0000747) * D1) * ((D1/D0 – 1.5) * (0.25) + 1)
  *
- * =>	115.7400832 * ch1 / gain1 / mt -
- *	68.1982976 * ch0 / gain0 / mt +
- *	0.00012213 * 25600 * (ch1 / gain1 / mt) * 25600 *
- *	(ch1 /gain1 / mt) / (25600 * ch0 / gain0 / mt)
+ *    => -0.000745625 * D0 + 0.0002515625 * D1 + -0.000018675 * D1 * D1 / D0
  *
- * A =	0.00012213 * 25600 * (ch1 /gain1 / mt) * 25600 *
- *	(ch1 /gain1 / mt) / (25600 * ch0 / gain0 / mt)
- * =>	0.00012213 * 25600 * (ch1 /gain1 / mt) *
- *	(ch1 /gain1 / mt) / (ch0 / gain0 / mt)
- * =>	0.00012213 * 25600 * (ch1 / gain1) * (ch1 /gain1 / mt) /
- *	(ch0 / gain0)
- * =>	0.00012213 * 25600 * (ch1 / gain1) * (ch1 /gain1 / mt) *
- *	gain0 / ch0
- * =>	3.126528 * ch1 * ch1 * gain0 / gain1 / gain1 / mt /ch0
+ *    => (6.44 * ch1 / gain1 + 19.088 * ch0 / gain0 -
+ *       0.47808 * ch1 * ch1 * gain0 / gain1 / gain1 / ch0) /
+ *       mt
  *
- * lx = (115.7400832 * ch1 / gain1 - 68.1982976 * ch0 / gain0) /
- *	mt + A
- * =>	(115.7400832 * ch1 / gain1 - 68.1982976 * ch0 / gain0) /
- *	mt + 3.126528 * ch1 * ch1 * gain0 / gain1 / gain1 / mt /
- *	ch0
+ * Else
+ *    lx = 0.001193 * D0 - 0.0000747 * D1
  *
- * =>	(115.7400832 * ch1 / gain1 - 68.1982976 * ch0 / gain0 +
- *	  3.126528 * ch1 * ch1 * gain0 / gain1 / gain1 / ch0) /
- *	  mt
- *
- * For (0.87 <= D1/D0 < 1.00)
- * lx = (0.001331* D0 + 0.0000354 * D1) * ((D1/D0 – 0.87) * (0.385) + 1)
- * =>	(0.001331 * 256 * 100 * ch0 / gain0 / mt + 0.0000354 * 256 *
- *	100 * ch1 / gain1 / mt) * ((D1/D0 -  0.87) * (0.385) + 1)
- * =>	(34.0736 * ch0 / gain0 / mt + 0.90624 * ch1 / gain1 / mt) *
- *	((D1/D0 -  0.87) * (0.385) + 1)
- * =>	(34.0736 * ch0 / gain0 / mt + 0.90624 * ch1 / gain1 / mt) *
- *	(0.385 * D1/D0 - 0.66505)
- * =>	(34.0736 * ch0 / gain0 / mt + 0.90624 * ch1 / gain1 / mt) *
- *	(0.385 * 256 * 100 * ch1 / gain1 / mt / (256 * 100 * ch0 / gain0 / mt) - 0.66505)
- * =>	(34.0736 * ch0 / gain0 / mt + 0.90624 * ch1 / gain1 / mt) *
- *	(9856 * ch1 / gain1 / mt / (25600 * ch0 / gain0 / mt) + 0.66505)
- * =>	13.118336 * ch1 / (gain1 * mt)
- *	+ 22.66064768 * ch0 / (gain0 * mt)
- *	+ 8931.90144 * ch1 * ch1 * gain0 /
- *	  (25600 * ch0 * gain1 * gain1 * mt)
- *	+ 0.602694912 * ch1 / (gain1 * mt)
- *
- * =>	[0.3489024 * ch1 * ch1 * gain0 / (ch0 * gain1 * gain1)
- *	 + 22.66064768 * ch0 / gain0
- *	 + 13.721030912 * ch1 / gain1
- *	] / mt
- *
- * For (D1/D0 >= 1.00)
- *
- * lx	= (0.001331* D0 + 0.0000354 * D1) * ((D1/D0 – 2.0) * (-0.05) + 1)
- *	=> (0.001331* D0 + 0.0000354 * D1) * (-0.05D1/D0 + 1.1)
- *	=> (0.001331 * 256 * 100 * ch0 / gain0 / mt + 0.0000354 * 256 *
- *	   100 * ch1 / gain1 / mt) * (-0.05D1/D0 + 1.1)
- *	=> (34.0736 * ch0 / gain0 / mt + 0.90624 * ch1 / gain1 / mt) *
- *	   (-0.05 * 256 * 100 * ch1 / gain1 / mt / (256 * 100 * ch0 / gain0 / mt) + 1.1)
- *	=> (34.0736 * ch0 / gain0 / mt + 0.90624 * ch1 / gain1 / mt) *
- *	   (-1280 * ch1 / (gain1 * mt * 25600 * ch0 / gain0 / mt) + 1.1)
- *	=> (34.0736 * ch0 * -1280 * ch1 * gain0 * mt /( gain0 * mt * gain1 * mt * 25600 * ch0)
- *	    + 34.0736 * 1.1 * ch0 / (gain0 * mt)
- *	    + 0.90624 * ch1 * -1280 * ch1 *gain0 * mt / (gain1 * mt *gain1 * mt * 25600 * ch0)
- *	    + 1.1 * 0.90624 * ch1 / (gain1 * mt)
- *	=> -43614.208 * ch1 / (gain1 * mt * 25600)
- *	    + 37.48096  ch0 / (gain0 * mt)
- *	    - 1159.9872 * ch1 * ch1 * gain0 / (gain1 * gain1 * mt * 25600 * ch0)
- *	    + 0.996864 ch1 / (gain1 * mt)
- *	=> [
- *		- 0.045312 * ch1 * ch1 * gain0 / (gain1 * gain1 * ch0)
- *		- 0.706816 * ch1 / gain1
- *		+ 37.48096  ch0 /gain0
- *	   ] * mt
- *
- *
- * So, the first case (D1/D0 < 0.87) can be computed to a form:
- *
- * lx = (3.126528 * ch1 * ch1 * gain0 / (ch0 * gain1 * gain1) +
- *	 115.7400832 * ch1 / gain1 +
- *	-68.1982976 * ch0 / gain0
- *	 / mt
- *
- * Second case (0.87 <= D1/D0 < 1.00) goes to form:
- *
- *	=> [0.3489024 * ch1 * ch1 * gain0 / (ch0 * gain1 * gain1) +
- *	    13.721030912 * ch1 / gain1 +
- *	    22.66064768 * ch0 / gain0
- *	   ] / mt
- *
- * Third case (D1/D0 >= 1.00) goes to form:
- *	=> [-0.045312 * ch1 * ch1 * gain0 / (ch0 * gain1 * gain1) +
- *	    -0.706816 * ch1 / gain1 +
- *	    37.48096  ch0 /(gain0
- *	   ] / mt
+ *    => (1.91232 * ch1 / gain1 + 30.5408 * ch0 / gain0 +
+ *        [0 * ch1 * ch1 * gain0 / gain1 / gain1 / ch0] ) /
+ *        mt
  *
  * This can be unified to format:
  * lx = [
@@ -695,19 +598,14 @@ unlock_out:
  *	] / mt
  *
  * For case 1:
- * A = 3.126528,
- * B = 115.7400832
- * C = -68.1982976
+ * A = -0.47808,
+ * B = 6.44,
+ * C = 19.088
  *
  * For case 2:
- * A = 0.3489024
- * B = 13.721030912
- * C = 22.66064768
- *
- * For case 3:
- * A = -0.045312
- * B = -0.706816
- * C = 37.48096
+ * A = 0
+ * B = 1.91232
+ * C = 30.5408
  */
 
 struct bu27034_lx_coeff {
@@ -812,21 +710,16 @@ static int bu27034_fixp_calc_lx(unsigned int ch0, unsigned int ch1,
 {
 	static const struct bu27034_lx_coeff coeff[] = {
 		{
-			.A = 31265280,		/* 3.126528 */
-			.B = 1157400832,	/*115.7400832 */
-			.C = 681982976,		/* -68.1982976 */
-			.is_neg = {false, false, true},
+			.A = 4780800,		/* -0.47808 */
+			.B = 64400000,		/*6.44 */
+			.C = 190880000,		/* 19.088 */
+			.is_neg = {true, false, false},
 		}, {
-			.A = 3489024,		/* 0.3489024 */
-			.B = 137210309,		/* 13.721030912 */
-			.C = 226606476,		/* 22.66064768 */
+			.A = 0,			/* 0 */
+			.B = 19123200,		/* 1.91232 */
+			.C = 305408000,		/* 30.5408 */
 			/* All terms positive */
-		}, {
-			.A = 453120,		/* -0.045312 */
-			.B = 7068160,		/* -0.706816 */
-			.C = 374809600,		/* 37.48096 */
-			.is_neg = {true, true, false},
-		}
+		},
 	};
 	const struct bu27034_lx_coeff *c = &coeff[coeff_idx];
 	u64 res = 0, terms[3];
@@ -898,7 +791,6 @@ static int bu27034_read_result(struct bu27034_data *data, int chan, int *res)
 	int reg[] = {
 		[BU27034_CHAN_DATA0] = BU27034_REG_DATA0_LO,
 		[BU27034_CHAN_DATA1] = BU27034_REG_DATA1_LO,
-//		[BU27034_CHAN_DATA2] = BU27034_REG_DATA2_LO,
 	};
 	int valid, ret;
 	__le16 val;
@@ -990,12 +882,10 @@ static int bu27034_get_single_result(struct bu27034_data *data, int chan,
  * D1 = data1/ch1_gain/meas_time_ms * 25600
  *
  * Then:
- * if (D1/D0 < 0.87)
- *	lx = (0.001331 * D0 + 0.0000354 * D1) * ((D1 / D0 - 0.87) * 3.45 + 1)
- * else if (D1/D0 < 1)
- *	lx = (0.001331 * D0 + 0.0000354 * D1) * ((D1 / D0 - 0.87) * 0.385 + 1)
- * else
- *	lx = (0.001331 * D0 + 0.0000354 * D1) * ((D1 / D0 - 2) * -0.05 + 1)
+ * If (D1/D0 < 1.5)
+ *    lx = (0.001193 * D0 + (-0.0000747) * D1) * ((D1/D0 – 1.5) * (0.25) + 1)
+ * Else
+ *    lx = (0.001193* D0 + (-0.0000747) * D1)
  *
  * We use it here. Users who have for example some colored lens
  * need to modify the calculation but I hope this gives a starting point for
@@ -1064,7 +954,7 @@ static int bu27034_calc_mlux(struct bu27034_data *data, __le16 *res, int *val)
 
 static int bu27034_get_mlux(struct bu27034_data *data, int chan, int *val)
 {
-	__le16 res[2];
+	__le16 res[BU27034_NUM_HW_DATA_CHANS];
 	int ret;
 
 	ret = bu27034_meas_set(data, true);
