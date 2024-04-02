@@ -38,13 +38,15 @@ WHAT EXAMPLES ARE INCLUDED?
 		inter-processor communication method for every design, but it is
 		useful for initial debugging and demonstrations.
 
-
+	PRU_Hardware_UART
+		This code shows a basic example of using the PRU core to program
+		and control the hardware UART instance within the PRU subsystem.
 
 
 ADDITIONAL RESOURCES
 
 	For more information about the PRU, visit:
 
-	PRU-ICSS/PRU_ICSSG docs	 - https://software-dl.ti.com/processor-sdk-linux/esd/AM64X/latest/exports/docs/linux/Foundational_Components_PRU_Subsystem.html
+	PRU-ICSS/PRU_ICSSG docs	 - https://software-dl.ti.com/processor-sdk-linux/esd/AM62X/latest/exports/docs/linux/Foundational_Components_PRU_Subsystem.html
 	AM62x TRM                - https://www.ti.com/lit/spruiv7
 	Support                  - http://e2e.ti.com
