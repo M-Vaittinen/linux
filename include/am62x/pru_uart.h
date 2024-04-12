@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2022 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2022-2024 Texas Instruments Incorporated - http://www.ti.com/
  *
  *
  * Redistribution and use in source and binary forms, with or without
@@ -37,16 +37,42 @@
 /* PRU UART register set */
 typedef struct {
 
-	/* PRU_UART_RBR_TBR register bit field */
+	/*
+	 * PRU_UART_RBR_TBR register bit field
+	 * RBR and TBR / THR register pair
+	 *
+	 * This is a unique register pair in that RBR and THR
+	 * share the same address. RBR is read-only while THR is
+	 * write-only.
+	 *
+	 * Additionally, RBR and THR share an address with DLL. To
+	 * read/write RBR/THR write 0 to the DLAB bit in the LCR
+	 * register. To modify DLL write a 1.
+	 *
+	 * DLL also has a dedicated
+	 * address which does not require toggling the DLAB bit.
+	 */
 	union {
-		volatile uint32_t RBR_TBR;
+		/* PRU_UART_RBR register bit field */
+		union {
+			volatile uint32_t RBR;
 
-		volatile struct {
-			uint32_t RBR_DATA : 8; // 7:0
-			uint32_t TBR_DATA : 10; // 17:8
-			uint32_t rsvd18 : 14; // 31:18
-		} RBR_TBR_bit;
-	}; // 0x0
+			volatile struct {
+				unsigned DATA : 8;              // 7:0
+				unsigned rsvd8 : 24;            // 31:8
+			} RBR_bit;
+		};
+
+		/* PRU_UART_THR register bit field */
+		union {
+			volatile uint32_t THR;
+
+			volatile struct {
+				unsigned DATA : 8;              // 7:0
+				unsigned rsvd8 : 24;            // 31:8
+			} THR_bit;
+		};
+	};      // 0x0
 
 	/* PRU_UART_INT_EN register bit field */
 	union {
@@ -61,24 +87,41 @@ typedef struct {
 		} INT_EN_bit;
 	}; // 0x4
 
-	/* PRU_UART_INT_FIFO register bit field */
+	/*
+	 * IIR and FCR register pair
+	 * This is a unique register pair in that IIR and FCR
+	 * share the same address. IIR is read-only while FCR is
+	 * write-only.
+	 */
 	union {
-		volatile uint32_t INT_FIFO;
+		/* PRU_UART_IIR register bit field */
+		union {
+			volatile uint32_t IIR;
 
-		volatile struct {
-			uint32_t IIR_IPEND : 1; // 0
-			uint32_t IIR_INTID : 3; // 3:1
-			uint32_t rsvd4 : 2; // 5:4
-			uint32_t IIR_FIFOEN : 2; // 7:6
-			uint32_t FCR_FIFOEN : 1; // 8
-			uint32_t FCR_RXCLR : 1; // 9
-			uint32_t FCR_TXCLR : 1; // 10
-			uint32_t FCR_DMAMODE1 : 1; // 11
-			uint32_t rsvd12 : 2; // 13:12
-			uint32_t FCR_RXFIFTL : 2; // 15:14
-			uint32_t rsvd16 : 16; // 31:16
-		} INT_FIFO_bit;
-	}; // 0x8
+			volatile struct {
+				unsigned IPEND : 1;             // 0
+				unsigned INTID : 3;             // 3:1
+				unsigned rsvd4 : 2;             // 5:4
+				unsigned FIFOEN : 2;            // 7:6
+				unsigned rsvd8 : 24;            // 31:8
+			} IIR_bit;
+		};
+
+		/* PRU_UART_FCR register bit field */
+		union {
+			volatile uint32_t FCR;
+
+			volatile struct {
+				unsigned FIFOEN : 1;            // 0
+				unsigned RXCLR : 1;             // 1
+				unsigned TXCLR : 1;             // 2
+				unsigned DMAMODE1 : 1;          // 3
+				unsigned rsvd4 : 2;             // 5:4
+				unsigned RXFIFTL : 2;           // 7:6
+				unsigned rsvd8 : 24;            // 31:8
+			} FCR_bit;
+		};
+	};      // 0x8
 
 	/* PRU_UART_LCTR register bit field */
 	union {

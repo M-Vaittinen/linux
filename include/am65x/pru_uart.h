@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2021-2024 Texas Instruments Incorporated - http://www.ti.com/
+ * Copyright (C) 2024 Texas Instruments Incorporated - http://www.ti.com/
  *
  *
  * Redistribution and use in source and binary forms, with or without
@@ -260,4 +260,3 @@ typedef struct {
 volatile __far uart CT_UART __attribute__((cregister("PRU_UART", far), peripheral));
 
 #endif /* _PRU_UART_H_ */
-
