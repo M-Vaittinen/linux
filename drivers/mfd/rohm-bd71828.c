@@ -2,7 +2,7 @@
 //
 // Copyright (C) 2019 ROHM Semiconductors
 //
-// ROHM BD71828/BD71815 PMIC driver
+// ROHM BD71828/BD71815/BD71851 PMIC driver
 
 #include <linux/gpio_keys.h>
 #include <linux/i2c.h>
@@ -13,6 +13,7 @@
 #include <linux/mfd/core.h>
 #include <linux/mfd/rohm-bd71815.h>
 #include <linux/mfd/rohm-bd71828.h>
+#include <linux/mfd/rohm-bd71851.h>
 #include <linux/mfd/rohm-generic.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -41,6 +42,12 @@ static const struct resource bd71828_rtc_irqs[] = {
 	DEFINE_RES_IRQ_NAMED(BD71828_INT_RTC0, "bd71828-rtc-alm-0"),
 	DEFINE_RES_IRQ_NAMED(BD71828_INT_RTC1, "bd71828-rtc-alm-1"),
 	DEFINE_RES_IRQ_NAMED(BD71828_INT_RTC2, "bd71828-rtc-alm-2"),
+};
+
+static const struct resource bd71851_rtc_irqs[] = {
+	DEFINE_RES_IRQ_NAMED(BD71851_INT_RTC0, "rtc-alm-0"),
+	DEFINE_RES_IRQ_NAMED(BD71851_INT_RTC1, "rtc-alm-1"),
+	DEFINE_RES_IRQ_NAMED(BD71851_INT_RTC2, "rtc-alm-2"),
 };
 
 static struct resource bd71815_power_irqs[] = {
@@ -130,6 +137,17 @@ static struct mfd_cell bd71828_mfd_cells[] = {
 	},
 };
 
+static struct mfd_cell bd71851_mfd_cells[] = {
+	{ .name = "bd71851-pmic", },
+	{ .name = "bd71851-clk", },
+	{ .name = "bd71851-gpo", },
+	{
+		.name = "bd71851-rtc",
+		.num_resources = ARRAY_SIZE(bd71851_rtc_irqs),
+		.resources = &bd71851_rtc_irqs[0],
+	},
+};
+
 static const struct regmap_range bd71815_volatile_ranges[] = {
 	{
 		.range_min = BD71815_REG_SEC,
@@ -182,6 +200,34 @@ static const struct regmap_range bd71828_volatile_ranges[] = {
 	},
 };
 
+static const struct regmap_range bd71851_volatile_ranges[] = {
+	{
+		.range_min = BD71851_REG_POR_REASON,
+		.range_max = BD71851_REG_POW_STATE,
+	}, {
+		.range_min = BD71851_REG_PS_CTRL_1,
+		.range_max = BD71851_REG_PS_CTRL_2,
+	}, {
+		.range_min = BD71851_REG_RCVNUM,
+		.range_max = BD71851_REG_RCVNUM,
+	}, {
+		.range_min = BD71851_REG_RTC_SEC,
+		.range_max = BD71851_REG_RTC_YEAR,
+	}, {
+		.range_min = BD71851_REG_RTC_CONF,
+		.range_max = BD71851_REG_RTC_CONF,
+	}, {
+		.range_min = BD71851_REG_ADC_ACCUM_KICK,
+		.range_max = BD71851_REG_ADC_TEMP_VAL0,
+	}, {
+		.range_min = BD71851_REG_INT_MAIN_STAT,
+		.range_max = BD71851_REG_INT_5_STAT,
+	}, {
+		.range_min = BD71851_REG_INT_MAIN_SRC,
+		.range_max = BD71851_REG_INT_5_SRC,
+	},
+};
+
 static const struct regmap_access_table bd71815_volatile_regs = {
 	.yes_ranges = &bd71815_volatile_ranges[0],
 	.n_yes_ranges = ARRAY_SIZE(bd71815_volatile_ranges),
@@ -190,6 +236,35 @@ static const struct regmap_access_table bd71815_volatile_regs = {
 static const struct regmap_access_table bd71828_volatile_regs = {
 	.yes_ranges = &bd71828_volatile_ranges[0],
 	.n_yes_ranges = ARRAY_SIZE(bd71828_volatile_ranges),
+};
+
+static const struct regmap_access_table bd71851_volatile_regs = {
+	.yes_ranges = &bd71851_volatile_ranges[0],
+	.n_yes_ranges = ARRAY_SIZE(bd71851_volatile_ranges),
+};
+
+static const struct regmap_range bd71851_read_only_ranges[] = {
+	{
+		.range_min = BD71851_REG_PRODUCT_ID,
+		.range_max = BD71851_REG_NVMVERSION,
+	}, {
+		.range_min = BD71851_REG_POW_STATE,
+		.range_max = BD71851_REG_POW_STATE,
+	}, {
+		.range_min = BD71851_REG_ADC_ACCUM_CNT2,
+		.range_max = BD71851_REG_ADC_TEMP_VAL0,
+	}, {
+		.range_min = BD71851_REG_INT_MAIN_STAT,
+		.range_max = BD71851_REG_INT_MAIN_STAT,
+	}, {
+		.range_min = BD71851_REG_INT_MAIN_SRC,
+		.range_max = BD71851_REG_INT_5_SRC,
+	},
+};
+
+static const struct regmap_access_table bd71851_ro_regs = {
+	.no_ranges = &bd71851_read_only_ranges[0],
+	.n_no_ranges = ARRAY_SIZE(bd71851_read_only_ranges),
 };
 
 static const struct regmap_config bd71815_regmap = {
@@ -205,6 +280,15 @@ static const struct regmap_config bd71828_regmap = {
 	.val_bits = 8,
 	.volatile_table = &bd71828_volatile_regs,
 	.max_register = BD71828_MAX_REGISTER,
+	.cache_type = REGCACHE_MAPLE,
+};
+
+static const struct regmap_config bd71851_regmap = {
+	.reg_bits = 8,
+	.val_bits = 8,
+	.wr_table = &bd71851_ro_regs,
+	.volatile_table = &bd71851_volatile_regs,
+	.max_register = BD71851_MAX_REGISTER - 1,
 	.cache_type = REGCACHE_MAPLE,
 };
 
@@ -407,6 +491,60 @@ static struct regmap_irq bd71828_irqs[] = {
 	REGMAP_IRQ_REG(BD71828_INT_RTC2, 11, BD71828_INT_RTC2_MASK),
 };
 
+static const struct regmap_irq bd71851_irqs[] = {
+	/* INT_STAT_1 register IRQs, ADC and RTC */
+	REGMAP_IRQ_REG(BD71851_INT_ADC_ACCUM_DONE, 0, BD71851_INT_ADC_ACCUM_DONE_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_ADC_ACCUM_OVF, 0, BD71851_INT_ADC_ACCUM_OVF_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_ADC_ACCUM_VAL, 0, BD71851_INT_ADC_ACCUM_VAL_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_ADC_ACCUM_TW, 0, BD71851_INT_ADC_ACCUM_TW_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_ADC_POW_VAL, 0, BD71851_INT_ADC_POW_VAL_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_RTC0, 0, BD71851_INT_RTC0_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_RTC1, 0, BD71851_INT_RTC1_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_RTC2, 0, BD71851_INT_RTC2_MASK),
+
+	/* BUCK reg interrupts */
+	/* INT_STAT_2 IRQs */
+	REGMAP_IRQ_REG(BD71851_INT_BUCK1_DVS_DONE, 1, BD71851_INT_BUCK1_DVS_DONE_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_BUCK2_DVS_DONE, 1, BD71851_INT_BUCK2_DVS_DONE_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_BUCK3_DVS_DONE, 1, BD71851_INT_BUCK3_DVS_DONE_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_BUCK4_DVS_DONE, 1, BD71851_INT_BUCK4_DVS_DONE_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_BUCK5_DVS_DONE, 1, BD71851_INT_BUCK5_DVS_DONE_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_BUCK6_DVS_DONE, 1, BD71851_INT_BUCK6_DVS_DONE_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_BUCK7_DVS_DONE, 1, BD71851_INT_BUCK7_DVS_DONE_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_BUCK8_DVS_DONE, 1, BD71851_INT_BUCK8_DVS_DONE_MASK),
+	/* INT_STAT_3 IRQs */
+	REGMAP_IRQ_REG(BD71851_INT_BUCK1_OCP, 2, BD71851_INT_BUCK1_OCP_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_BUCK2_OCP, 2, BD71851_INT_BUCK2_OCP_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_BUCK3_OCP, 2, BD71851_INT_BUCK3_OCP_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_BUCK4_OCP, 2, BD71851_INT_BUCK4_OCP_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_BUCK5_OCP, 2, BD71851_INT_BUCK5_OCP_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_BUCK6_OCP, 2, BD71851_INT_BUCK6_OCP_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_BUCK7_OCP, 2, BD71851_INT_BUCK7_OCP_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_BUCK8_OCP, 2, BD71851_INT_BUCK8_OCP_MASK),
+
+	/* INT_STAT_4 IRQs, power-button, WDG and reset */
+	REGMAP_IRQ_REG(BD71851_INT_PBTN_LONG_PRESS, 3, BD71851_INT_PBTN_LONG_PRESS_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_PBTN_MID_PRESS, 3, BD71851_INT_PBTN_MID_PRESS_MASK),
+	/*
+	 * The SHORT_PUSH is generated when button is first pressed (longer
+	 * than configured time limit), and then released before the MID_PRESS
+	 * time limit. The SHORT_PRESS is generated immediately when button is
+	 * pressed for longer than configured limit, whether it is released or
+	 * not.
+	 */
+	REGMAP_IRQ_REG(BD71851_INT_PBTN_SHORT_PUSH, 3, BD71851_INT_PBTN_SHORT_PUSH_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_PBTN_SHORT_PRESS, 3, BD71851_INT_PBTN_SHORT_PRESS_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_WDG, 3, BD71851_INT_WDG_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_SWRESET, 3, BD71851_INT_SWRESET_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_SEQ_DONE, 3, BD71851_INT_SEQ_DONE_MASK),
+
+	/* INT_STAT_5 IRQs, GPIO */
+	REGMAP_IRQ_REG(BD71851_INT_GPIO1, 4, BD71851_INT_GPIO1_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_GPIO2, 4, BD71851_INT_GPIO2_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_GPIO3, 4, BD71851_INT_GPIO3_MASK),
+	REGMAP_IRQ_REG(BD71851_INT_GPIO4, 4, BD71851_INT_GPIO4_MASK),
+};
+
 static struct regmap_irq_chip bd71828_irq_chip = {
 	.name = "bd71828_irq",
 	.main_status = BD71828_REG_INT_MAIN,
@@ -436,6 +574,26 @@ static struct regmap_irq_chip bd71815_irq_chip = {
 	.num_main_regs = 1,
 	.sub_reg_offsets = &bd718xx_sub_irq_offsets[0],
 	.num_main_status_bits = 8,
+	.irq_reg_stride = 1,
+};
+
+static struct regmap_irq_chip bd71851_irq_chip = {
+	.name = "bd71851_irq",
+	.main_status = BD71851_REG_INT_MAIN_STAT,
+	.irqs = &bd71851_irqs[0],
+	.num_irqs = ARRAY_SIZE(bd71851_irqs),
+	.status_base = BD71851_REG_INT_1_STAT,
+	.unmask_base = BD71851_REG_INT_1_EN,
+	.ack_base = BD71851_REG_INT_1_STAT,
+	.init_ack_masked = true,
+	.num_regs = 5,
+	.num_main_regs = 1,
+/*	.sub_reg_offsets = &bd718xx_sub_irq_offsets[0], direct 1 to 1 mapping */
+/*
+ * Ignore mirrored bits [7:5]. They are handled as part of normal INT_4
+ * handling
+ */
+	.num_main_status_bits = 5,
 	.irq_reg_stride = 1,
 };
 
@@ -528,6 +686,15 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 		 */
 		button_irq = 0;
 		break;
+	case ROHM_CHIP_TYPE_BD71851:
+		mfd = bd71851_mfd_cells;
+		cells = ARRAY_SIZE(bd71851_mfd_cells);
+		regmap_config = &bd71851_regmap;
+		irqchip = &bd71851_irq_chip;
+		clkmode_reg = BD71851_REG_OUT32K;
+		button_irq = BD71851_INT_PBTN_SHORT_PUSH;
+		break;
+
 	default:
 		dev_err(&i2c->dev, "Unknown device type");
 		return -EINVAL;
@@ -588,6 +755,9 @@ static const struct of_device_id bd71828_of_match[] = {
 	}, {
 		.compatible = "rohm,bd71815",
 		.data = (void *)ROHM_CHIP_TYPE_BD71815,
+	}, {
+		.compatible = "rohm,bd71851",
+		.data = (void *)ROHM_CHIP_TYPE_BD71851,
 	 },
 	{ },
 };
