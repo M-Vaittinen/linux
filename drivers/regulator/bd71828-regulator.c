@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 // Copyright (C) 2019 ROHM Semiconductors
-// bd71828-regulator.c ROHM BD71828GW-DS1 regulator driver
-//
+// bd71828-regulator.c ROHM BD71828GW-DS1 and BD71851GW regulator driver
 
 #include <linux/delay.h>
 #include <linux/err.h>
@@ -27,6 +26,13 @@ struct bd71828_regulator_data {
 	const struct reg_init *reg_inits;
 	int reg_init_amnt;
 };
+
+/*
+ * LDO1 and LDO3 node names are used also in the driver to find OTP setting for
+ * the used voltage range.
+ */
+#define LDO1_NODE_NAME "LDO1"
+#define LDO3_NODE_NAME "LDO3"
 
 static const struct reg_init bd71828_buck1_inits[] = {
 	/*
@@ -89,6 +95,48 @@ static const struct linear_range bd71828_ldo_volts[] = {
 	REGULATOR_LINEAR_RANGE(3300000, 0x32, 0x3f, 0),
 };
 
+static const struct linear_range bd71851_buck12348_volts[] = {
+	REGULATOR_LINEAR_RANGE(500000, 0x00, 0x50, 10000),
+	REGULATOR_LINEAR_RANGE(1300000, 0x51, 0xff, 0),
+};
+
+static const unsigned int bd71851_buck5_volt_range_sel[] = {
+	0x0, 0x0, 0x1, 0x1,
+};
+
+static const struct linear_range bd71851_buck5_volts[] = {
+	/* range selector 0 */
+	REGULATOR_LINEAR_RANGE(500000, 0x00, 0x50, 10000),
+	REGULATOR_LINEAR_RANGE(1300000, 0x51, 0x7f, 0),
+	/* range selector 1 */
+	REGULATOR_LINEAR_RANGE(300000, 0x00, 0x46, 10000),
+	REGULATOR_LINEAR_RANGE(1000000, 0x47, 0x7f, 0),
+};
+
+static const struct linear_range bd71851_buck67_volts[] = {
+	REGULATOR_LINEAR_RANGE(1500000, 0x00, 0xc8, 10000),
+	REGULATOR_LINEAR_RANGE(3500000, 0xc9, 0xff, 0),
+};
+
+/*
+ * On the BD71851 the LDO1 and LDO3 support two different voltage areas.
+ * Whether to use 'high' or 'low' ranges is configured by OTP. There seems
+ * to be no register to read the configured area so it must be given via
+ * device-tree properties.
+ */
+static const struct linear_range bd71851_ldo13_low_volts[] = {
+	REGULATOR_LINEAR_RANGE(600000, 0x00, 0x78, 10000),
+	REGULATOR_LINEAR_RANGE(1800000, 0x79, 0xff, 0),
+};
+
+static const struct linear_range bd71851_ldo13_high_volts[] = {
+	REGULATOR_LINEAR_RANGE(750000, 0x00, 0xff, 10000),
+};
+
+static const struct linear_range bd71851_ldo24_volts[] = {
+	REGULATOR_LINEAR_RANGE(750000, 0x00, 0xff, 10000),
+};
+
 static const unsigned int bd71828_ramp_delay[] = { 2500, 5000, 10000, 20000 };
 
 static int buck_set_hw_dvs_levels(struct device_node *np,
@@ -136,6 +184,37 @@ static int ldo6_parse_dt(struct device_node *np,
 	return 0;
 }
 
+/* Operations for all other BUCKs but BUCK 5 */
+static const struct regulator_ops bd71851_buck_ops = {
+	.enable = regulator_enable_regmap,
+	.disable = regulator_disable_regmap,
+	.is_enabled = regulator_is_enabled_regmap,
+	.list_voltage = regulator_list_voltage_linear_range,
+	.set_voltage_sel = regulator_set_voltage_sel_regmap,
+	.get_voltage_sel = regulator_get_voltage_sel_regmap,
+	.set_ramp_delay = regulator_set_ramp_delay_regmap,
+};
+
+static const struct regulator_ops bd71851_buck5_ops = {
+	.enable = regulator_enable_regmap,
+	.disable = regulator_disable_regmap,
+	.is_enabled = regulator_is_enabled_regmap,
+	.list_voltage = regulator_list_voltage_linear_range,
+	.set_voltage_sel = regulator_set_voltage_sel_pickable_regmap,
+	.get_voltage_sel = regulator_get_voltage_sel_pickable_regmap,
+	.set_ramp_delay = regulator_set_ramp_delay_regmap,
+};
+
+
+static const struct regulator_ops bd71851_ldo_ops = {
+	.enable = regulator_enable_regmap,
+	.disable = regulator_disable_regmap,
+	.is_enabled = regulator_is_enabled_regmap,
+	.list_voltage = regulator_list_voltage_linear_range,
+	.set_voltage_sel = regulator_set_voltage_sel_regmap,
+	.get_voltage_sel = regulator_get_voltage_sel_regmap,
+};
+
 static const struct regulator_ops bd71828_buck_ops = {
 	.enable = regulator_enable_regmap,
 	.disable = regulator_disable_regmap,
@@ -174,7 +253,7 @@ static const struct regulator_ops bd71828_ldo6_ops = {
 static const struct bd71828_regulator_data bd71828_rdata[] = {
 	{
 		.desc = {
-			.name = "buck1",
+			.name = "BUCK1",
 			.of_match = of_match_ptr("BUCK1"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = BD71828_BUCK1,
@@ -217,7 +296,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 	},
 	{
 		.desc = {
-			.name = "buck2",
+			.name = "BUCK2",
 			.of_match = of_match_ptr("BUCK2"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = BD71828_BUCK2,
@@ -258,7 +337,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 	},
 	{
 		.desc = {
-			.name = "buck3",
+			.name = "BUCK3",
 			.of_match = of_match_ptr("BUCK3"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = BD71828_BUCK3,
@@ -293,7 +372,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 	},
 	{
 		.desc = {
-			.name = "buck4",
+			.name = "BUCK4",
 			.of_match = of_match_ptr("BUCK4"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = BD71828_BUCK4,
@@ -328,7 +407,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 	},
 	{
 		.desc = {
-			.name = "buck5",
+			.name = "BUCK5",
 			.of_match = of_match_ptr("BUCK5"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = BD71828_BUCK5,
@@ -363,7 +442,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 	},
 	{
 		.desc = {
-			.name = "buck6",
+			.name = "BUCK6",
 			.of_match = of_match_ptr("BUCK6"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = BD71828_BUCK6,
@@ -404,7 +483,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 	},
 	{
 		.desc = {
-			.name = "buck7",
+			.name = "BUCK7",
 			.of_match = of_match_ptr("BUCK7"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = BD71828_BUCK7,
@@ -445,7 +524,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 	},
 	{
 		.desc = {
-			.name = "ldo1",
+			.name = "LDO1",
 			.of_match = of_match_ptr("LDO1"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = BD71828_LDO1,
@@ -479,7 +558,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 		},
 	}, {
 		.desc = {
-			.name = "ldo2",
+			.name = "LDO2",
 			.of_match = of_match_ptr("LDO2"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = BD71828_LDO2,
@@ -513,7 +592,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 		},
 	}, {
 		.desc = {
-			.name = "ldo3",
+			.name = "LDO3",
 			.of_match = of_match_ptr("LDO3"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = BD71828_LDO3,
@@ -548,7 +627,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 
 	}, {
 		.desc = {
-			.name = "ldo4",
+			.name = "LDO4",
 			.of_match = of_match_ptr("LDO4"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = BD71828_LDO4,
@@ -582,7 +661,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 		},
 	}, {
 		.desc = {
-			.name = "ldo5",
+			.name = "LDO5",
 			.of_match = of_match_ptr("LDO5"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = BD71828_LDO5,
@@ -618,7 +697,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 
 	}, {
 		.desc = {
-			.name = "ldo6",
+			.name = "LDO6",
 			.of_match = of_match_ptr("LDO6"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = BD71828_LDO6,
@@ -638,7 +717,7 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 	}, {
 		.desc = {
 			/* SNVS LDO in data-sheet */
-			.name = "ldo7",
+			.name = "LDO7",
 			.of_match = of_match_ptr("LDO7"),
 			.regulators_node = of_match_ptr("regulators"),
 			.id = BD71828_LDO_SNVS,
@@ -677,22 +756,502 @@ static const struct bd71828_regulator_data bd71828_rdata[] = {
 	},
 };
 
+static const struct bd71828_regulator_data bd71851_rdata[] = {
+	{
+		.desc = {
+			.name = "BUCK1",
+			.of_match = of_match_ptr("BUCK1"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD71851_BUCK1,
+			.ops = &bd71851_buck_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd71851_buck12348_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd71851_buck12348_volts),
+			.n_voltages = BD71851_NUM_VOLTS,
+			.enable_reg = BD71851_REG_BUCK1_ON,
+			.enable_mask = BD71851_MASK_RUN_EN,
+			.vsel_reg = BD71851_REG_BUCK1_VOLT_RUN,
+			.vsel_mask = BD71851_MASK_VOLT,
+			.ramp_delay_table = bd71828_ramp_delay,
+			.n_ramp_values = ARRAY_SIZE(bd71828_ramp_delay),
+			.ramp_reg = BD71851_REG_BUCK1_MODE,
+			.ramp_mask = BD71851_MASK_RAMP_DELAY,
+			.owner = THIS_MODULE,
+			.of_parse_cb = buck_set_hw_dvs_levels,
+		},
+		.dvs = {
+			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
+				     ROHM_DVS_LEVEL_SUSPEND,
+			.run_reg = BD71851_REG_BUCK1_VOLT_RUN,
+			.run_mask = BD71851_MASK_VOLT,
+			.idle_reg = BD71851_REG_BUCK1_VOLT_IDLE,
+			.idle_mask = BD71851_MASK_VOLT,
+			.idle_on_mask = BD71851_MASK_IDLE_EN,
+			.suspend_reg = BD71851_REG_BUCK1_VOLT_SUSP,
+			.suspend_mask = BD71851_MASK_VOLT,
+			.suspend_on_mask = BD71851_MASK_SUSP_EN,
+		},
+	}, {
+		.desc = {
+			.name = "BUCK2",
+			.of_match = of_match_ptr("BUCK2"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD71851_BUCK2,
+			.ops = &bd71851_buck_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd71851_buck12348_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd71851_buck12348_volts),
+			.n_voltages = BD71851_NUM_VOLTS,
+			.enable_reg = BD71851_REG_BUCK2_ON,
+			.enable_mask = BD71851_MASK_RUN_EN,
+			.vsel_reg = BD71851_REG_BUCK2_VOLT_RUN,
+			.vsel_mask = BD71851_MASK_VOLT,
+			.ramp_delay_table = bd71828_ramp_delay,
+			.n_ramp_values = ARRAY_SIZE(bd71828_ramp_delay),
+			.ramp_reg = BD71851_REG_BUCK2_MODE,
+			.ramp_mask = BD71851_MASK_RAMP_DELAY,
+			.owner = THIS_MODULE,
+			.of_parse_cb = buck_set_hw_dvs_levels,
+		},
+		.dvs = {
+			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
+				     ROHM_DVS_LEVEL_SUSPEND,
+			.run_reg = BD71851_REG_BUCK2_VOLT_RUN,
+			.run_mask = BD71851_MASK_VOLT,
+			.idle_reg = BD71851_REG_BUCK2_VOLT_IDLE,
+			.idle_mask = BD71851_MASK_VOLT,
+			.idle_on_mask = BD71851_MASK_IDLE_EN,
+			.suspend_reg = BD71851_REG_BUCK2_VOLT_SUSP,
+			.suspend_mask = BD71851_MASK_VOLT,
+			.suspend_on_mask = BD71851_MASK_SUSP_EN,
+		},
+	}, {
+		.desc = {
+			.name = "BUCK3",
+			.of_match = of_match_ptr("BUCK3"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD71851_BUCK3,
+			.ops = &bd71851_buck_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd71851_buck12348_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd71851_buck12348_volts),
+			.n_voltages = BD71851_NUM_VOLTS,
+			.enable_reg = BD71851_REG_BUCK3_ON,
+			.enable_mask = BD71851_MASK_RUN_EN,
+			.vsel_reg = BD71851_REG_BUCK3_VOLT_RUN,
+			.vsel_mask = BD71851_MASK_VOLT,
+			.ramp_delay_table = bd71828_ramp_delay,
+			.n_ramp_values = ARRAY_SIZE(bd71828_ramp_delay),
+			.ramp_reg = BD71851_REG_BUCK3_MODE,
+			.ramp_mask = BD71851_MASK_RAMP_DELAY,
+			.owner = THIS_MODULE,
+			.of_parse_cb = buck_set_hw_dvs_levels,
+		},
+		.dvs = {
+			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
+				     ROHM_DVS_LEVEL_SUSPEND,
+			.run_reg = BD71851_REG_BUCK3_VOLT_RUN,
+			.run_mask = BD71851_MASK_VOLT,
+			.idle_reg = BD71851_REG_BUCK3_VOLT_IDLE,
+			.idle_mask = BD71851_MASK_VOLT,
+			.idle_on_mask = BD71851_MASK_IDLE_EN,
+			.suspend_reg = BD71851_REG_BUCK3_VOLT_SUSP,
+			.suspend_mask = BD71851_MASK_VOLT,
+			.suspend_on_mask = BD71851_MASK_SUSP_EN,
+		},
+
+	}, {
+		.desc = {
+			.name = "BUCK4",
+			.of_match = of_match_ptr("BUCK4"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD71851_BUCK4,
+			.ops = &bd71851_buck_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd71851_buck12348_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd71851_buck12348_volts),
+			.n_voltages = BD71851_NUM_VOLTS,
+			.enable_reg = BD71851_REG_BUCK4_ON,
+			.enable_mask = BD71851_MASK_RUN_EN,
+			.vsel_reg = BD71851_REG_BUCK4_VOLT_RUN,
+			.vsel_mask = BD71851_MASK_VOLT,
+			.ramp_delay_table = bd71828_ramp_delay,
+			.n_ramp_values = ARRAY_SIZE(bd71828_ramp_delay),
+			.ramp_reg = BD71851_REG_BUCK4_MODE,
+			.ramp_mask = BD71851_MASK_RAMP_DELAY,
+			.owner = THIS_MODULE,
+			.of_parse_cb = buck_set_hw_dvs_levels,
+		},
+		.dvs = {
+			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
+				     ROHM_DVS_LEVEL_SUSPEND,
+			.run_reg = BD71851_REG_BUCK4_VOLT_RUN,
+			.run_mask = BD71851_MASK_VOLT,
+			.idle_reg = BD71851_REG_BUCK4_VOLT_IDLE,
+			.idle_mask = BD71851_MASK_VOLT,
+			.idle_on_mask = BD71851_MASK_IDLE_EN,
+			.suspend_reg = BD71851_REG_BUCK4_VOLT_SUSP,
+			.suspend_mask = BD71851_MASK_VOLT,
+			.suspend_on_mask = BD71851_MASK_SUSP_EN,
+		},
+	}, {
+		.desc = {
+			.name = "BUCK5",
+			.of_match = of_match_ptr("BUCK5"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD71851_BUCK5,
+			.ops = &bd71851_buck5_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd71851_buck5_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd71851_buck5_volts),
+			.linear_range_selectors_bitfield =
+						bd71851_buck5_volt_range_sel,
+			.n_voltages = BD71851_NUM_BUCK5_VOLTS,
+			.enable_reg = BD71851_REG_BUCK5_ON,
+			.enable_mask = BD71851_MASK_RUN_EN,
+			.vsel_reg = BD71851_REG_BUCK5_VOLT_RUN,
+			.vsel_mask = BD71851_MASK_VOLT,
+			.vsel_range_reg = BD71851_REG_BUCK5_MODE,
+			.vsel_range_mask = BD71851_BUCK5_RANGE_MASK,
+			.ramp_delay_table = bd71828_ramp_delay,
+			.n_ramp_values = ARRAY_SIZE(bd71828_ramp_delay),
+			.ramp_reg = BD71851_REG_BUCK5_MODE,
+			.ramp_mask = BD71851_MASK_RAMP_DELAY,
+			.owner = THIS_MODULE,
+		},
+		.dvs = {
+			/*
+			 * We don't support setting the IDLE / SUSPEND voltages
+			 * for the BUCK 5 for now. Reason is that the pickable
+			 * range selector bit is common for all states (RUN,
+			 * SUSPEND and IDLE), and toggling it for one impacts
+			 * also others.
+			 * Furthermore, writing the BD71851 range selector does
+			 * not impact the RUN voltage until a new voltage value
+			 * is also written to the vsel register. Hence the
+			 * voltage change can be done without any 'intermediate
+			 * voltages', even when the range is changed when the
+			 * BUCK is enabled.
+			 * It, however, is not documented how the IDLE / SUSPEND
+			 * states work in this regard. I expect the full
+			 * combination of the range selector and vsel is taken
+			 * into account at the state change, no matter when they
+			 * have been written to.
+			 */
+			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
+				     ROHM_DVS_LEVEL_SUSPEND,
+			.run_reg = BD71851_REG_BUCK5_VOLT_RUN,
+			.run_mask = BD71851_MASK_VOLT,
+			.idle_on_mask = BD71851_MASK_IDLE_EN,
+			.suspend_on_mask = BD71851_MASK_SUSP_EN,
+		},
+
+	}, {
+		.desc = {
+			.name = "BUCK6",
+			.of_match = of_match_ptr("BUCK6"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD71851_BUCK6,
+			.ops = &bd71851_buck_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd71851_buck67_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd71851_buck67_volts),
+			.n_voltages = BD71851_NUM_VOLTS,
+			.enable_reg = BD71851_REG_BUCK6_ON,
+			.enable_mask = BD71851_MASK_RUN_EN,
+			.vsel_reg = BD71851_REG_BUCK6_VOLT_RUN,
+			.vsel_mask = BD71851_MASK_VOLT,
+			.ramp_delay_table = bd71828_ramp_delay,
+			.n_ramp_values = ARRAY_SIZE(bd71828_ramp_delay),
+			.ramp_reg = BD71851_REG_BUCK6_MODE,
+			.ramp_mask = BD71851_MASK_RAMP_DELAY,
+			.owner = THIS_MODULE,
+			.of_parse_cb = buck_set_hw_dvs_levels,
+		},
+		.dvs = {
+			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
+				     ROHM_DVS_LEVEL_SUSPEND,
+			.run_reg = BD71851_REG_BUCK6_VOLT_RUN,
+			.run_mask = BD71851_MASK_VOLT,
+			.idle_reg = BD71851_REG_BUCK6_VOLT_IDLE,
+			.idle_mask = BD71851_MASK_VOLT,
+			.idle_on_mask = BD71851_MASK_IDLE_EN,
+			.suspend_reg = BD71851_REG_BUCK6_VOLT_SUSP,
+			.suspend_mask = BD71851_MASK_VOLT,
+			.suspend_on_mask = BD71851_MASK_SUSP_EN,
+		},
+	}, {
+		.desc = {
+			.name = "BUCK7",
+			.of_match = of_match_ptr("BUCK7"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD71851_BUCK7,
+			.ops = &bd71851_buck_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd71851_buck67_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd71851_buck67_volts),
+			.n_voltages = BD71851_NUM_VOLTS,
+			.enable_reg = BD71851_REG_BUCK7_ON,
+			.enable_mask = BD71851_MASK_RUN_EN,
+			.vsel_reg = BD71851_REG_BUCK7_VOLT_RUN,
+			.vsel_mask = BD71851_MASK_VOLT,
+			.ramp_delay_table = bd71828_ramp_delay,
+			.n_ramp_values = ARRAY_SIZE(bd71828_ramp_delay),
+			.ramp_reg = BD71851_REG_BUCK7_MODE,
+			.ramp_mask = BD71851_MASK_RAMP_DELAY,
+			.owner = THIS_MODULE,
+			.of_parse_cb = buck_set_hw_dvs_levels,
+		},
+		.dvs = {
+			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
+				     ROHM_DVS_LEVEL_SUSPEND,
+			.run_reg = BD71851_REG_BUCK7_VOLT_RUN,
+			.run_mask = BD71851_MASK_VOLT,
+			.idle_reg = BD71851_REG_BUCK7_VOLT_IDLE,
+			.idle_mask = BD71851_MASK_VOLT,
+			.idle_on_mask = BD71851_MASK_IDLE_EN,
+			.suspend_reg = BD71851_REG_BUCK7_VOLT_SUSP,
+			.suspend_mask = BD71851_MASK_VOLT,
+			.suspend_on_mask = BD71851_MASK_SUSP_EN,
+		},
+	}, {
+		.desc = {
+			.name = "BUCK8",
+			.of_match = of_match_ptr("BUCK8"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD71851_BUCK8,
+			.ops = &bd71851_buck_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd71851_buck12348_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd71851_buck12348_volts),
+			.n_voltages = BD71851_NUM_VOLTS,
+			.enable_reg = BD71851_REG_BUCK8_ON,
+			.enable_mask = BD71851_MASK_RUN_EN,
+			.vsel_reg = BD71851_REG_BUCK8_VOLT_RUN,
+			.vsel_mask = BD71851_MASK_VOLT,
+			.ramp_delay_table = bd71828_ramp_delay,
+			.n_ramp_values = ARRAY_SIZE(bd71828_ramp_delay),
+			.ramp_reg = BD71851_REG_BUCK8_MODE,
+			.ramp_mask = BD71851_MASK_RAMP_DELAY,
+			.owner = THIS_MODULE,
+			.of_parse_cb = buck_set_hw_dvs_levels,
+		},
+		.dvs = {
+			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
+				     ROHM_DVS_LEVEL_SUSPEND,
+			.run_reg = BD71851_REG_BUCK8_VOLT_RUN,
+			.run_mask = BD71851_MASK_VOLT,
+			.idle_reg = BD71851_REG_BUCK8_VOLT_IDLE,
+			.idle_mask = BD71851_MASK_VOLT,
+			.idle_on_mask = BD71851_MASK_IDLE_EN,
+			.suspend_reg = BD71851_REG_BUCK8_VOLT_SUSP,
+			.suspend_mask = BD71851_MASK_VOLT,
+			.suspend_on_mask = BD71851_MASK_SUSP_EN,
+		},
+	}, {
+		.desc = {
+			.name = "LDO1",
+			.of_match = of_match_ptr(LDO1_NODE_NAME),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD71851_LDO1,
+			.ops = &bd71851_ldo_ops,
+			.type = REGULATOR_VOLTAGE,
+
+			/* TODO: Support using high/low volt ranges */
+			.linear_ranges = bd71851_ldo13_low_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd71851_ldo13_low_volts),
+			.n_voltages = BD71851_NUM_VOLTS,
+			.enable_reg = BD71851_REG_LDO1_ON,
+			.enable_mask = BD71851_MASK_RUN_EN,
+			.vsel_reg = BD71851_REG_LDO1_VOLT,
+			.vsel_mask = BD71851_MASK_VOLT,
+			.owner = THIS_MODULE,
+			.of_parse_cb = buck_set_hw_dvs_levels,
+		},
+		.dvs = {
+			/*
+			 * LDOs support only single voltage for all states.
+			 * Voltage can be individually enabled for each state
+			 * though. Allow setting enable/disable config by
+			 * setting the <state>_on_mask for all supported states.
+			 */
+			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
+				     ROHM_DVS_LEVEL_SUSPEND |
+			.run_reg = BD71851_REG_LDO1_VOLT,
+			.run_mask = BD71851_MASK_LDO_VOLT,
+			.idle_on_mask = BD71851_MASK_IDLE_EN,
+			.suspend_on_mask = BD71851_MASK_SUSP_EN,
+		},
+	}, {
+		.desc = {
+			.name = "LDO2",
+			.of_match = of_match_ptr("LDO2"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD71851_LDO2,
+			.ops = &bd71851_ldo_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd71851_ldo24_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd71851_ldo24_volts),
+			.n_voltages = BD71851_NUM_VOLTS,
+			.enable_reg = BD71851_REG_LDO2_ON,
+			.enable_mask = BD71851_MASK_RUN_EN,
+			.vsel_reg = BD71851_REG_LDO2_VOLT,
+			.vsel_mask = BD71851_MASK_VOLT,
+			.owner = THIS_MODULE,
+			.of_parse_cb = buck_set_hw_dvs_levels,
+		},
+		.dvs = {
+			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
+				     ROHM_DVS_LEVEL_SUSPEND |
+			.run_reg = BD71851_REG_LDO2_VOLT,
+			.run_mask = BD71851_MASK_LDO_VOLT,
+			.idle_on_mask = BD71851_MASK_IDLE_EN,
+			.suspend_on_mask = BD71851_MASK_SUSP_EN,
+		},
+	}, {
+		.desc = {
+			.name = "LDO3",
+			.of_match = of_match_ptr(LDO3_NODE_NAME),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD71851_LDO3,
+			.ops = &bd71851_ldo_ops,
+			.type = REGULATOR_VOLTAGE,
+
+			/* TODO: Support using high/low volt ranges */
+			.linear_ranges = bd71851_ldo13_low_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd71851_ldo13_low_volts),
+			.n_voltages = BD71851_NUM_VOLTS,
+			.enable_reg = BD71851_REG_LDO3_ON,
+			.enable_mask = BD71851_MASK_RUN_EN,
+			.vsel_reg = BD71851_REG_LDO3_VOLT,
+			.vsel_mask = BD71851_MASK_VOLT,
+			.owner = THIS_MODULE,
+			.of_parse_cb = buck_set_hw_dvs_levels,
+		},
+		.dvs = {
+			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
+				     ROHM_DVS_LEVEL_SUSPEND |
+			.run_reg = BD71851_REG_LDO3_VOLT,
+			.run_mask = BD71851_MASK_LDO_VOLT,
+			.idle_on_mask = BD71851_MASK_IDLE_EN,
+			.suspend_on_mask = BD71851_MASK_SUSP_EN,
+		},
+	}, {
+		.desc = {
+			.name = "LDO4",
+			.of_match = of_match_ptr("LDO4"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD71851_LDO4,
+			.ops = &bd71851_ldo_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd71851_ldo24_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd71851_ldo24_volts),
+			.n_voltages = BD71851_NUM_VOLTS,
+			.enable_reg = BD71851_REG_LDO4_ON,
+			.enable_mask = BD71851_MASK_RUN_EN,
+			.vsel_reg = BD71851_REG_LDO4_VOLT,
+			.vsel_mask = BD71851_MASK_VOLT,
+			.owner = THIS_MODULE,
+			.of_parse_cb = buck_set_hw_dvs_levels,
+		},
+		.dvs = {
+			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
+				     ROHM_DVS_LEVEL_SUSPEND |
+			.run_reg = BD71851_REG_LDO4_VOLT,
+			.run_mask = BD71851_MASK_LDO_VOLT,
+			.idle_on_mask = BD71851_MASK_IDLE_EN,
+			.suspend_on_mask = BD71851_MASK_SUSP_EN,
+		},
+	},
+};
+
+static int bd71851_check_ldo_otp_options(struct device *dev,
+					 struct bd71828_regulator_data *d,
+					 unsigned int num_reg_data)
+{
+	bool ldo1_use_high_range = false, ldo3_use_high_range = false;
+	struct device_node *nproot = dev->of_node;
+	struct device_node *np;
+	int ret;
+
+	/*
+	 * The code assumes regulator IDs to start from 0 and to match the
+	 * indexing of regulator data arrays. WARN if someone changes this.
+	 */
+	WARN_ON(d[BD71851_LDO1].desc.id != BD71851_LDO1);
+	WARN_ON(d[BD71851_LDO3].desc.id != BD71851_LDO3);
+
+	nproot = of_get_child_by_name(nproot, "regulators");
+	if (!nproot) {
+		dev_err(dev, "failed to find regulators node\n");
+		return -ENODEV;
+	}
+	for_each_child_of_node(nproot, np) {
+		if (!of_node_name_eq(np, LDO1_NODE_NAME))
+			ldo1_use_high_range = of_property_read_bool(np,
+							"rohm,ldo-range-high");
+		if (!of_node_name_eq(np, LDO3_NODE_NAME))
+			ldo3_use_high_range = of_property_read_bool(np,
+							"rohm,ldo-range-high");
+	}
+	of_node_put(nproot);
+
+	if (ldo1_use_high_range) {
+		d[BD71828_LDO1].desc.linear_ranges = &bd71851_ldo13_high_volts;
+		d[BD71828_LDO1].desc.n_linear_ranges =
+					ARRAY_SIZE(bd71851_ldo13_high_volts);
+	}
+	if (ldo3_use_high_range) {
+		d[BD71828_LDO3].desc.linear_ranges = &bd71851_ldo13_high_volts;
+		d[BD71828_LDO3].desc.n_linear_ranges =
+					ARRAY_SIZE(bd71851_ldo13_high_volts);
+	}
+
+	return 0;
+}
+
 static int bd71828_probe(struct platform_device *pdev)
 {
 	int i, j, ret;
+	enum rohm_chip_type chip = platform_get_device_id(pdev)->driver_data;
 	struct regulator_config config = {
 		.dev = pdev->dev.parent,
 	};
+	struct bd71828_regulator_data *d;
+	int num_regulator:
 
 	config.regmap = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!config.regmap)
 		return -ENODEV;
 
-	for (i = 0; i < ARRAY_SIZE(bd71828_rdata); i++) {
+	switch (chip) {
+	case ROHM_CHIP_TYPE_BD71828:
+		d = &bd71828_rdata[0];
+		num_regulator = ARRAY_SIZE(bd71828_rdata);
+	break;
+	case ROHM_CHIP_TYPE_BD71851:
+		num_regulator = 0;
+		d = devm_kmemdup(dev, bd71851_rdata, sizeof(bd71851_rdata),
+			     GFP_KERNEL);
+		if (!d)
+			return -ENOMEM;
+
+		num_regulator = ARRAY_SIZE(bd71851_rdata);
+
+		ret = bd71851_check_ldo_otp_options(&pdev->dev, d, num_regulator);
+		if (ret)
+			return ret;
+		break;
+	default:
+		dev_err(&pdev->dev, "Unsupported chip type %u\n", chip);
+		return -EINVAL;
+	}
+
+	for (i = 0; i < num_regulator; i++) {
 		struct regulator_dev *rdev;
 		const struct bd71828_regulator_data *rd;
 
-		rd = &bd71828_rdata[i];
+		rd = &d[i];
 		rdev = devm_regulator_register(&pdev->dev,
 					       &rd->desc, &config);
 		if (IS_ERR(rdev))
@@ -714,17 +1273,25 @@ static int bd71828_probe(struct platform_device *pdev)
 	return 0;
 }
 
+static const struct platform_device_id bd71828_pmic_id[] = {
+	{ "bd71828-pmic", ROHM_CHIP_TYPE_BD71828 },
+	{ "bd71851-pmic", ROHM_CHIP_TYPE_BD71851 },
+	{ },
+};
+MODULE_DEVICE_TABLE(platform, bd71828_pmic_id);
+
 static struct platform_driver bd71828_regulator = {
 	.driver = {
 		.name = "bd71828-pmic",
 		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
 	},
 	.probe = bd71828_probe,
+	.id_table = bd71828_pmic_id,
 };
 
 module_platform_driver(bd71828_regulator);
 
 MODULE_AUTHOR("Matti Vaittinen <matti.vaittinen@fi.rohmeurope.com>");
-MODULE_DESCRIPTION("BD71828 voltage regulator driver");
+MODULE_DESCRIPTION("BD71828 and BD71851 voltage regulator driver");
 MODULE_LICENSE("GPL");
 MODULE_ALIAS("platform:bd71828-pmic");
