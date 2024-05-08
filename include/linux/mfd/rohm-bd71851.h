@@ -25,6 +25,17 @@ enum {
 	BD71851_LDO4,
 };
 
+/*
+ * All regulators except BUCK 5 have full 8-bit register of valid voltage
+ * values.
+ */
+#define BD71851_NUM_VOLTS	0xff
+/*
+ * BUCK 5 has two sets of voltage ranges, both having valid voltage selectors
+ * from 0x0 to 0x7f
+ */
+#define BD71851_BUCK5_VOLTS	(0x80 + 0x80)
+
 /* BD71851 interrupts */
 enum {
 	/* INT_STAT_1 register IRQs, ADC and RTC */
@@ -79,6 +90,14 @@ enum {
 	BD71851_INT_GPIO3,
 	BD71851_INT_GPIO4,
 };
+
+#define BD71851_MASK_RUN_EN		BIT(2)
+#define BD71851_MASK_SUSP_EN		BIT(1)
+#define BD71851_MASK_IDLE_EN		BIT(0)
+#define BD71851_MASK_VOLT		GENMASK(7, 0)
+#define BD71851_MASK_BUCK5_VOLT		GENMASK(6, 0)
+#define BD71851_MASK_RAMP_DELAY		GENMASK(2, 1)
+#define BD71851_BUCK5_RANGE_MASK	BIT(7)
 
 /* BD71851 registers */
 enum {
