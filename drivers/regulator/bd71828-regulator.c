@@ -7,6 +7,7 @@
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/mfd/rohm-bd71828.h>
+#include <linux/mfd/rohm-bd71851.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -112,6 +113,12 @@ static const struct linear_range bd71851_buck5_volts[] = {
 	REGULATOR_LINEAR_RANGE(300000, 0x00, 0x46, 10000),
 	REGULATOR_LINEAR_RANGE(1000000, 0x47, 0x7f, 0),
 };
+/*
+ * iBUCK5 has two different pickable ranges, each having voltages matching
+ * selectors 0x0 to 0x7f. This gives 0x7f + 1 different voltages for each of
+ * the ranges.
+ */
+#define BD71851_NUM_BUCK5_VOLTS ((0x7f + 1) * 2)
 
 static const struct linear_range bd71851_buck67_volts[] = {
 	REGULATOR_LINEAR_RANGE(1500000, 0x00, 0xc8, 10000),
@@ -199,12 +206,11 @@ static const struct regulator_ops bd71851_buck5_ops = {
 	.enable = regulator_enable_regmap,
 	.disable = regulator_disable_regmap,
 	.is_enabled = regulator_is_enabled_regmap,
-	.list_voltage = regulator_list_voltage_linear_range,
+	.list_voltage = regulator_list_voltage_pickable_linear_range,
 	.set_voltage_sel = regulator_set_voltage_sel_pickable_regmap,
 	.get_voltage_sel = regulator_get_voltage_sel_pickable_regmap,
 	.set_ramp_delay = regulator_set_ramp_delay_regmap,
 };
-
 
 static const struct regulator_ops bd71851_ldo_ops = {
 	.enable = regulator_enable_regmap,
@@ -1076,9 +1082,9 @@ static const struct bd71828_regulator_data bd71851_rdata[] = {
 			 * setting the <state>_on_mask for all supported states.
 			 */
 			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
-				     ROHM_DVS_LEVEL_SUSPEND |
+				     ROHM_DVS_LEVEL_SUSPEND,
 			.run_reg = BD71851_REG_LDO1_VOLT,
-			.run_mask = BD71851_MASK_LDO_VOLT,
+			.run_mask = BD71851_MASK_VOLT,
 			.idle_on_mask = BD71851_MASK_IDLE_EN,
 			.suspend_on_mask = BD71851_MASK_SUSP_EN,
 		},
@@ -1102,9 +1108,9 @@ static const struct bd71828_regulator_data bd71851_rdata[] = {
 		},
 		.dvs = {
 			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
-				     ROHM_DVS_LEVEL_SUSPEND |
+				     ROHM_DVS_LEVEL_SUSPEND,
 			.run_reg = BD71851_REG_LDO2_VOLT,
-			.run_mask = BD71851_MASK_LDO_VOLT,
+			.run_mask = BD71851_MASK_VOLT,
 			.idle_on_mask = BD71851_MASK_IDLE_EN,
 			.suspend_on_mask = BD71851_MASK_SUSP_EN,
 		},
@@ -1130,9 +1136,9 @@ static const struct bd71828_regulator_data bd71851_rdata[] = {
 		},
 		.dvs = {
 			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
-				     ROHM_DVS_LEVEL_SUSPEND |
+				     ROHM_DVS_LEVEL_SUSPEND,
 			.run_reg = BD71851_REG_LDO3_VOLT,
-			.run_mask = BD71851_MASK_LDO_VOLT,
+			.run_mask = BD71851_MASK_VOLT,
 			.idle_on_mask = BD71851_MASK_IDLE_EN,
 			.suspend_on_mask = BD71851_MASK_SUSP_EN,
 		},
@@ -1156,9 +1162,9 @@ static const struct bd71828_regulator_data bd71851_rdata[] = {
 		},
 		.dvs = {
 			.level_map = ROHM_DVS_LEVEL_RUN | ROHM_DVS_LEVEL_IDLE |
-				     ROHM_DVS_LEVEL_SUSPEND |
+				     ROHM_DVS_LEVEL_SUSPEND,
 			.run_reg = BD71851_REG_LDO4_VOLT,
-			.run_mask = BD71851_MASK_LDO_VOLT,
+			.run_mask = BD71851_MASK_VOLT,
 			.idle_on_mask = BD71851_MASK_IDLE_EN,
 			.suspend_on_mask = BD71851_MASK_SUSP_EN,
 		},
@@ -1172,7 +1178,6 @@ static int bd71851_check_ldo_otp_options(struct device *dev,
 	bool ldo1_use_high_range = false, ldo3_use_high_range = false;
 	struct device_node *nproot = dev->of_node;
 	struct device_node *np;
-	int ret;
 
 	/*
 	 * The code assumes regulator IDs to start from 0 and to match the
@@ -1197,12 +1202,12 @@ static int bd71851_check_ldo_otp_options(struct device *dev,
 	of_node_put(nproot);
 
 	if (ldo1_use_high_range) {
-		d[BD71828_LDO1].desc.linear_ranges = &bd71851_ldo13_high_volts;
+		d[BD71828_LDO1].desc.linear_ranges = bd71851_ldo13_high_volts;
 		d[BD71828_LDO1].desc.n_linear_ranges =
 					ARRAY_SIZE(bd71851_ldo13_high_volts);
 	}
 	if (ldo3_use_high_range) {
-		d[BD71828_LDO3].desc.linear_ranges = &bd71851_ldo13_high_volts;
+		d[BD71828_LDO3].desc.linear_ranges = bd71851_ldo13_high_volts;
 		d[BD71828_LDO3].desc.n_linear_ranges =
 					ARRAY_SIZE(bd71851_ldo13_high_volts);
 	}
@@ -1217,8 +1222,8 @@ static int bd71828_probe(struct platform_device *pdev)
 	struct regulator_config config = {
 		.dev = pdev->dev.parent,
 	};
-	struct bd71828_regulator_data *d;
-	int num_regulator:
+	const struct bd71828_regulator_data *d;
+	int num_regulator;
 
 	config.regmap = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!config.regmap)
@@ -1230,18 +1235,24 @@ static int bd71828_probe(struct platform_device *pdev)
 		num_regulator = ARRAY_SIZE(bd71828_rdata);
 	break;
 	case ROHM_CHIP_TYPE_BD71851:
+	{
+		struct bd71828_regulator_data *tmp;
+
 		num_regulator = 0;
-		d = devm_kmemdup(dev, bd71851_rdata, sizeof(bd71851_rdata),
+		tmp = devm_kmemdup(&pdev->dev, bd71851_rdata, sizeof(bd71851_rdata),
 			     GFP_KERNEL);
-		if (!d)
+		if (tmp)
 			return -ENOMEM;
 
 		num_regulator = ARRAY_SIZE(bd71851_rdata);
 
-		ret = bd71851_check_ldo_otp_options(&pdev->dev, d, num_regulator);
+		ret = bd71851_check_ldo_otp_options(&pdev->dev, tmp, num_regulator);
 		if (ret)
 			return ret;
+
+		d = tmp;
 		break;
+	}
 	default:
 		dev_err(&pdev->dev, "Unsupported chip type %u\n", chip);
 		return -EINVAL;
