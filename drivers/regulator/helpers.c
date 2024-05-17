@@ -217,8 +217,14 @@ int regulator_set_voltage_sel_pickable_regmap(struct regulator_dev *rdev,
 		 * (but range changed) by using regmap_write_bits() and not the
 		 * regmap_update_bits().
 		 */
-		ret = regmap_write_bits(rdev->regmap, rdev->desc->vsel_reg,
-					rdev->desc->vsel_mask, sel);
+		if (desc->range_applied_by_vsel)
+			ret = regmap_write_bits(rdev->regmap,
+						rdev->desc->vsel_reg,
+						rdev->desc->vsel_mask, sel);
+		else
+			ret = regmap_update_bits(rdev->regmap,
+						 rdev->desc->vsel_reg,
+						 rdev->desc->vsel_mask, sel);
 	}
 
 	if (ret)
