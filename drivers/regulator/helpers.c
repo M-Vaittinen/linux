@@ -161,6 +161,63 @@ int regulator_get_voltage_sel_pickable_regmap(struct regulator_dev *rdev)
 }
 EXPORT_SYMBOL_GPL(regulator_get_voltage_sel_pickable_regmap);
 
+static int write_separate_vsel_and_range(struct regulator_dev *rdev,
+					 unsigned int sel, unsigned int range)
+{
+	bool force_write = false;
+	/*
+	 * By default we assume range is updated, and allow the
+	 * regmap_update_bits() to do the magic. However, there is a
+	 * special case where we need to check if range changed. So, if we
+	 * notice range was not updated we can skip the range write.
+	 */
+	bool range_updated = true;
+	int ret;
+
+	/*
+	 * Some PMICs treat the vsel_reg same as apply-bit. Force it
+	 * to be written even if the old selector were same as the new
+	 * (but range changed).
+	 */
+	if (rdev->desc->range_applied_by_vsel) {
+		force_write = true;
+
+		/*
+		 * Read from cache should be cheap so check if range changes
+		 * if range register is cached. This way we can avoid an
+		 * unnecessary write to vsel register if both the range and
+		 * the vsel are unchanged.
+		 */
+		if (regcache_reg_cached(rdev->regmap,
+					rdev->desc->vsel_range_reg)) {
+			int old;
+
+			regmap_read(rdev->regmap,
+				    rdev->desc->vsel_range_reg, &old);
+			if ((old & rdev->desc->vsel_range_mask) ==
+			    (range & rdev->desc->vsel_range_mask)) {
+				force_write = false;
+				range_updated = false;
+			}
+		}
+	}
+	if (range_updated)
+		ret = regmap_update_bits(rdev->regmap,
+					 rdev->desc->vsel_range_reg,
+					 rdev->desc->vsel_range_mask,
+					 range);
+	if (ret)
+		return ret;
+
+	if (force_write)
+		return regmap_write_bits(rdev->regmap,
+					rdev->desc->vsel_reg,
+					rdev->desc->vsel_mask, sel);
+
+	return regmap_update_bits(rdev->regmap, rdev->desc->vsel_reg,
+				  rdev->desc->vsel_mask, sel);
+}
+
 /**
  * regulator_set_voltage_sel_pickable_regmap - pickable range set_voltage_sel
  *
@@ -199,33 +256,12 @@ int regulator_set_voltage_sel_pickable_regmap(struct regulator_dev *rdev,
 	range = rdev->desc->linear_range_selectors_bitfield[i];
 	range <<= ffs(rdev->desc->vsel_range_mask) - 1;
 
-	if (rdev->desc->vsel_reg == rdev->desc->vsel_range_reg) {
-		ret = regmap_update_bits(rdev->regmap,
-					 rdev->desc->vsel_reg,
+	if (rdev->desc->vsel_reg == rdev->desc->vsel_range_reg)
+		ret = regmap_update_bits(rdev->regmap, rdev->desc->vsel_reg,
 					 rdev->desc->vsel_range_mask |
 					 rdev->desc->vsel_mask, sel | range);
-	} else {
-		ret = regmap_update_bits(rdev->regmap,
-					 rdev->desc->vsel_range_reg,
-					 rdev->desc->vsel_range_mask, range);
-		if (ret)
-			return ret;
-
-		/*
-		 * Some PMICs treat the vsel_reg same as apply-bit. Force it
-		 * to be written even if the old selector were same as the new
-		 * (but range changed) by using regmap_write_bits() and not the
-		 * regmap_update_bits().
-		 */
-		if (desc->range_applied_by_vsel)
-			ret = regmap_write_bits(rdev->regmap,
-						rdev->desc->vsel_reg,
-						rdev->desc->vsel_mask, sel);
-		else
-			ret = regmap_update_bits(rdev->regmap,
-						 rdev->desc->vsel_reg,
-						 rdev->desc->vsel_mask, sel);
-	}
+	else
+		ret = write_separate_vsel_and_range(rdev, sel, range);
 
 	if (ret)
 		return ret;
