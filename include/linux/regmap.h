@@ -1657,23 +1657,40 @@ int regmap_irq_set_type_config_simple(unsigned int **buf, unsigned int type,
 int regmap_add_irq_chip(struct regmap *map, int irq, int irq_flags,
 			int irq_base, const struct regmap_irq_chip *chip,
 			struct regmap_irq_chip_data **data);
+int regmap_add_irq_chip_named(struct regmap *map, int irq, int irq_flags,
+			int irq_base, const struct regmap_irq_chip *chip,
+			struct regmap_irq_chip_data **data,
+			const char *domain_suffix);
 int regmap_add_irq_chip_fwnode(struct fwnode_handle *fwnode,
 			       struct regmap *map, int irq,
 			       int irq_flags, int irq_base,
 			       const struct regmap_irq_chip *chip,
-			       struct regmap_irq_chip_data **data);
+			       struct regmap_irq_chip_data **data,
+			       const char *domain_suffix);
 void regmap_del_irq_chip(int irq, struct regmap_irq_chip_data *data);
 
 int devm_regmap_add_irq_chip(struct device *dev, struct regmap *map, int irq,
 			     int irq_flags, int irq_base,
 			     const struct regmap_irq_chip *chip,
 			     struct regmap_irq_chip_data **data);
+int devm_regmap_add_irq_chip_named(struct device *dev, struct regmap *map, int irq,
+			     int irq_flags, int irq_base,
+			     const struct regmap_irq_chip *chip,
+			     struct regmap_irq_chip_data **data,
+			     const char *domain_suffix);
 int devm_regmap_add_irq_chip_fwnode(struct device *dev,
 				    struct fwnode_handle *fwnode,
 				    struct regmap *map, int irq,
 				    int irq_flags, int irq_base,
 				    const struct regmap_irq_chip *chip,
 				    struct regmap_irq_chip_data **data);
+int devm_regmap_add_irq_chip_fwnode_named(struct device *dev,
+				    struct fwnode_handle *fwnode,
+				    struct regmap *map, int irq,
+				    int irq_flags, int irq_base,
+				    const struct regmap_irq_chip *chip,
+				    struct regmap_irq_chip_data **data,
+				    const char *domain_suffix);
 void devm_regmap_del_irq_chip(struct device *dev, int irq,
 			      struct regmap_irq_chip_data *data);
 
