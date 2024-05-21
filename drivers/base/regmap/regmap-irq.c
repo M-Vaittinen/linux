@@ -618,6 +618,7 @@ EXPORT_SYMBOL_GPL(regmap_irq_set_type_config_simple);
  * @irq_base: Allocate at specific IRQ number if irq_base > 0.
  * @chip: Configuration for the interrupt controller.
  * @data: Runtime data structure for the controller, allocated on success.
+ * @domain_suffix: IRQ domain name suffix to be appended to name.
  *
  * Returns 0 on success or an errno on failure.
  *
@@ -629,7 +630,8 @@ int regmap_add_irq_chip_fwnode(struct fwnode_handle *fwnode,
 			       struct regmap *map, int irq,
 			       int irq_flags, int irq_base,
 			       const struct regmap_irq_chip *chip,
-			       struct regmap_irq_chip_data **data)
+			       struct regmap_irq_chip_data **data,
+			       const char *domain_suffix)
 {
 	struct regmap_irq_chip_data *d;
 	int i;
@@ -856,13 +858,25 @@ int regmap_add_irq_chip_fwnode(struct fwnode_handle *fwnode,
 		}
 	}
 
-	if (irq_base)
-		d->domain = irq_domain_create_legacy(fwnode, chip->num_irqs,
-						     irq_base, 0,
-						     &regmap_domain_ops, d);
-	else
-		d->domain = irq_domain_create_linear(fwnode, chip->num_irqs,
-						     &regmap_domain_ops, d);
+	if (irq_base) {
+		if (!domain_suffix)
+			d->domain = irq_domain_create_legacy(fwnode,
+						chip->num_irqs, irq_base, 0,
+						&regmap_domain_ops, d);
+		else
+			d->domain = irq_domain_create_legacy_named(fwnode,
+						chip->num_irqs,	irq_base, 0,
+						&regmap_domain_ops, d, domain_suffix);
+	} else {
+		if (!domain_suffix)
+			d->domain = irq_domain_create_linear(fwnode,
+							chip->num_irqs,
+							&regmap_domain_ops, d);
+		else
+			d->domain = irq_domain_create_linear_named(fwnode,
+						chip->num_irqs, &regmap_domain_ops,
+						d, domain_suffix);
+	}
 	if (!d->domain) {
 		dev_err(map->dev, "Failed to create IRQ domain\n");
 		ret = -ENOMEM;
@@ -922,9 +936,36 @@ int regmap_add_irq_chip(struct regmap *map, int irq, int irq_flags,
 			struct regmap_irq_chip_data **data)
 {
 	return regmap_add_irq_chip_fwnode(dev_fwnode(map->dev), map, irq,
-					  irq_flags, irq_base, chip, data);
+					  irq_flags, irq_base, chip, data, NULL);
 }
 EXPORT_SYMBOL_GPL(regmap_add_irq_chip);
+
+/**
+ * regmap_add_irq_chip_named() - Named standard regmap IRQ controller handling
+ *
+ * @map: The regmap for the device.
+ * @irq: The IRQ the device uses to signal interrupts.
+ * @irq_flags: The IRQF_ flags to use for the primary interrupt.
+ * @irq_base: Allocate at specific IRQ number if irq_base > 0.
+ * @chip: Configuration for the interrupt controller.
+ * @data: Runtime data structure for the controller, allocated on success.
+ * @domain_suffix: Name suffix to be appended to end of IRQ domain name. Needed
+ *		   when multiple regmap-IRQ controllers are created from same
+ *		   device.
+ *
+ * Returns 0 on success or an errno on failure.
+ *
+ * This is the same as regmap_add_irq_chip_fwnode, except that the firmware
+ * node of the regmap is used.
+ */
+int regmap_add_irq_chip_named(struct regmap *map, int irq, int irq_flags,
+			int irq_base, const struct regmap_irq_chip *chip,
+			struct regmap_irq_chip_data **data, const char *domain_suffix)
+{
+	return regmap_add_irq_chip_fwnode(dev_fwnode(map->dev), map, irq,
+				irq_flags, irq_base, chip, data, domain_suffix);
+}
+EXPORT_SYMBOL_GPL(regmap_add_irq_chip_named);
 
 /**
  * regmap_del_irq_chip() - Stop interrupt handling for a regmap IRQ chip
@@ -996,6 +1037,56 @@ static int devm_regmap_irq_chip_match(struct device *dev, void *res, void *data)
 }
 
 /**
+ * devm_regmap_add_irq_chip_fwnode_named() - Resource managed regmap_add_irq_chip_fwnode()
+ *
+ * @dev: The device pointer on which irq_chip belongs to.
+ * @fwnode: The firmware node where the IRQ domain should be added to.
+ * @map: The regmap for the device.
+ * @irq: The IRQ the device uses to signal interrupts
+ * @irq_flags: The IRQF_ flags to use for the primary interrupt.
+ * @irq_base: Allocate at specific IRQ number if irq_base > 0.
+ * @chip: Configuration for the interrupt controller.
+ * @data: Runtime data structure for the controller, allocated on success
+ * @domain_suffix: Name suffix to be appended to end of IRQ domain name. Needed
+ *		 when multiple regmap-IRQ controllers are created from same
+ *		 device.
+ *
+ * Returns 0 on success or an errno on failure.
+ *
+ * The &regmap_irq_chip_data will be automatically released when the device is
+ * unbound.
+ */
+int devm_regmap_add_irq_chip_fwnode_named(struct device *dev,
+				    struct fwnode_handle *fwnode,
+				    struct regmap *map, int irq,
+				    int irq_flags, int irq_base,
+				    const struct regmap_irq_chip *chip,
+				    struct regmap_irq_chip_data **data,
+				    const char *domain_suffix)
+{
+	struct regmap_irq_chip_data **ptr, *d;
+	int ret;
+
+	ptr = devres_alloc(devm_regmap_irq_chip_release, sizeof(*ptr),
+			   GFP_KERNEL);
+	if (!ptr)
+		return -ENOMEM;
+
+	ret = regmap_add_irq_chip_fwnode(fwnode, map, irq, irq_flags, irq_base,
+					 chip, &d, domain_suffix);
+	if (ret < 0) {
+		devres_free(ptr);
+		return ret;
+	}
+
+	*ptr = d;
+	devres_add(dev, ptr);
+	*data = d;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(devm_regmap_add_irq_chip_fwnode_named);
+
+/**
  * devm_regmap_add_irq_chip_fwnode() - Resource managed regmap_add_irq_chip_fwnode()
  *
  * @dev: The device pointer on which irq_chip belongs to.
@@ -1019,25 +1110,9 @@ int devm_regmap_add_irq_chip_fwnode(struct device *dev,
 				    const struct regmap_irq_chip *chip,
 				    struct regmap_irq_chip_data **data)
 {
-	struct regmap_irq_chip_data **ptr, *d;
-	int ret;
-
-	ptr = devres_alloc(devm_regmap_irq_chip_release, sizeof(*ptr),
-			   GFP_KERNEL);
-	if (!ptr)
-		return -ENOMEM;
-
-	ret = regmap_add_irq_chip_fwnode(fwnode, map, irq, irq_flags, irq_base,
-					 chip, &d);
-	if (ret < 0) {
-		devres_free(ptr);
-		return ret;
-	}
-
-	*ptr = d;
-	devres_add(dev, ptr);
-	*data = d;
-	return 0;
+	return devm_regmap_add_irq_chip_fwnode_named(dev, fwnode, map, irq,
+						     irq_flags, irq_base, chip,
+						     data, NULL);
 }
 EXPORT_SYMBOL_GPL(devm_regmap_add_irq_chip_fwnode);
 
