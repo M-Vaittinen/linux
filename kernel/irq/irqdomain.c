@@ -132,7 +132,8 @@ static struct irq_domain *__irq_domain_create(struct fwnode_handle *fwnode,
 					      irq_hw_number_t hwirq_max,
 					      int direct_max,
 					      const struct irq_domain_ops *ops,
-					      void *host_data)
+					      void *host_data,
+					      const char *name_suffix)
 {
 	struct irqchip_fwid *fwid;
 	struct irq_domain *domain;
@@ -150,6 +151,17 @@ static struct irq_domain *__irq_domain_create(struct fwnode_handle *fwnode,
 		return NULL;
 
 	if (is_fwnode_irqchip(fwnode)) {
+		/*
+		 * The name_suffix is only intended to be used to avoid a name
+		 * collison, when multiple domains are created for a single
+		 * device and the name is picked using a real device node.
+		 * (Typical use-case is regmap-IRQ controllers for devices
+		 * providing more than one physical IRQ.) There should be no
+		 * need to use name_suffix with irqchip-fwnode.
+		 */
+		if (name_suffix)
+			return NULL;
+
 		fwid = container_of(fwnode, struct irqchip_fwid, fwnode);
 
 		switch (fwid->type) {
@@ -177,7 +189,11 @@ static struct irq_domain *__irq_domain_create(struct fwnode_handle *fwnode,
 		 * unhappy about. Replace them with ':', which does
 		 * the trick and is not as offensive as '\'...
 		 */
-		name = kasprintf(GFP_KERNEL, "%pfw", fwnode);
+		if (!name_suffix)
+			name = kasprintf(GFP_KERNEL, "%pfw", fwnode);
+		else
+			name = kasprintf(GFP_KERNEL, "%pfw-%s", fwnode,
+					 name_suffix);
 		if (!name) {
 			kfree(domain);
 			return NULL;
@@ -249,6 +265,8 @@ static void __irq_domain_publish(struct irq_domain *domain)
  *              direct mapping
  * @ops: domain callbacks
  * @host_data: Controller private data pointer
+ * @name_suffix: Optional name suffix to avoid collisions when multiple domains
+ * 		 are added using same fwnode
  *
  * Allocates and initializes an irq_domain structure.
  * Returns pointer to IRQ domain, or NULL on failure.
@@ -256,12 +274,12 @@ static void __irq_domain_publish(struct irq_domain *domain)
 struct irq_domain *__irq_domain_add(struct fwnode_handle *fwnode, unsigned int size,
 				    irq_hw_number_t hwirq_max, int direct_max,
 				    const struct irq_domain_ops *ops,
-				    void *host_data)
+				    void *host_data, const char *name_suffix)
 {
 	struct irq_domain *domain;
 
 	domain = __irq_domain_create(fwnode, size, hwirq_max, direct_max,
-				     ops, host_data);
+				     ops, host_data, name_suffix);
 	if (domain)
 		__irq_domain_publish(domain);
 
@@ -362,7 +380,7 @@ struct irq_domain *irq_domain_create_simple(struct fwnode_handle *fwnode,
 {
 	struct irq_domain *domain;
 
-	domain = __irq_domain_add(fwnode, size, size, 0, ops, host_data);
+	domain = __irq_domain_add(fwnode, size, size, 0, ops, host_data, NULL);
 	if (!domain)
 		return NULL;
 
@@ -409,6 +427,24 @@ struct irq_domain *irq_domain_add_legacy(struct device_node *of_node,
 }
 EXPORT_SYMBOL_GPL(irq_domain_add_legacy);
 
+struct irq_domain *irq_domain_create_legacy_named(struct fwnode_handle *fwnode,
+					 unsigned int size,
+					 unsigned int first_irq,
+					 irq_hw_number_t first_hwirq,
+					 const struct irq_domain_ops *ops,
+					 void *host_data, const char *name_suffix)
+{
+	struct irq_domain *domain;
+
+	domain = __irq_domain_add(fwnode, first_hwirq + size, first_hwirq + size,
+				  0, ops, host_data, name_suffix);
+	if (domain)
+		irq_domain_associate_many(domain, first_irq, first_hwirq, size);
+
+	return domain;
+}
+EXPORT_SYMBOL_GPL(irq_domain_create_legacy_named);
+
 struct irq_domain *irq_domain_create_legacy(struct fwnode_handle *fwnode,
 					 unsigned int size,
 					 unsigned int first_irq,
@@ -416,13 +452,8 @@ struct irq_domain *irq_domain_create_legacy(struct fwnode_handle *fwnode,
 					 const struct irq_domain_ops *ops,
 					 void *host_data)
 {
-	struct irq_domain *domain;
-
-	domain = __irq_domain_add(fwnode, first_hwirq + size, first_hwirq + size, 0, ops, host_data);
-	if (domain)
-		irq_domain_associate_many(domain, first_irq, first_hwirq, size);
-
-	return domain;
+	return irq_domain_create_legacy_named(fwnode, size, first_irq,
+					      first_hwirq, ops, host_data, NULL);
 }
 EXPORT_SYMBOL_GPL(irq_domain_create_legacy);
 
@@ -1146,9 +1177,11 @@ struct irq_domain *irq_domain_create_hierarchy(struct irq_domain *parent,
 	struct irq_domain *domain;
 
 	if (size)
-		domain = __irq_domain_create(fwnode, size, size, 0, ops, host_data);
+		domain = __irq_domain_create(fwnode, size, size, 0, ops,
+					     host_data, NULL);
 	else
-		domain = __irq_domain_create(fwnode, 0, ~0, 0, ops, host_data);
+		domain = __irq_domain_create(fwnode, 0, ~0, 0, ops, host_data,
+					     NULL);
 
 	if (domain) {
 		if (parent)
