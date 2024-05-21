@@ -919,6 +919,7 @@ static const struct bd71828_regulator_data bd71851_rdata[] = {
 			.vsel_mask = BD71851_MASK_VOLT,
 			.vsel_range_reg = BD71851_REG_BUCK5_MODE,
 			.vsel_range_mask = BD71851_BUCK5_RANGE_MASK,
+			.range_applied_by_vsel = true,
 			.ramp_delay_table = bd71828_ramp_delay,
 			.n_ramp_values = ARRAY_SIZE(bd71828_ramp_delay),
 			.ramp_reg = BD71851_REG_BUCK5_MODE,
@@ -1176,7 +1177,7 @@ static int bd71851_check_ldo_otp_options(struct device *dev,
 					 unsigned int num_reg_data)
 {
 	bool ldo1_use_high_range = false, ldo3_use_high_range = false;
-	struct device_node *nproot = dev->of_node;
+	struct device_node *nproot = dev->parent->of_node;
 	struct device_node *np;
 
 	/*
@@ -1241,7 +1242,7 @@ static int bd71828_probe(struct platform_device *pdev)
 		num_regulator = 0;
 		tmp = devm_kmemdup(&pdev->dev, bd71851_rdata, sizeof(bd71851_rdata),
 			     GFP_KERNEL);
-		if (tmp)
+		if (!tmp)
 			return -ENOMEM;
 
 		num_regulator = ARRAY_SIZE(bd71851_rdata);
