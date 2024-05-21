@@ -260,7 +260,7 @@ void irq_domain_free_fwnode(struct fwnode_handle *fwnode);
 struct irq_domain *__irq_domain_add(struct fwnode_handle *fwnode, unsigned int size,
 				    irq_hw_number_t hwirq_max, int direct_max,
 				    const struct irq_domain_ops *ops,
-				    void *host_data);
+				    void *host_data, const char *name_suffix);
 struct irq_domain *irq_domain_create_simple(struct fwnode_handle *fwnode,
 					    unsigned int size,
 					    unsigned int first_irq,
@@ -350,7 +350,8 @@ static inline struct irq_domain *irq_domain_add_linear(struct device_node *of_no
 					 const struct irq_domain_ops *ops,
 					 void *host_data)
 {
-	return __irq_domain_add(of_node_to_fwnode(of_node), size, size, 0, ops, host_data);
+	return __irq_domain_add(of_node_to_fwnode(of_node), size, size, 0, ops,
+				host_data, NULL);
 }
 
 #ifdef CONFIG_IRQ_DOMAIN_NOMAP
@@ -359,7 +360,8 @@ static inline struct irq_domain *irq_domain_add_nomap(struct device_node *of_nod
 					 const struct irq_domain_ops *ops,
 					 void *host_data)
 {
-	return __irq_domain_add(of_node_to_fwnode(of_node), 0, max_irq, max_irq, ops, host_data);
+	return __irq_domain_add(of_node_to_fwnode(of_node), 0, max_irq, max_irq,
+						  ops, host_data, NULL);
 }
 
 extern unsigned int irq_create_direct_mapping(struct irq_domain *host);
@@ -369,7 +371,7 @@ static inline struct irq_domain *irq_domain_add_tree(struct device_node *of_node
 					 const struct irq_domain_ops *ops,
 					 void *host_data)
 {
-	return __irq_domain_add(of_node_to_fwnode(of_node), 0, ~0, 0, ops, host_data);
+	return __irq_domain_add(of_node_to_fwnode(of_node), 0, ~0, 0, ops, host_data, NULL);
 }
 
 static inline struct irq_domain *irq_domain_create_linear(struct fwnode_handle *fwnode,
@@ -377,14 +379,22 @@ static inline struct irq_domain *irq_domain_create_linear(struct fwnode_handle *
 					 const struct irq_domain_ops *ops,
 					 void *host_data)
 {
-	return __irq_domain_add(fwnode, size, size, 0, ops, host_data);
+	return __irq_domain_add(fwnode, size, size, 0, ops, host_data, NULL);
+}
+
+static inline struct irq_domain *irq_domain_create_linear_named(struct fwnode_handle *fwnode,
+					 unsigned int size,
+					 const struct irq_domain_ops *ops,
+					 void *host_data, const char *name_suffix)
+{
+	return __irq_domain_add(fwnode, size, size, 0, ops, host_data, name_suffix);
 }
 
 static inline struct irq_domain *irq_domain_create_tree(struct fwnode_handle *fwnode,
 					 const struct irq_domain_ops *ops,
 					 void *host_data)
 {
-	return __irq_domain_add(fwnode, 0, ~0, 0, ops, host_data);
+	return __irq_domain_add(fwnode, 0, ~0, 0, ops, host_data, NULL);
 }
 
 extern void irq_domain_remove(struct irq_domain *host);
