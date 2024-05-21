@@ -221,9 +221,9 @@ static int bd96801_i2c_probe(struct i2c_client *i2c)
 	if (ret)
 		return dev_err_probe(&i2c->dev, ret, "Failed to unlock PMIC\n");
 
-	ret = devm_regmap_add_irq_chip(&i2c->dev, regmap, intb_irq,
+	ret = devm_regmap_add_irq_chip_named(&i2c->dev, regmap, intb_irq,
 				       IRQF_ONESHOT, 0, &bd96801_irq_chip_intb,
-				       &intb_irq_data);
+				       &intb_irq_data, "intb");
 	if (ret)
 		return dev_err_probe(&i2c->dev, ret, "Failed to add INTB IRQ chip\n");
 
