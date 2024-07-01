@@ -129,13 +129,25 @@ void irq_domain_free_fwnode(struct fwnode_handle *fwnode)
 EXPORT_SYMBOL_GPL(irq_domain_free_fwnode);
 
 static int irq_domain_set_name(struct irq_domain *domain,
-			       const struct fwnode_handle *fwnode,
-			       enum irq_domain_bus_token bus_token)
+			       const struct irq_domain_info *info)
 {
+	const struct fwnode_handle *fwnode = info->fwnode;
+	enum irq_domain_bus_token bus_token = info->bus_token;
 	static atomic_t unknown_domains;
 	struct irqchip_fwid *fwid;
 
 	if (is_fwnode_irqchip(fwnode)) {
+		/*
+		 * The name_suffix is only intended to be used to avoid a name
+		 * collison, when multiple domains are created for a single
+		 * device and the name is picked using a real device node.
+		 * (Typical use-case is regmap-IRQ controllers for devices
+		 * providing more than one physical IRQ.) There should be no
+		 * need to use name_suffix with irqchip-fwnode.
+		 */
+		if (info->name_suffix)
+			return NULL;
+
 		fwid = container_of(fwnode, struct irqchip_fwid, fwnode);
 
 		switch (fwid->type) {
@@ -164,17 +176,23 @@ static int irq_domain_set_name(struct irq_domain *domain,
 		   is_software_node(fwnode)) {
 		char *name;
 
+		if (info->name_suffix)
+			name = bus_token ?
+				kasprintf(GFP_KERNEL, "%pfw-%s-%d", fwnode,
+					  info->name_suffix, bus_token) :
+				kasprintf(GFP_KERNEL, "%pfw-%s", fwnode, info->name_suffix);
+		else
+			name = bus_token ?
+				kasprintf(GFP_KERNEL, "%pfw-%d", fwnode, bus_token) :
+				kasprintf(GFP_KERNEL, "%pfw", fwnode);
+		if (!name)
+			return -ENOMEM;
+
 		/*
 		 * fwnode paths contain '/', which debugfs is legitimately
 		 * unhappy about. Replace them with ':', which does
 		 * the trick and is not as offensive as '\'...
 		 */
-		name = bus_token ?
-			kasprintf(GFP_KERNEL, "%pfw-%d", fwnode, bus_token) :
-			kasprintf(GFP_KERNEL, "%pfw", fwnode);
-		if (!name)
-			return -ENOMEM;
-
 		domain->name = strreplace(name, '/', ':');
 		domain->flags |= IRQ_DOMAIN_NAME_ALLOCATED;
 	}
@@ -211,7 +229,7 @@ static struct irq_domain *__irq_domain_create(const struct irq_domain_info *info
 	if (!domain)
 		return ERR_PTR(-ENOMEM);
 
-	err = irq_domain_set_name(domain, info->fwnode, info->bus_token);
+	err = irq_domain_set_name(domain, info);
 	if (err) {
 		kfree(domain);
 		return ERR_PTR(err);
