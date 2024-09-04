@@ -347,14 +347,15 @@ static const struct regmap_config bd96801_regmap_config = {
 
 static int bd96801_i2c_probe(struct i2c_client *i2c)
 {
-	int i, ret, intb_irq, errb_irq, num_regu_irqs, num_intb, num_errb = 0;
-	int wdg_irq_no;
 	struct regmap_irq_chip_data *intb_irq_data, *errb_irq_data;
 	struct irq_domain *intb_domain, *errb_domain;
-	struct resource wdg_irq;
 	const struct fwnode_handle *fwnode;
 	struct resource *regulator_res;
+	struct resource wdg_irq;
 	struct regmap *regmap;
+	int intb_irq, errb_irq, num_intb, num_errb = 0;
+	int num_regu_irqs, wdg_irq_no;
+	int i, ret;
 
 	fwnode = dev_fwnode(&i2c->dev);
 	if (!fwnode)
@@ -394,7 +395,7 @@ static int bd96801_i2c_probe(struct i2c_client *i2c)
 				       IRQF_ONESHOT, 0, &bd96801_irq_chip_intb,
 				       &intb_irq_data);
 	if (ret)
-		return dev_err_probe(&i2c->dev, ret, "Failed to add INTB irq_chip\n");
+		return dev_err_probe(&i2c->dev, ret, "Failed to add INTB IRQ chip\n");
 
 	intb_domain = regmap_irq_get_domain(intb_irq_data);
 
@@ -423,7 +424,7 @@ static int bd96801_i2c_probe(struct i2c_client *i2c)
 				       0, &bd96801_irq_chip_errb, &errb_irq_data);
 	if (ret)
 		return dev_err_probe(&i2c->dev, ret,
-				     "Failed to add ERRB (%d) irq_chip\n", errb_irq);
+				     "Failed to add ERRB IRQ chip\n");
 
 	errb_domain = regmap_irq_get_domain(errb_irq_data);
 
