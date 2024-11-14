@@ -9,6 +9,7 @@
 
 #include <linux/bitfield.h>
 #include <linux/bitops.h>
+#include <linux/cleanup.h>
 #include <linux/device.h>
 #include <linux/i2c.h>
 #include <linux/interrupt.h>
@@ -889,28 +890,27 @@ static int bu27008_try_set_int_time(struct bu27008_data *data, int int_time_new)
 {
 	int ret, old_time_sel, new_time_sel,  old_gain, new_gain;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 
 	ret = bu27008_get_int_time_sel(data, &old_time_sel);
 	if (ret < 0)
-		goto unlock_out;
+		return ret;
 
 	if (!iio_gts_valid_time(&data->gts, int_time_new)) {
 		dev_dbg(data->dev, "Unsupported integration time %u\n",
 			int_time_new);
 
-		ret = -EINVAL;
-		goto unlock_out;
+		return -EINVAL;
 	}
 
 	/* If we already use requested time, then we're done */
 	new_time_sel = iio_gts_find_sel_by_int_time(&data->gts, int_time_new);
 	if (new_time_sel == old_time_sel)
-		goto unlock_out;
+		return 0;
 
 	ret = bu27008_get_gain(data, &data->gts, &old_gain);
 	if (ret)
-		goto unlock_out;
+		return ret;
 
 	ret = iio_gts_find_new_gain_sel_by_old_gain_time(&data->gts, old_gain,
 				old_time_sel, new_time_sel, &new_gain);
@@ -924,7 +924,7 @@ static int bu27008_try_set_int_time(struct bu27008_data *data, int int_time_new)
 			int_time_new, scale1, scale2);
 
 		if (new_gain < 0)
-			goto unlock_out;
+			return ret;
 
 		/*
 		 * If caller requests for integration time change and we
@@ -941,7 +941,7 @@ static int bu27008_try_set_int_time(struct bu27008_data *data, int int_time_new)
 				 "Total gain increase. Risk of saturation");
 			ret = iio_gts_get_min_gain(&data->gts);
 			if (ret < 0)
-				goto unlock_out;
+				return ret;
 		}
 		new_gain = ret;
 		dev_dbg(data->dev, "scale changed, new gain %u\n", new_gain);
@@ -949,14 +949,9 @@ static int bu27008_try_set_int_time(struct bu27008_data *data, int int_time_new)
 
 	ret = bu27008_set_gain(data, new_gain);
 	if (ret)
-		goto unlock_out;
+		return ret;
 
-	ret = bu27008_set_int_time(data, int_time_new);
-
-unlock_out:
-	mutex_unlock(&data->mutex);
-
-	return ret;
+	return bu27008_set_int_time(data, int_time_new);
 }
 
 static int bu27008_meas_set(struct bu27008_data *data, bool enable)
@@ -1267,26 +1262,21 @@ static int bu27008_set_scale(struct bu27008_data *data,
 	if (chan->scan_index == BU27008_IR)
 		return -EINVAL;
 
-	mutex_lock(&data->mutex);
+	guard(mutex)(&data->mutex);
 
 	ret = bu27008_get_int_time_sel(data, &time_sel);
 	if (ret < 0)
-		goto unlock_out;
+		return ret;
 
 	ret = iio_gts_find_gain_sel_for_scale_using_time(&data->gts, time_sel,
 						val, val2, &gain_sel);
 	if (ret) {
 		ret = bu27008_try_find_new_time_gain(data, val, val2, &gain_sel);
 		if (ret)
-			goto unlock_out;
+			return ret;
 
 	}
-	ret = data->cd->write_gain_sel(data, gain_sel);
-
-unlock_out:
-	mutex_unlock(&data->mutex);
-
-	return ret;
+	return data->cd->write_gain_sel(data, gain_sel);
 }
 
 static int bu27008_write_raw_get_fmt(struct iio_dev *indio_dev,
