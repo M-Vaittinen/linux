@@ -21,7 +21,7 @@ properties:
     enum:
       - kionix,kx022a
       - kionix,kx132-1211
-      - rohm,kx134-1211
+      - kionix,kx134-1211
       - rohm,kx132acr-lbz
       - rohm,kx134acr-lbz
 
