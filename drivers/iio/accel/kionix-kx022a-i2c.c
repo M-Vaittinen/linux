@@ -48,7 +48,7 @@ MODULE_DEVICE_TABLE(i2c, kx022a_i2c_id);
 static const struct of_device_id kx022a_of_match[] = {
 	{ .compatible = "kionix,kx022a", .data = &kx022a_chip_info },
 	{ .compatible = "kionix,kx132-1211", .data = &kx132_chip_info },
-	{ .compatible = "rohm,kx134-1211", .data = &kx134_chip_info },
+	{ .compatible = "kionix,kx134-1211", .data = &kx134_chip_info },
 	{ .compatible = "rohm,kx132acr-lbz", .data = &kx132acr_chip_info },
 	{ .compatible = "rohm,kx134acr-lbz", .data = &kx134acr_chip_info },
 	{ }
