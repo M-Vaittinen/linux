@@ -108,6 +108,10 @@ properties:
       purposes. Set this property accrdingly.
     const: gpo
 
+  rohm,dvs-vsel-gpios:
+    description: Reference to two GPIO pins used to switch between sub-run
+      states (RUN0 .. RUN3).
+
 required:
   - compatible
   - reg
