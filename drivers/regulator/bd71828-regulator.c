@@ -2105,7 +2105,7 @@ static int bd72720_buck10_ldon_head_mode(struct device *dev,
 	int ldon_val;
 	int ret;
 
-	ret = of_property_read_u32(np, "rohm,ldon-head-mv", &ldon_head);
+	ret = of_property_read_u32(np, "rohm,ldon-head-millivolt", &ldon_head);
 	if (ret == -EINVAL)
 		return 0;
 	if (ret)
