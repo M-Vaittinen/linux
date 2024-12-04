@@ -92,6 +92,14 @@ patternProperties:
         description:
           should be "buck1", ..., "buck10"
 
+      rohm,ldon-head-millivolt:
+        description:
+          Set this on boards where BUCK10 is used to supply LDOs 1-4. The bucki
+          voltage will be changed by the PMIC to follow the LDO output voltages
+          with the offset voltage given here. This will improve the LDO efficiency.
+        minimum: 50
+        maximum: 300
+
       rohm,dvs-run-voltage:
         description:
           PMIC default "RUN" state voltage in uV. See below table for
