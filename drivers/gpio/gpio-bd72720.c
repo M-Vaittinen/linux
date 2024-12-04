@@ -111,7 +111,7 @@ static int bd72720_gpio_get_pins(struct bd72720_gpio *g)
 	return 0;
 }
 
-static int bd72720gpi_get(struct bd72720_gpio *bdgpio, unsigned int offset)
+static int bd72720gpi_get(struct bd72720_gpio *bdgpio, unsigned int reg_offset)
 {
 	int ret, val, shift;
 
@@ -119,7 +119,7 @@ static int bd72720gpi_get(struct bd72720_gpio *bdgpio, unsigned int offset)
 	if (ret)
 		return ret;
 
-	shift = BD72720_INT_GPIO1_IN_SRC + offset;
+	shift = BD72720_INT_GPIO1_IN_SRC + reg_offset;
 
 	return (val >> shift) & 1;
 
@@ -143,7 +143,7 @@ static int bd72720gpio_get(struct gpio_chip *chip, unsigned int offset)
 	struct bd72720_gpio_pin_cfg *pin = &bdgpio->pin[offset];
 
 	if (pin->state == BD72720_PIN_GPI)
-		return bd72720gpi_get(bdgpio, offset);
+		return bd72720gpi_get(bdgpio, pin->pin_no);
 	if (pin->state == BD72720_PIN_GPO)
 		return bd72720gpo_get(bdgpio, pin);
 
