@@ -1,0 +1,85 @@
+// SPDX-License-Identifier: GPL-2.0-only
+
+Laina ## 3 ## Nousukausi
+Kauppareitti ## 3 ## Nousukausi 
+Vartiotorni ## 3 ## Nousukausi 
+Piispa ## 4 ## Nousukausi 
+Monumentti ## 4 ## Nousukausi 
+Louhos ## 4 ## Nousukausi 
+Talismaani ## 4 ## Nousukausi 
+Työläiskylä ## 4 ## Nousukausi 
+Kaupunki ## 5 ## Nousukausi 
+Hämärät varat ## 5 ## Nousukausi 
+Tilitoimisto ## 5 ## Nousukausi 
+Rahapaja ## 5 ## Nousukausi 
+Petkuttaja ## 5 ## Nousukausi 
+Rahvas ## 5 ## Nousukausi 
+Sinetti ## 5 ## Nousukausi 
+Holvi ## 5 ## Nousukausi 
+Palkkio ## 5 ## Nousukausi 
+Roistot ## 6 ## Nousukausi 
+Suurtori ## 6 ## Nousukausi 
+Aarre ## 6 ## Nousukausi 
+Pankki ## 7 ## Nousukausi 
+Laajennus ## 7 ## Nousukausi 
+Ahjo ## 7 ## Nousukausi 
+Kuninkaan Hovi ## 7 ## Nousukausi 
+Kulkukauppias ## 8 ## Nousukausi 
+
+
+Rakennusmestari ## 4 ## Keisarikunta 
+Kaupunginosa ## 8 ## Keisarikunta 
+Ylipäällikkö ## 8 ## Keisarikunta 
+Kuninkaanseppä ## 8 ## Keisarikunta 
+Leiri / Ryöstösaalis ## 2 ## Keisarikunta 
+Patriisi / Markkinapaikka ## 2 ## Keisarikunta 
+Uudisasukkaat / Vilkas kylä ## 2 ## Keisarikunta 
+Linnat ## 3 ## Keisarikunta 
+Katapultti / Kivet ## 3 ## Keisarikunta 
+Vaunukisat ## 3 ## Keisarikunta 
+Lumoajatar ## 3 ## Keisarikunta 
+Maalaismarkkinat ## 3 ## Keisarikunta 
+Gladiaattori / Palkinto ## 3 ## Keisarikunta 
+Uhraus ## 4 ## Keisarikunta 
+Temppeli ## 4 ## Keisarikunta 
+Huvila ## 4 ## Keisarikunta 
+Arkisto ## 5 ## Keisarikunta 
+Pääoma ## 5 ## Keisarikunta 
+Onnenkalu ## 5 ## Keisarikunta 
+Kruunu ## 5 ## Keisarikunta 
+Foorumi ## 5 ## Keisarikunta 
+Henkijahti ## 5 ## Keisarikunta 
+Legioonalainen ## 5 ## Keisarikunta 
+Puutarhuri ## 5 ## Keisarikunta 
+
+
+Byrokraatti ## 4 ## Valtakunta 
+Juhlat ## 5 ## Valtakunta 
+Kaivos ## 5 ## Valtakunta 
+Kansleri ## 3 ## Valtakunta 
+Kappeli ## 2 ## Valtakunta 
+Kellari ## 2 ## Valtakunta 
+Kirjasto ## 5 ## Valtakunta 
+Koronkiskuri ## 4 ## Valtakunta 
+Kylä ## 3 ## Valtakunta 
+Laboratorio ## 5 ## Valtakunta 
+Metsuri ## 3 ## Valtakunta 
+Muutostyö ## 4 ## Valtakunta 
+Noita ## 5 ## Valtakunta 
+Nostoväki ## 4 ## Valtakunta 
+Pidot ## 4 ## Valtakunta 
+Puutarha ## 4 ## Valtakunta 
+Raatihuone ## 5 ## Valtakunta 
+Seikkailija ## 6 ## Valtakunta 
+Takomo ## 4 ## Valtakunta 
+Tori ## 5 ## Valtakunta 
+Työpaja ## 3 ## Valtakunta 
+Vakooja ## 4 ## Valtakunta 
+Vallihauta ## 2 ## Valtakunta 
+Valtaistuinsali ## 4 ## Valtakunta 
+Varas ## 4 ## Valtakunta 
+
+Spurgutyö ## 4 ## Extras
+Linnoitettu-kylä ## 4 ## Extras
+Mustapörssi ## 3 ## Extras
+
