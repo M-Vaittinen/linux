@@ -2,11 +2,28 @@
 //
 // Copyright (C) 2025 Matti Vaittinen
 
+#define VERSION "0.1"
+
+#include <getopt.h>
+#include <unistd.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <time.h>
+
+#define OPTSTRING "c:e:f:svh?"
+
+static struct option long_options[] =
+{
+	{"stats", no_argument,  0, 's'},
+	{"num-cheap" , required_argument, 0, 'c'},
+	{"num-four" , required_argument, 0, 'f'},
+	{"num-expensive" , required_argument, 0, 'e'},
+	{"version",  no_argument, 0, 'v'},
+	{"help",  no_argument, 0, 'h'},
+	{0,0,0,0}
+};
 
 struct card {
 	struct card *next;
@@ -110,7 +127,17 @@ void add_card(struct card *c)
 	}
 }
 
+int print_stats()
+{
+	struct card *c;
 
+	printf("Number of cards: %d\n", g_num_cards); 
+	printf("Cheap (<4) : %d\n", g_numalle); 
+	printf("Mid-range (4) : %d\n", g_numtasan); 
+	printf("Expensive (>4) : %d\n", g_numyli); 
+
+	return 0;
+}
 
 int read_cards()
 {
@@ -139,20 +166,34 @@ int read_cards()
 	return -1;
 }
 
-int arvo(char *num, int foo)
+static void print_usage()
+{
+	printf("Usage: ./dice [-s -e<exp> -f<mid> -c<cheap> -v -h]\n");
+	printf("\t-s --stats\n");
+	printf("\t-c --num-cheap <NUM>\n");
+	printf("\t-f --num-four <NUM>\n");
+	printf("\t-e --num-expensive <NUM>\n");
+	printf("\t-v --version\n");
+	printf("\t-h --help\n");
+	printf("-s: summary of known cards\n");
+	printf("-c -f -e: override default number of cards (3,3,4)\n");
+}
+
+int err_info(int err)
+{
+	print_usage();
+
+	return err;
+}
+
+int arvo(int num, int foo)
 {
 	int i;
-	unsigned long ret;
-	char *chkptr;
 	struct card *head[] = { &alle4, &nelja, &yli4 };
 	struct card *c;
 
- 	ret = strtoul(num, &chkptr, 0);
-	if (*chkptr && *chkptr != '\n' && chkptr != num)
-		return ret;
-
 	c = head[foo]->next;
-	for (i = 0; i < ret && c; i++) {
+	for (i = 0; i < num && c; i++) {
 		printf("%s\t (%u) \t %s\n", c->name, c->prize, c->sequel);
 		c = c->next;
 	}
@@ -160,18 +201,64 @@ int arvo(char *num, int foo)
 	return 0;
 }
 
+enum {
+	NUM_CHEAP,
+	NUM_MID,
+	NUM_EXP
+};
+
 int main(int argc, char *argv[])
 {
-	int ret, i;
+	int ret, i, c;
+	int num_cards[] = {3, 3, 4};
+	int pr_stats = 0;
+	int index;
 
-	if (argc != 4) {
-		printf("Parametrit puuttuu, num < 4, num 4, num > 4\n");
-		return EINVAL;
+	while (-1 != (c = getopt_long(argc, argv, OPTSTRING, long_options, &index)))
+	{
+		char *chkptr;
+
+		switch(c) {
+		case 'c':
+	 		num_cards[NUM_CHEAP] = strtoul(optarg, &chkptr, 0);
+			if (chkptr == optarg || (*chkptr && *chkptr != '\n'))
+				return err_info(EINVAL);
+			break;
+		case 'f':
+ 			num_cards[NUM_MID] = strtoul(optarg, &chkptr, 0);
+			if (chkptr == optarg || (*chkptr && *chkptr != '\n'))
+				return err_info(EINVAL);
+		break;
+		case 'e':
+ 			num_cards[NUM_EXP] = strtoul(optarg, &chkptr, 0);
+			if (chkptr == optarg || (*chkptr && *chkptr != '\n'))
+				return err_info(EINVAL);
+		break;
+		case 's':
+			pr_stats = 1;
+			break;
+		case 'v':
+			printf("%s version: %s\n",argv[0],VERSION);
+			return 0;
+			break;
+		case '?':
+		case 'h':
+			printf("%s version: %s\n",argv[0],VERSION);
+			print_usage();
+			return 0;
+			break;
+		default:
+			break;
+		}
 	}
+
 	init();
 	ret = read_cards();
 	if (ret)
 		return ret;
+
+	if (pr_stats)
+		return print_stats();
 
 	if (!g_num_cards)
 		return -EINVAL;
@@ -179,7 +266,7 @@ int main(int argc, char *argv[])
 	suffle();
 
 	for (i = 0; i < 3; i++) {
-		ret = arvo(argv[i + 1], i);
+		ret = arvo(num_cards[i], i);
 		if (ret)
 			return ret;
 	}
