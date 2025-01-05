@@ -13,11 +13,13 @@
 #include <errno.h>
 #include <time.h>
 
-#define OPTSTRING "c:e:f:svh?"
+#define OPTSTRING "CcE::e:f:svh?"
 
 static struct option long_options[] =
 {
+	{"exclude-chapter", required_argument, 0, 'E'},
 	{"stats", no_argument,  0, 's'},
+	{"chapters", no_argument,  0, 'C'},
 	{"num-cheap" , required_argument, 0, 'c'},
 	{"num-four" , required_argument, 0, 'f'},
 	{"num-expensive" , required_argument, 0, 'e'},
@@ -47,8 +49,16 @@ static struct card alle4;
 static struct card nelja;
 static struct card yli4;
 
+struct exlist {
+	struct exlist *next;
+	char *name;
+};
+
+struct exlist g_exhead;
+
 void init()
 {
+	g_exhead.next = NULL;
 	tmpalle4.next = NULL;
 	tmpnelja.next = NULL;
 	tmpyli4.next = NULL;
@@ -107,9 +117,46 @@ void suffle()
 		}
 }
 
+static void trim(char *buf)
+{
+	int len;
+
+	len = strlen(buf);
+	while (len--)
+		if (isspace(buf[len]))
+			buf[len] = 0;
+		else
+			break;
+}
+
+static int exlist_add(char *chapter)
+{
+	struct exlist *e;
+
+	if (!chapter) {
+		printf("-E with no chapter?\n");
+		return EINVAL;
+	}
+
+	e = malloc(sizeof(*e));
+	if (!e)
+		return ENOMEM;
+	e->name = strdup(chapter);
+	trim(e->name);
+	e->next = g_exhead.next;
+	g_exhead.next = e;
+
+	return 0;
+}
+
 void add_card(struct card *c)
 {
 	struct card *new = &g_cards[g_num_cards];
+	struct exlist *ex;
+
+	for (ex = g_exhead.next; ex; ex = ex->next)
+		if (!strcmp(ex->name, c->sequel))
+			return;
 
 	memcpy(new, c, sizeof(*c));
 	g_num_cards++;
@@ -134,18 +181,13 @@ struct seq_list {
 	int num;
 };
 
-int print_stats()
+static int print_chapters()
 {
 	struct seq_list list;
 	struct seq_list *head = &list;
 	int i;
 
 	head->next = NULL;
-
-	printf("Number of cards: %d\n", g_num_cards); 
-	printf("Cheap (<4) : %d\n", g_numalle); 
-	printf("Mid-range (4) : %d\n", g_numtasan); 
-	printf("Expensive (>4) : %d\n", g_numyli); 
 
 	for (i = 0; i < g_num_cards; i++) {
 		struct card *c = &g_cards[i];
@@ -178,16 +220,14 @@ int print_stats()
 	return 0;
 }
 
-static void trim(char *buf)
+int print_stats()
 {
-	int len;
+	printf("Number of cards: %d\n", g_num_cards); 
+	printf("Cheap (<4) : %d\n", g_numalle); 
+	printf("Mid-range (4) : %d\n", g_numtasan); 
+	printf("Expensive (>4) : %d\n", g_numyli); 
 
-	len = strlen(buf);
-	while (len--)
-		if (isspace(buf[len]))
-			buf[len] = 0;
-		else
-			break;
+	return 0;
 }
 
 static int read_cards()
@@ -195,8 +235,6 @@ static int read_cards()
 	FILE *cf;
 	int ret;
  
-	init();
-
 	cf = fopen("cards-new.txt","r");
 	if (!cf) {
 		perror("cards-new.txt");
@@ -231,12 +269,14 @@ static void print_usage()
 {
 	printf("Usage: ./dice [-s -e<exp> -f<mid> -c<cheap> -v -h]\n");
 	printf("\t-s --stats\n");
+	printf("\t-C --chapters\n");
 	printf("\t-c --num-cheap <NUM>\n");
 	printf("\t-f --num-four <NUM>\n");
 	printf("\t-e --num-expensive <NUM>\n");
 	printf("\t-v --version\n");
 	printf("\t-h --help\n");
 	printf("-s: summary of known cards\n");
+	printf("-C: print known chapters\n");
 	printf("-c -f -e: override default number of cards (3,3,4)\n");
 }
 
@@ -272,14 +312,28 @@ int main(int argc, char *argv[])
 {
 	int ret, i, c;
 	int num_cards[] = {3, 3, 4};
-	int pr_stats = 0;
+	int pr_stats = 0, pr_chaps = 0;
 	int index;
+
+	init();
 
 	while (-1 != (c = getopt_long(argc, argv, OPTSTRING, long_options, &index)))
 	{
 		char *chkptr;
 
 		switch(c) {
+		case 'E': 
+		{
+			int ret;
+
+			ret = exlist_add(optarg);
+			if (ret)
+				return ret;
+			break;
+		}
+		case 'C':
+			pr_chaps = 1;
+			break;
 		case 'c':
 	 		num_cards[NUM_CHEAP] = strtoul(optarg, &chkptr, 0);
 			if (chkptr == optarg || (*chkptr && *chkptr != '\n'))
@@ -313,13 +367,15 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	init();
 	ret = read_cards();
 	if (ret)
 		return ret;
 
 	if (pr_stats)
 		return print_stats();
+
+	if (pr_chaps)
+		return print_chapters();
 
 	if (!g_num_cards)
 		return -EINVAL;
