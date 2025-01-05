@@ -2,7 +2,7 @@
 //
 // Copyright (C) 2025 Matti Vaittinen
 
-#define VERSION "0.1"
+#define VERSION "1"
 
 #include <ctype.h>
 #include <getopt.h>
@@ -30,7 +30,6 @@ static struct option long_options[] =
 
 struct card {
 	struct card *next;
-	struct card *prev;
 	unsigned prize;
 	char sequel[255];
 	char name[255];
@@ -39,15 +38,15 @@ struct card {
 static struct card g_cards[1000];
 static int g_num_cards = 0;
 
-static struct card tmpalle4;
-int g_numalle = 0;
-static struct card tmpnelja;
+static struct card tmpcheap;
+int g_numcheap = 0;
+static struct card tmpmiddle;
 int g_numtasan = 0;
-static struct card tmpyli4;
-int g_numyli = 0;
-static struct card alle4;
-static struct card nelja;
-static struct card yli4;
+static struct card tmpexpensive;
+int g_numexpensive = 0;
+static struct card cheap;
+static struct card middle;
+static struct card expensive;
 
 struct exlist {
 	struct exlist *next;
@@ -59,18 +58,12 @@ struct exlist g_exhead;
 void init()
 {
 	g_exhead.next = NULL;
-	tmpalle4.next = NULL;
-	tmpnelja.next = NULL;
-	tmpyli4.next = NULL;
-	alle4.next = NULL;
-	nelja.next = NULL;
-	yli4.next = NULL;
-	tmpalle4.prev = NULL;
-	tmpnelja.prev = NULL;
-	tmpyli4.prev = NULL;
-	alle4.prev = NULL;
-	nelja.prev = NULL;
-	yli4.prev = NULL;
+	tmpcheap.next = NULL;
+	tmpmiddle.next = NULL;
+	tmpexpensive.next = NULL;
+	cheap.next = NULL;
+	middle.next = NULL;
+	expensive.next = NULL;
 }
 
 void add(struct card *head, struct card *new)
@@ -97,9 +90,9 @@ void del(struct card *head, struct card *foo)
 void suffle()
 {
 	int i, j, seed = (int)time(NULL);
-	int num, g_num[] = {g_numalle, g_numtasan, g_numyli };
-	struct card *tmphead[] = { &tmpalle4, &tmpnelja, &tmpyli4 };
-	struct card *head[] = { &alle4, &nelja, &yli4 };
+	int num, g_num[] = {g_numcheap, g_numtasan, g_numexpensive };
+	struct card *tmphead[] = { &tmpcheap, &tmpmiddle, &tmpexpensive };
+	struct card *head[] = { &cheap, &middle, &expensive };
 
 	srand(seed);
 
@@ -141,6 +134,7 @@ static int exlist_add(char *chapter)
 	e = malloc(sizeof(*e));
 	if (!e)
 		return ENOMEM;
+
 	e->name = strdup(chapter);
 	trim(e->name);
 	e->next = g_exhead.next;
@@ -162,16 +156,16 @@ void add_card(struct card *c)
 	g_num_cards++;
 
 	if (new->prize < 4) {
-		add(&tmpalle4, new);
-		g_numalle++;
+		add(&tmpcheap, new);
+		g_numcheap++;
 	}
 	if (new->prize == 4) {
-		add(&tmpnelja, new);
+		add(&tmpmiddle, new);
 		g_numtasan++;
 	}
 	if (new->prize > 4) {
-		add(&tmpyli4, new);
-		g_numyli++;
+		add(&tmpexpensive, new);
+		g_numexpensive++;
 	}
 }
 
@@ -223,9 +217,9 @@ static int print_chapters()
 int print_stats()
 {
 	printf("Number of cards: %d\n", g_num_cards); 
-	printf("Cheap (<4) : %d\n", g_numalle); 
+	printf("Cheap (<4) : %d\n", g_numcheap); 
 	printf("Mid-range (4) : %d\n", g_numtasan); 
-	printf("Expensive (>4) : %d\n", g_numyli); 
+	printf("Expensive (>4) : %d\n", g_numexpensive); 
 
 	return 0;
 }
@@ -270,6 +264,7 @@ static void print_usage()
 	printf("Usage: ./dice [-s -e<exp> -f<mid> -c<cheap> -v -h]\n");
 	printf("\t-s --stats\n");
 	printf("\t-C --chapters\n");
+	printf("\t-E --exclude-chapter <CHAPTER>\n");
 	printf("\t-c --num-cheap <NUM>\n");
 	printf("\t-f --num-four <NUM>\n");
 	printf("\t-e --num-expensive <NUM>\n");
@@ -278,6 +273,7 @@ static void print_usage()
 	printf("-s: summary of known cards\n");
 	printf("-C: print known chapters\n");
 	printf("-c -f -e: override default number of cards (3,3,4)\n");
+	printf("-E: Don't include cards from given chapter.\n");
 }
 
 int err_info(int err)
@@ -287,10 +283,10 @@ int err_info(int err)
 	return err;
 }
 
-int arvo(int num, int foo)
+int display_cards(int num, int foo)
 {
 	int i;
-	struct card *head[] = { &alle4, &nelja, &yli4 };
+	struct card *head[] = { &cheap, &middle, &expensive };
 	struct card *c;
 
 	c = head[foo]->next;
@@ -383,7 +379,7 @@ int main(int argc, char *argv[])
 	suffle();
 
 	for (i = 0; i < 3; i++) {
-		ret = arvo(num_cards[i], i);
+		ret = display_cards(num_cards[i], i);
 		if (ret)
 			return ret;
 	}
