@@ -155,9 +155,16 @@ int read_cards()
 	while(1) {
 		struct card c;
 
-		ret = fscanf(cf,"%s ## %u ## %s\n", &c.name[0], &c.prize, &c.sequel[0]);
+		ret = fscanf(cf,"%[^#\n]## %u ## %[^\n]", &c.name[0], &c.prize, &c.sequel[0]);
 		if (ret == EOF)
 			return 0;
+
+		/*
+		 * if the line could not be parsed the \n is left to the file.
+		 * We need to read it to avoid looping endlessly
+		 * */
+		if (ret == 0)
+			fscanf(cf, "\n");
 
 		if (ret == 3)
 			add_card(&c);
