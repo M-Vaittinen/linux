@@ -4,6 +4,7 @@
 
 #define VERSION "0.1"
 
+#include <ctype.h>
 #include <getopt.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -127,19 +128,69 @@ void add_card(struct card *c)
 	}
 }
 
+struct seq_list {
+	struct seq_list *next;
+	char *name;
+	int num;
+};
+
 int print_stats()
 {
-	struct card *c;
+	struct seq_list list;
+	struct seq_list *head = &list;
+	int i;
+
+	head->next = NULL;
 
 	printf("Number of cards: %d\n", g_num_cards); 
 	printf("Cheap (<4) : %d\n", g_numalle); 
 	printf("Mid-range (4) : %d\n", g_numtasan); 
 	printf("Expensive (>4) : %d\n", g_numyli); 
 
+	for (i = 0; i < g_num_cards; i++) {
+		struct card *c = &g_cards[i];
+		struct seq_list *iter = head->next;
+		int found = 0;
+
+		while (iter) {
+			if (!strcmp(iter->name, c->sequel)) {
+				found = 1;
+				iter->num++;
+				break;
+			}
+			iter = iter->next;
+		}
+		if (!found) {
+			iter = malloc(sizeof(*iter));
+			if (!iter)
+				return ENOMEM;
+
+			iter->name = c->sequel;
+			iter->num = 1;
+			iter->next = head->next;
+			head->next = iter;
+		}
+	}
+	printf("Chapters:\n");
+	for (head = head->next; head; head=head->next)
+		printf("\t %s: (%d cards)\n", head->name, head->num);
+
 	return 0;
 }
 
-int read_cards()
+static void trim(char *buf)
+{
+	int len;
+
+	len = strlen(buf);
+	while (len--)
+		if (isspace(buf[len]))
+			buf[len] = 0;
+		else
+			break;
+}
+
+static int read_cards()
 {
 	FILE *cf;
 	int ret;
@@ -166,8 +217,11 @@ int read_cards()
 		if (ret == 0)
 			fscanf(cf, "\n");
 
-		if (ret == 3)
+		if (ret == 3) {
+			trim(c.name);
+			trim(c.sequel);
 			add_card(&c);
+		}
 	}
 
 	return -1;
