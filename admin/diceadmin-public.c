@@ -15,9 +15,49 @@
 #include <mysql/mysql.h>
 #include <ncurses/ncurses.h>
 #include <ncurses/form.h>
+#include <ncurses/menu.h>
 #include <assert.h>
+#include <signal.h>
 
-#define OPTSTRING "CE:svh?"
+#define OPTSTRING "E:vh?"
+#define KEY_ESC 27
+/* ENDKEY proceeds to write card */
+#define ENDKEY KEY_F(1)
+/* QUITKEY quits program */
+#define QUITKEY KEY_F(2)
+
+#define ARRAY_SIZE(foo) ( sizeof(foo) / sizeof(foo[0]) )
+
+enum {
+	EATTACK,
+	EDEFEND,
+	EDEBT,
+	EGATHER,
+	EENDURE,
+	EDESTROY,
+	ECURSE,
+	ENONE
+};
+
+#define MASK_ATTACK 1
+#define MASK_DEFENCE (1 << 1)
+#define MASK_DEBT (1 << 2)
+#define MASK_GATHERS (1 << 3)
+#define MASK_ENDURES (1 << 4)
+#define MASK_DESTROYS (1 << 5)
+#define MASK_CURSES (1 << 6)
+
+static char *bool_menu_opts[] =
+{
+	[EATTACK] = "hyokkaa",
+	[EDEFEND] = "puolustaa",
+	[EDEBT] = "on velka",
+	[EGATHER] = "keraa",
+	[EENDURE] = "kestaa",
+	[EDESTROY] = "tuhoaa",
+	[ECURSE] = "kiroaa",
+	[ENONE] = " ",
+};
 
 /* These MUST match the type IDs in the database */
 enum {
@@ -30,11 +70,6 @@ static MYSQL *g_conn;
 static struct option long_options[] =
 {
 	{"exclude-chapter", required_argument, 0, 'E'},
-	{"stats", no_argument,  0, 's'},
-	{"chapters", no_argument,  0, 'C'},
-/*	{"num-cheap" , required_argument, 0, 'c'},
-	{"num-four" , required_argument, 0, 'f'},
-	{"num-expensive" , required_argument, 0, 'e'}, */
 	{"version",  no_argument, 0, 'v'},
 	{"help",  no_argument, 0, 'h'},
 	{0,0,0,0}
@@ -42,7 +77,7 @@ static struct option long_options[] =
 
 struct card {
 	struct card *next;
-	unsigned prize;
+	unsigned int prize;
 	char sequel[255];
 	char name[255];
 };
@@ -50,27 +85,60 @@ struct card {
 static struct card g_cards[1000];
 static int g_num_cards = 0;
 
-static struct card tmpcheap;
-int g_numcheap = 0;
-static struct card tmpmiddle;
-int g_numtasan = 0;
-static struct card tmpexpensive;
-int g_numexpensive = 0;
-static struct card cheap;
-static struct card middle;
-static struct card expensive;
-
 struct exlist {
 	struct exlist *next;
 	char *name;
 };
 
-struct exlist g_exhead;
-/*
-static WINDOW *win_body, *win_form;
-static FORM *form;
+static struct exlist g_exhead;
 
-void err_out(const char *reason, int err)
+static WINDOW *win_body, *win_menu_multi, *win_menu_type, *win_sequel, *win_form;
+/*
+|-------------------------------|
+|card name, guide		|
+|-------------------------------|
+|		    |		|
+|	multi	    |	types	|
+|		    |		|
+|		    |		|
+|-------------------|-----------|
+| prize   |			|
+| tuhina  |	sequels		|
+|-------------------------------|
+*/
+#define WIN_BASE_HEIGHT		LINES
+#define WIN_BASE_WIDTH		COLS
+
+#define FREE_INSIDE_BASE_Y	(LINES - 3) /* available when base borders and card name are occupied */
+#define FREE_INSIDE_BASE_X	(COLS - 2) /* available when base borders are occupied */
+
+#define WIN_MENU_MULTI_START_Y	2 /* basewin border + card name/guide line */
+#define WIN_MENU_MULTI_START_X	1 /* basewin border */
+#define WIN_MENU_MULTI_HEIGHT	(FREE_INSIDE_BASE_Y - (FREE_INSIDE_BASE_Y / 3)) /* 1/3  of available */
+#define WIN_MENU_MULTI_WIDTH	(FREE_INSIDE_BASE_X - FREE_INSIDE_BASE_X / 3)
+
+#define WIN_MENU_TYPES_START_Y	(WIN_MENU_MULTI_START_Y)
+#define WIN_MENU_TYPES_START_X	(WIN_MENU_MULTI_START_X + WIN_MENU_MULTI_WIDTH + 1)
+#define WIN_MENU_TYPES_HEIGHT	WIN_MENU_MULTI_HEIGHT
+#define WIN_MENU_TYPES_WIDTH	(FREE_INSIDE_BASE_X - WIN_MENU_MULTI_WIDTH)
+
+/*
+ * The longest form will be:
+ * " Tuhinakerroin: XX "
+ * which requires 19 characters. Let's add few more in case we want borders or some such
+ * TODO: Should we have values below labels?
+ */
+#define WIN_FORMS_WIDTH		(25)
+#define WIN_FORMS_HEIGHT	(FREE_INSIDE_BASE_Y - WIN_MENU_MULTI_HEIGHT)
+#define WIN_FORMS_START_Y	(WIN_MENU_MULTI_START_Y + WIN_MENU_MULTI_HEIGHT + 1)
+#define WIN_FORMS_START_X	WIN_MENU_MULTI_START_X
+
+#define WIN_SEQUEL_WIDTH	(FREE_INSIDE_BASE_X - WIN_FORMS_WIDTH)
+#define WIN_SEQUEL_HEIGHT	WIN_FORMS_HEIGHT
+#define WIN_SEQUEL_START_Y	WIN_FORMS_START_Y
+#define WIN_SEQUEL_START_X	(WIN_FORMS_START_X + WIN_FORMS_WIDTH + 1)
+
+static void err_out(const char *reason, int err)
 {
 	endwin();
 	printf("%s %d\n", reason, err);
@@ -78,89 +146,62 @@ void err_out(const char *reason, int err)
 	exit(err);
 }
 
-int add_menu(MENU *menu, char *options[], int num_options)
+static void add_menu(MENU **menu, char *options[], int num_options)
 {
 	ITEM **items;
+	int i;
 
 	items = calloc(num_options + 1, sizeof(ITEM *));
 
 	for (i = 0; i < num_options; i++) {
 		items[i] = new_item(options[i], options[i]);
-		if (!items[i])
+		if (!items[i]) {
+			endwin();
+			printf("%s %s\n", options[i], options[i]);
+			exit(-1);
 			err_out("item alloc failed\n", ENOMEM);
+		}
+		item_opts_on(items[i], O_SELECTABLE);
 	}
+	items[i] = NULL;
+	*menu = new_menu(items);
 }
-*/
-void init()
+
+
+static void init()
 {
 	/* Ncurses inits */
-	/*
 	initscr();
 	cbreak();
 	noecho();
 	keypad(stdscr, TRUE);
 
-	win_body = newwin(24, 80, 0, 0);
+	win_body = newwin(0, 0, 0, 0);
 	if (!win_body)
-		exit(1);
+		err_out("newwin() FAIL\n", errno);
 
-	win_form = derwin(win_body, 20, 78, 3, 1);
+	/* Menu window will be 1/3 of the base window, minus 2 rows for the card name and instructions */
+	win_menu_multi = derwin(win_body, WIN_MENU_MULTI_HEIGHT, WIN_MENU_MULTI_WIDTH, WIN_MENU_MULTI_START_Y, WIN_MENU_MULTI_START_X);
+	assert(win_menu_multi != NULL);
+	box(win_menu_multi, 0, 0);
+
+	win_menu_type = derwin(win_body, WIN_MENU_TYPES_HEIGHT, WIN_MENU_TYPES_WIDTH, WIN_MENU_TYPES_START_Y, WIN_MENU_TYPES_START_X);
+	assert(win_menu_multi != NULL);
+	box(win_menu_type, 0, 0);
+
+	win_form = derwin(win_body, WIN_FORMS_HEIGHT, WIN_FORMS_WIDTH, WIN_FORMS_START_Y, WIN_FORMS_START_X);
 	assert(win_form != NULL);
 	box(win_form, 0, 0);
-	*/
+
+	win_sequel = derwin(win_body, WIN_SEQUEL_HEIGHT, WIN_SEQUEL_WIDTH, WIN_SEQUEL_START_Y, WIN_SEQUEL_START_X);
+	assert(win_sequel != NULL);
+	box(win_sequel, 0, 0);
+
+	refresh();
+	wrefresh(win_body);
 
 	/* Init lists */
 	g_exhead.next = NULL;
-	tmpcheap.next = NULL;
-	tmpmiddle.next = NULL;
-	tmpexpensive.next = NULL;
-	cheap.next = NULL;
-	middle.next = NULL;
-	expensive.next = NULL;
-}
-
-void add(struct card *head, struct card *new)
-{
-	new->next = head->next;
-	head->next = new;
-}
-
-void del(struct card *head, struct card *foo)
-{
-	struct card *tmp = head;
-
-	while (tmp->next != foo) {
-		if (!tmp->next) {
-			printf("Not found\n");
-			return;
-		}
-		tmp = tmp->next;
-	}
-
-	tmp->next = foo->next;
-}
-
-void suffle()
-{
-	int i, j, seed = (int)time(NULL);
-	int num, g_num[] = {g_numcheap, g_numtasan, g_numexpensive };
-	struct card *tmphead[] = { &tmpcheap, &tmpmiddle, &tmpexpensive };
-	struct card *head[] = { &cheap, &middle, &expensive };
-
-	srand(seed);
-
-	for (j = 0; j < 3; j++)
-		for (i = g_num[j]; i > 0; i--) {
-			struct card *c = tmphead[j]->next;
-
-			num = rand() % i;
-			while (num > 0) {
-				c = c->next;
-				num--;
-			}
-			del(tmphead[j], c);
-			add(head[j], c);
-		}
 }
 
 static void trim(char *buf)
@@ -196,7 +237,7 @@ static int exlist_add(char *chapter)
 	return 0;
 }
 
-void add_card(struct card *c)
+static void add_card(struct card *c)
 {
 	struct card *new = &g_cards[g_num_cards];
 	struct exlist *ex;
@@ -207,19 +248,6 @@ void add_card(struct card *c)
 
 	memcpy(new, c, sizeof(*c));
 	g_num_cards++;
-
-	if (new->prize < 4) {
-		add(&tmpcheap, new);
-		g_numcheap++;
-	}
-	if (new->prize == 4) {
-		add(&tmpmiddle, new);
-		g_numtasan++;
-	}
-	if (new->prize > 4) {
-		add(&tmpexpensive, new);
-		g_numexpensive++;
-	}
 }
 
 struct seq_list {
@@ -227,55 +255,6 @@ struct seq_list {
 	char *name;
 	int num;
 };
-
-static int print_chapters()
-{
-	struct seq_list list;
-	struct seq_list *head = &list;
-	int i;
-
-	head->next = NULL;
-
-	for (i = 0; i < g_num_cards; i++) {
-		struct card *c = &g_cards[i];
-		struct seq_list *iter = head->next;
-		int found = 0;
-
-		while (iter) {
-			if (!strcmp(iter->name, c->sequel)) {
-				found = 1;
-				iter->num++;
-				break;
-			}
-			iter = iter->next;
-		}
-		if (!found) {
-			iter = malloc(sizeof(*iter));
-			if (!iter)
-				return ENOMEM;
-
-			iter->name = c->sequel;
-			iter->num = 1;
-			iter->next = head->next;
-			head->next = iter;
-		}
-	}
-	printf("Chapters:\n");
-	for (head = head->next; head; head=head->next)
-		printf("\t %s: (%d cards)\n", head->name, head->num);
-
-	return 0;
-}
-
-int print_stats()
-{
-	printf("Number of cards: %d\n", g_num_cards); 
-	printf("Cheap (<4) : %d\n", g_numcheap); 
-	printf("Mid-range (4) : %d\n", g_numtasan); 
-	printf("Expensive (>4) : %d\n", g_numexpensive); 
-
-	return 0;
-}
 
 static int read_cards()
 {
@@ -314,41 +293,9 @@ static int read_cards()
 
 static void print_usage()
 {
-	printf("Usage: ./dice [-s -e<exp> -f<mid> -c<cheap> -v -h]\n");
-	printf("\t-s --stats\n");
-	printf("\t-C --chapters\n");
 	printf("\t-E --exclude-chapter <CHAPTER>\n");
-	printf("\t-c --num-cheap <NUM>\n");
-	printf("\t-f --num-four <NUM>\n");
-	printf("\t-e --num-expensive <NUM>\n");
 	printf("\t-v --version\n");
 	printf("\t-h --help\n");
-	printf("-s: summary of known cards\n");
-	printf("-C: print known chapters\n");
-	printf("-c -f -e: override default number of cards (3,3,4)\n");
-	printf("-E: Don't include cards from given chapter.\n");
-}
-
-int err_info(int err)
-{
-	print_usage();
-
-	return err;
-}
-
-int display_cards(int num, int foo)
-{
-	int i;
-	struct card *head[] = { &cheap, &middle, &expensive };
-	struct card *c;
-
-	c = head[foo]->next;
-	for (i = 0; i < num && c; i++) {
-		printf("%s\t (%u) \t %s\n", c->name, c->prize, c->sequel);
-		c = c->next;
-	}
-
-	return 0;
 }
 
 enum {
@@ -357,7 +304,7 @@ enum {
 	NUM_EXP
 };
 
-int already_added(struct card *c)
+static int already_added(struct card *c)
 {
 	char query[255];
 	MYSQL_RES *res;
@@ -365,8 +312,7 @@ int already_added(struct card *c)
 
 	ret = snprintf(query, 254, "SELECT * FROM cards WHERE name = '%s' LIMIT 1", c->name);
 	if (ret >= 254) {
-		printf("%s: Query too long\n", __func__);
-		return -1;
+		err_out("already_added(): Query too long\n", ERANGE);
 	}
 
 	/* send SQL query */
@@ -382,146 +328,35 @@ int already_added(struct card *c)
 	}
 	ret = mysql_num_rows(res);
 
-	printf("Card '%s': %s\n", c->name, (ret)?"FOUND!" : "Not found");
-
 	return ret;
 }
-
-int ask_user(const char *q, bool *yn)
-{
-	char yns[3];
-	char *ret;
-
-retry:
-	printf("%s\n", q);
-	printf("y/n\n");
-	ret = fgets(&yns[0], 3, stdin);
-	if (!ret)
-		return EINVAL;
-
-	if (yns[0] == 'y')
-		*yn = true;
-	else if (yns[0] == 'n')
-		*yn = false;
-	else
-		goto retry;
-
-	return 0;
-}
-
 struct expansion {
 	int id;
 	const char *name;
 };
 
-static int mva_get_knum(unsigned int *num)
+char *strtolow(char *str)
 {
-	char sid[5];
-	char *chkptr, *ret;
+	char *p = strdup(str);
+	int i;
 
-	ret = fgets(&sid[0], 4, stdin);
-	if (!ret)
-		return EINVAL;
+	if (!p)
+		err_out("strdup failed\n", ENOMEM);
 
-	*num = strtoul(&sid[0], &chkptr, 0);
-	if (chkptr == &sid[0] || (*chkptr && *chkptr != '\n'))
-		return EINVAL;
+	for (i = 0; str[i]; i++)
+		p[i] = tolower(str[i]);
 
-	return 0;
+	return p;
 }
 
-static bool ask_id(struct expansion *exp, int num_exp, unsigned int *id)
-{
-	int ret, i;
-	//unsigned int id;
-
-	printf("No martching expansion found. Please select ID or type 'N' to cancel\n");
-
-	for (i = 0; i < num_exp; i++)
-		printf("ID %u - expansion '%s'\n", exp[i].id, exp[i].name);
-
-	ret = mva_get_knum(id);
-	if (ret)
-		return false;
-
-	for (i = 0; i < num_exp; i++)
-		if (exp[i].id == *id) {
-			printf("Selected ID %u (expansion '%s')\n", *id, exp[i].name);
-			return true;
-		}
-
-	return false;
-}
-
-int get_cardtype(unsigned int *id, struct card *c)
-{
-	const char *query = "SELECT * FROM cardtype";
-	MYSQL_RES *res;
-	MYSQL_ROW row;
-	int num_types, i, ret;
-
-	/* send SQL query */
-	if (mysql_query(g_conn, query)) {
-		fprintf(stderr, "%s: %s\n", query, mysql_error(g_conn));
-		return -1;
-	}
-
-	res = mysql_store_result(g_conn);
-	if (!res) {
-		fprintf(stderr, "mysql_store_result(): %s\n", mysql_error(g_conn));
-		return -1;
-	}
-	num_types = mysql_num_rows(res);
-	if (num_types < 0 || num_types > 50) {
-		printf("Unexpected num of types (%d)\n", num_types);
-		return -1;
-	}
-
-	printf("\n");
-	printf("Give type ID for card '%s'\n", c->name);
-	for (i = 0; i < num_types; i++) {
-	       	row = mysql_fetch_row(res);
-		printf("ID: %s: Type '%s'\n", row[0], row[1]);
-	}
-
-	ret = mva_get_knum(id);
-	if (ret)
-		return false;
-
-	mysql_data_seek(res, 0);
-
-	/* Initialize to 'ENOENT' and change to '0' if value passes the check below */
-	ret = ENOENT;
-	if (*id > 9 || *id < 0) {
-		printf("type ID has grown to two digits. Fix the 'Ok'-check! %s:%d\n",
-		       __FILE__, __LINE__);
-		return EINVAL;
-	}
-
-	for (i = 0; i < num_types; i++) {
-		row = mysql_fetch_row(res);
-		if ((*id) + '0' == *row[0]) {
-			printf("Selected type '%s' for card '%s'\n", row[1], c->name);
-			ret = 0;
-			break;
-		}
-	}
-
-	mysql_free_result(res);
-
-	return ret;
-}
-
-int get_expansion(unsigned int *id, struct card *c)
+static int get_expansion(unsigned int *id, struct card *c)
 {
 	const char *query = "SELECT * FROM expansion";
 	MYSQL_RES *res;
 	MYSQL_ROW row;
-	struct expansion *exp;
 	int num_exp, i;
 	bool found;
 
-	/* send SQL query */
 	if (mysql_query(g_conn, query)) {
 		fprintf(stderr, "%s: %s\n", query, mysql_error(g_conn));
 		return -1;
@@ -534,44 +369,30 @@ int get_expansion(unsigned int *id, struct card *c)
 	}
 	num_exp = mysql_num_rows(res);
 	if (num_exp < 0 || num_exp > 50) {
-		printf("Unexpected num of expansions (%d)\n", num_exp);
+		err_out("Unexpected num of expansions\n", num_exp);
 		return -1;
 	}
 
-	exp = calloc(num_exp, sizeof(*exp));
-	if (!exp) {
-		printf("OOM\n");
-		return ENOMEM;
-	}
-
-	printf("\n");
-	printf("Which expansion the card belongs to?\n");
 	for (i = 0; i < num_exp; i++) {
 		char *chkptr;
+		char *cmp1, *cmp2;
 
 	       	row = mysql_fetch_row(res);
-		exp[i].id = strtoul(row[0], &chkptr, 0);
-		if (chkptr == row[0] || *chkptr) {
-			printf("Bad ID\n");
-			return EINVAL;
-		}
-		if (!strcmp(row[1], c->sequel)) {
-			printf("%s \n", row[0]);
-			printf("Found expansion %s\n", c->sequel);
-			*id = exp[i].id;
+		cmp1 = strtolow(c->sequel);
+		cmp2 = strtolow(row[1]);
+		if (!strcmp(cmp1, cmp2)) {
+			*id = strtoul(row[0], &chkptr, 0);
 			found = true;
+			free(cmp1);
+			free(cmp2);
+			break;
 		}
+		free(cmp1);
+		free(cmp2);
 	}
 	if (!found)
-		found = ask_id(exp, num_exp, id);
+		err_out("Unknown expansion\n", EINVAL);
 	mysql_free_result(res);
-
-	free(exp);
-
-	if (found)
-		printf("Card '%s': Using equel ID %d\n", c->name, *id);
-	else
-		printf("Card '%s': No Sequel ID!\n", c->name);
 
 	return !found;
 }
@@ -579,34 +400,18 @@ int get_expansion(unsigned int *id, struct card *c)
 #define LARGE_QUERY_SIZE 2048
 static char g_large_query[LARGE_QUERY_SIZE + 1];
 
-void add_card_to_db(const char *name, int exp, int type, int prizetype,
-		    int prize, bool attack, bool defence, bool endures,
-		    bool gathers, bool destroys, unsigned int tuhisee, bool curses)
+static void add_card_to_db(const char *name, int exp, int type, int prizetype,
+			   unsigned int prize, unsigned int multimask, unsigned int tuhisee)
 {
 	const char *query = "INSERT INTO cards SET name='%s', expansion_id='%u', type_id='%u', prizetype_id='%u', prize='%u', attack='%u', defence='%u', endure='%u', gather='%u', destroy='%u', tuhinakerroin='%u', curse='%u'";
-	int ret;
-	bool ok;
 
-	snprintf(&g_large_query[0], LARGE_QUERY_SIZE, query, name, exp, type, prizetype, prize, attack, defence, endures, gathers, destroys, tuhisee, curses);
+	snprintf(&g_large_query[0], LARGE_QUERY_SIZE, query, name, exp, type, prizetype, prize, !!(multimask & MASK_ATTACK), !!(multimask & MASK_DEFENCE), !!(multimask & MASK_ENDURES), !!(multimask & MASK_GATHERS), !!(multimask & MASK_DESTROYS), tuhisee, !!(multimask & MASK_CURSES));
 	g_large_query[LARGE_QUERY_SIZE] = '\0';
 
-	printf("Going to execute SQL:\n");
-	printf("%s", &g_large_query[0]);
-	ret = ask_user("Ok?", &ok);
-	if (ret || !ok) {
-		printf("Skipped query\n");
-		return;
-	}
-
-	if (mysql_query(g_conn, &g_large_query[0])) {
-		fprintf(stderr, "Adding card failed: %s\n", mysql_error(g_conn));
-		return;
-	}
-
-	printf("Card Added\n");
-
-	return;
+	if (mysql_query(g_conn, &g_large_query[0]))
+		err_out(mysql_error(g_conn), EINVAL);
 }
+
 enum {
 	DUAL_CARD_TOP = 1,
 	DUAL_CARD_BOTTOM,
@@ -622,58 +427,543 @@ void reference_top_bot(char *top, char *bot)
 	MYSQL_RES *res[2];
 	MYSQL_ROW row;
 
-	printf("Referencing top %s and bot %s\n", top, bot);
-
 	for (i = 0; i < 2; i++) {
 		snprintf(&g_large_query[0], LARGE_QUERY_SIZE, query, names[i]);
 		g_large_query[LARGE_QUERY_SIZE] = '\0';
 
-		/* send SQL query */
 		if (mysql_query(g_conn, g_large_query)) {
+			endwin();
 			printf("%s: %s\n", g_large_query, mysql_error(g_conn));
 			printf("Fix top/bottom references for cards '%s' and '%s' manually!\n", top, bot);
-			return;
+			exit(1);
 		}
 
 		res[i] = mysql_store_result(g_conn);
 		if (!res[i]) {
+			endwin();
 			printf("mysql_store_result(): %s\n", mysql_error(g_conn));
 			printf("Fix top/bottom references for cards '%s' and '%s' manually!\n", top, bot);
-			return;
+			exit(1);
 		}
 		if (1 != mysql_num_rows(res[i])) {
+			endwin();
 			printf("Unexpected num of IDs returned. Fix top/bottom references for cards '%s' and '%s' manually!\n", top, bot);
-			return;
+			exit(1);
 		}
 		row = mysql_fetch_row(res[i]);
 		ids[i] = row[0];
 	}
 	snprintf(&g_large_query[0], LARGE_QUERY_SIZE, id_update_query, "dual_top_of_id", ids[1], ids[0]);
 	if (mysql_query(g_conn, g_large_query)) {
+		endwin();
 		printf("%s: %s\n", query, mysql_error(g_conn));
 		printf("Fix top/bottom references for cards '%s' and '%s' manually!\n", top, bot);
-		return;
+		exit(1);
 	}
 	snprintf(&g_large_query[0], LARGE_QUERY_SIZE, id_update_query, "dual_below_id", ids[0], ids[1]);
 	if (mysql_query(g_conn, g_large_query)) {
+		endwin();
 		printf("%s: %s\n", query, mysql_error(g_conn));
 		printf("Fix top/bottom references for cards '%s' and '%s' manually!\n", top, bot);
-		return;
+		exit(1);
 	}
 	for (i = 0; i < 2; i++)
 		mysql_free_result(res[i]);
 };
 
-void my_add_cards()
+enum {
+	FIELD_TUHINA_LABEL,
+	FIELD_TUHINA_DATA,
+	FIELD_PRIZE_LABEL,
+	FIELD_PRIZE_DATA,
+	NUM_FIELDS
+};
+
+struct card_window {
+	FORM *c_tuh_prize_form;
+	FIELD *field[NUM_FIELDS + 1];
+	MENU *c_booleans;
+	MENU *c_types;
+};
+
+static struct card_window g_card_window;
+
+
+void init_boolean_menu()
 {
+	int rows, cols;
+
+	add_menu(&g_card_window.c_booleans, bool_menu_opts, ARRAY_SIZE(bool_menu_opts));
+	menu_opts_off(g_card_window.c_booleans, O_ONEVALUE);
+	scale_menu(g_card_window.c_booleans, &rows, &cols);
+	set_menu_win(g_card_window.c_booleans, win_menu_multi);
+	set_menu_sub(g_card_window.c_booleans, derwin(win_menu_multi, rows + 2, cols + 2, 2, 2));
+	set_menu_mark(g_card_window.c_booleans, "*");
+	menu_opts_off(g_card_window.c_booleans, O_SHOWDESC);
+	post_menu(g_card_window.c_booleans);
+	menu_driver(g_card_window.c_booleans, REQ_LAST_ITEM);
+}
+
+struct card_type {
+	char *name;
+	char *id;
+};
+
+int get_card_types(struct card_type **ctypes, int *num_types)
+{
+	const char *query = "SELECT * FROM cardtype";
+	MYSQL_RES *res;
+	MYSQL_ROW row;
 	int i;
+
+	if (mysql_query(g_conn, query)) {
+		fprintf(stderr, "%s: %s\n", query, mysql_error(g_conn));
+		return -1;
+	}
+
+	res = mysql_store_result(g_conn);
+	if (!res) {
+		fprintf(stderr, "mysql_store_result(): %s\n", mysql_error(g_conn));
+		return -1;
+	}
+	*num_types = mysql_num_rows(res);
+	if (*num_types < 0 || *num_types > 50) {
+		fprintf(stderr, "Unexpected num of types (%d)\n", *num_types);
+		return -EINVAL;
+	}
+	*ctypes = calloc(*num_types, sizeof(struct card_type));
+	if (!*ctypes)
+		return -ENOMEM;
+
+	for (i = 0; i < *num_types; i++) {
+		row = mysql_fetch_row(res);
+		(*ctypes)[i].id = strdup(row[0]);
+		(*ctypes)[i].name = strdup(row[1]);
+	}
+	mysql_free_result(res);
+
+	return 0;
+}
+
+int g_default_type_index = 0;
+int *g_type_ids;
+int g_num_types;
+
+int init_type_menu()
+{
+	struct card_type *ctypes;
+	int ret, num_types;
+	ITEM **items;
+	int rows, cols;
+	int i;
+
+	ret = get_card_types(&ctypes, &num_types);
+	if (ret)
+		return ret;
+
+	items = calloc(num_types + 1, sizeof(ITEM *));
+	if (!items)
+		return -ENOMEM;
+
+	g_type_ids = calloc(num_types, sizeof(*g_type_ids));
+	if (!g_type_ids)
+		return -ENOMEM;
+
+	g_num_types = num_types;
+
+	for (i = 0; i < num_types; i++) {
+		if (!strcmp(ctypes[i].name, "toiminto"))
+			g_default_type_index = i;
+		items[i] = new_item(ctypes[i].name, ctypes[i].id);
+		if (!items[i]) {
+			endwin();
+			printf("%s %s\n", ctypes[i].name, ctypes[i].id);
+			exit(-1);
+			err_out("item alloc failed\n", ENOMEM);
+		}
+		item_opts_on(items[i], O_SELECTABLE);
+		g_type_ids[i] = atoi(ctypes[i].id);
+	}
+	items[i] = NULL;
+
+	g_card_window.c_types = new_menu(items);
+
+	scale_menu(g_card_window.c_types, &rows, &cols);
+	set_menu_win(g_card_window.c_types, win_menu_type);
+	set_menu_sub(g_card_window.c_types, derwin(win_menu_type, rows + 2, cols + 2, 2, 2));
+	set_menu_mark(g_card_window.c_types, "*");
+	menu_opts_off(g_card_window.c_types, O_SHOWDESC);
+	post_menu(g_card_window.c_types);
+
+	for (i = 0; i < g_default_type_index; i++)
+		menu_driver(g_card_window.c_types, REQ_NEXT_ITEM);
+
+	refresh();
+	wrefresh(win_menu_type);
+
+	return 0;
+}
+
+const char *tuhinalebel = "Tuhinakerroin:";
+const char *prizelebel = "Card prize:";
+
+int init_forms()
+{
+	int field_len, field_height = 1;
+	int rows, cols;
+	FORM *f;
+
+	field_len = strlen(tuhinalebel) + 1;
+	g_card_window.field[FIELD_TUHINA_LABEL] = new_field(field_height, field_len, 2, 2, 0, 0 );
+	g_card_window.field[FIELD_TUHINA_DATA] = new_field(field_height, 3/* len */, 2 /* start Y */, field_len + 2 + 2 /* start X */, 0, 0);
+	field_len = strlen(prizelebel) + 1;
+	g_card_window.field[FIELD_PRIZE_LABEL] = new_field(field_height, field_len, 1, 2, 0 ,0);
+	g_card_window.field[FIELD_PRIZE_DATA] = new_field(field_height, 3, 1, field_len + 2 + 2, 0, 0);
+	g_card_window.field[NUM_FIELDS] = NULL;
+
+	f = new_form(g_card_window.field);
+	assert(f != NULL);
+
+	scale_form(f, &rows, &cols);
+
+	set_field_buffer(g_card_window.field[FIELD_TUHINA_LABEL], 0, tuhinalebel);
+	set_field_buffer(g_card_window.field[FIELD_PRIZE_LABEL], 0, prizelebel);
+
+	set_field_opts(g_card_window.field[FIELD_TUHINA_LABEL], O_VISIBLE | O_PUBLIC | O_AUTOSKIP);
+	set_field_opts(g_card_window.field[FIELD_PRIZE_LABEL], O_VISIBLE | O_PUBLIC | O_AUTOSKIP);
+	set_field_opts(g_card_window.field[FIELD_TUHINA_DATA], O_VISIBLE | O_PUBLIC | O_EDIT | O_ACTIVE);
+	set_field_opts(g_card_window.field[FIELD_PRIZE_DATA], O_VISIBLE | O_PUBLIC | O_EDIT | O_ACTIVE);
+	set_field_back(g_card_window.field[FIELD_PRIZE_DATA], A_UNDERLINE);
+	set_field_back(g_card_window.field[FIELD_TUHINA_DATA], A_UNDERLINE);
+
+	set_form_win(f, win_form);
+	set_form_sub(f, derwin(win_form, rows+1, cols+1, 1, 1));
+	g_card_window.c_tuh_prize_form = f;
+
+	set_field_type(g_card_window.field[FIELD_TUHINA_DATA], TYPE_INTEGER, 2, 0, 10);
+	set_field_type(g_card_window.field[FIELD_PRIZE_DATA], TYPE_INTEGER, 2, 0, 20);
+
+	post_form(g_card_window.c_tuh_prize_form);
+
+	refresh();
+	wrefresh(win_body);
+	wrefresh(win_form);
+
+	return 0;
+}
+
+int init_card_menus()
+{
+	int ret;
+
+	init_boolean_menu();
+	ret = init_type_menu();
+	if (ret)
+		return ret;
+
+	ret = init_forms();
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+static void update_screen()
+{
+	wnoutrefresh(win_body);
+	wnoutrefresh(win_form);
+	wnoutrefresh(win_menu_type);
+	wnoutrefresh(win_menu_multi);
+	wnoutrefresh(win_sequel);
+	doupdate();
+}
+const char *g_help_text = "arrows move, enter (de)select, ESC back, F1 write card, F2 exit";
+
+static char *itoa(int i)
+{
+	int len, ret, tmp = i;
+	char *arr;
+
+	if (i < 0)
+		len = 1;
+	else
+		len = 0;
+
+	for (len++; tmp / 10; len++)
+		tmp /= 10;
+
+	arr = malloc(len + 1);
+	if (!arr)
+		err_out("malloc\n", ENOMEM);
+
+	if (1 != (ret = sprintf(arr, "%d", i)))
+		err_out("not integer\n", ret);
+
+	return arr;
+}
+
+static void update_card_menusforms(struct card *c)
+{
+	char *clearline;
+	int ret;
+
+	clearline = malloc(WIN_BASE_WIDTH);
+	memset(clearline, ' ', WIN_BASE_WIDTH);
+	clearline[WIN_BASE_WIDTH - 1] = '\0';
+	mvwprintw(win_body, 0, 0, "%s:", clearline);
+
+	mvwprintw(win_body, 0, 0, "Card: %s:", c->name);
+	mvwprintw(win_body, 0, WIN_BASE_WIDTH - strlen(g_help_text) - 1, "%s", g_help_text);
+	mvwprintw(win_sequel, 1, 1, "Expansion: %s\n", c->sequel);
+
+	/* leak mem */
+	ret = set_field_buffer(g_card_window.field[FIELD_PRIZE_DATA], 0, itoa(c->prize));
+	if (ret != E_OK)
+		err_out("Set field buffer failed %d\n", ret);
+}
+
+static unsigned int currently_selected;
+
+static void __menu_drv(WINDOW *w, MENU *m, bool toggle)
+{
+	int ch;
+
+	box(w, ACS_DIAMOND, ACS_DIAMOND);
+	wrefresh(w);
+	while (KEY_ESC != (ch = getch())) {
+		switch (ch) {
+		case KEY_UP:
+			menu_driver(m, REQ_UP_ITEM);
+			break;
+		case KEY_DOWN:
+			menu_driver(m, REQ_DOWN_ITEM);
+			break;
+		case '\n':
+		case KEY_ENTER:
+			if (toggle)
+				menu_driver(m, REQ_TOGGLE_ITEM);
+			break;
+		default:
+		}
+	wrefresh(w);
+	}
+	box(w, 0, 0);
+	wrefresh(w);
+}
+
+static void multi_menu_drv()
+{
+	WINDOW *w = win_menu_multi;
+	MENU *m = g_card_window.c_booleans;
+
+	__menu_drv(w, m, true);
+}
+
+static void type_menu_drv()
+{
+	WINDOW *w = win_menu_type;
+	MENU *m = g_card_window.c_types;
+
+	__menu_drv(w, m, false);
+}
+
+static void form_drv()
+{
+	int ch;
+	WINDOW *w = win_form;
+	FORM *f = g_card_window.c_tuh_prize_form;
+
+	wrefresh(w);
+	while (KEY_ESC != (ch = getch())) {
+		switch (ch) {
+		case KEY_UP:
+			form_driver(f, REQ_PREV_FIELD);
+			form_driver(f, REQ_END_LINE);
+			break;
+		case KEY_DOWN:
+			form_driver(f, REQ_NEXT_FIELD);
+			form_driver(f, REQ_END_LINE);
+			break;
+		case KEY_BACKSPACE:
+		case 127:
+			form_driver(f, REQ_DEL_PREV);
+			break;
+		case KEY_DC:
+			form_driver(f, REQ_DEL_CHAR);
+			break;
+		case '\n':
+		case KEY_ENTER:
+			form_driver(f, REQ_VALIDATION);
+			break;
+		default:
+			if (E_INVALID_FIELD == form_driver(f, ch))
+				form_driver(f, REQ_CLR_FIELD);
+			break;
+		}
+	wrefresh(w);
+	}
+	box(w, 0, 0);
+	wrefresh(w);
+}
+
+static int expansion_drv()
+{
+	int ch;
+	WINDOW *w = win_sequel;
+	wrefresh(w);
+
+	while (KEY_ESC != (ch = getch()) && ch != ENDKEY)
+		if (ch == QUITKEY)
+			err_out("See You!\n", 0);
+
+	box(w, 0, 0);
+	wrefresh(w);
+
+	return ch;
+}
+
+static int sub_driver(int drv)
+{
+	int ret = 0;
+
+	switch(drv)
+	{
+		case 0:
+			multi_menu_drv();
+			break;
+		case 1:
+			type_menu_drv();
+			break;
+		case 2:
+			form_drv();
+			break;
+		case 3:
+			ret = expansion_drv();
+			break;
+		default:
+			err_out("coder did not know what he did.\n", EINVAL);
+	}
+
+	return ret;
+}
+
+static int main_driver(int ctrl)
+{
+	WINDOW *w[] = { win_menu_multi, win_menu_type, win_form, win_sequel };
+	int i, ret = 0;
+
+	switch(ctrl)
+	{
+		case KEY_UP:
+		case KEY_DOWN:
+			currently_selected += 2;
+			break;
+		case KEY_LEFT:
+			currently_selected--;
+			break;
+		case KEY_RIGHT:
+			currently_selected++;
+			break;
+		case '\n':
+		case KEY_ENTER:
+			ret = sub_driver(currently_selected);
+			break;
+		case QUITKEY:
+			err_out("All good\n", 0);
+			break;
+		default:
+			break;
+	}
+	currently_selected = (currently_selected % 4);
+	if (currently_selected < 0 || currently_selected > 3) {
+		printf("WTF? cs = %d\n", currently_selected);
+	}
+	for (i = 0; i < 4; i++) {
+		if (currently_selected != i)
+			box(w[i], 0, 0);
+		else
+			box(w[i], ACS_DIAMOND, ACS_DIAMOND);
+	}
+	update_screen();
+
+	return ret;
+}
+
+static void get_multi_bitmask(unsigned int *mask)
+{
+	ITEM **items;
+	ITEM *ci;
+	int i, numi;
+
+	*mask = 0;
+
+	ci = current_item(g_card_window.c_booleans);
+
+	items = menu_items(g_card_window.c_booleans);
+	numi = item_count(g_card_window.c_booleans);
+	for (i = 0; i < numi; ++i) {
+		if (ci == items[i] || item_value(items[i]))
+			*mask |= (1 << i);
+	}
+}
+
+static int get_type_id(unsigned int *id)
+{
+	char *chkptr;
+	const char *idesc;
+	ITEM *it;
+
+	it = current_item(g_card_window.c_types);
+	if (!it)
+		err_out("No type selected\n", EINVAL);
+
+	idesc = item_description(it);
+	if (!idesc)
+		err_out("bad type ID\n", EINVAL);
+
+	*id = strtoul(idesc, &chkptr, 0);
+	if (chkptr != idesc && *chkptr == '\0')
+		return 0;
+
+	err_out("bad type ID\n", EINVAL);
+
+	return EINVAL;
+}
+
+static void get_int_from_formfield(FIELD *f, unsigned int *i)
+{
+	char *fb;
+
+	fb = field_buffer(f, 0);
+	if (!fb)
+		err_out("NULL field_buffer, err %d\n", errno);
+
+	*i = (unsigned int)atoi(fb);
+}
+static void get_prize_from_form(struct card *c)
+{
+	get_int_from_formfield(g_card_window.field[FIELD_PRIZE_DATA], &c->prize);
+}
+
+static void get_tuhina_from_form(unsigned int *tuhina)
+{
+	get_int_from_formfield(g_card_window.field[FIELD_TUHINA_DATA], tuhina);
+}
+
+static void my_add_cards()
+{
+	int i, ret, ctrl;
+
+	ret = init_card_menus();
+	if (ret)
+		err_out("Menu inits failed\n", ret);
 
 	for (i = 0; i < g_num_cards; i++) {
 		struct card *c;
 		int ret;
 		char *ch;
 		int dual_card = 0;
-		bool attack, defence, debt, yn, gathers, endures, destroys, curses;
+		unsigned int multimask;
 		unsigned int expansion_id, type_id, prizetype_id, tuhisee;
 		char *top_name = NULL;
 
@@ -715,67 +1005,31 @@ add_dual:
 			while (*ch == ' ')
 				ch++;
 			if (*ch == '\0') {
-				printf("Bad name for 'bottom' card\n");
+				err_out("Bad name for 'bottom' card\n", EINVAL);
 				return;
 			}
 			strcpy(c->name, ch);
-//			c->name = ch + 1;
 
-			printf("Give prize for '%s'\n", c->name);
-			ret = mva_get_knum(&c->prize);
-			if (ret) {
-				printf("Ouch! Adding bottom card '%s* failed. Add manually and fix bottom reference for card '%s'\n", c->name, top_name);
-				return;
-			}
+			c->prize = 0;
 
 		}
 		if (already_added(c))
 			continue;
 
-		printf("Add %s, prize %u:, expansion: %s\n", c->name, c->prize, c->sequel);
-		if (dual_card != DUAL_CARD_BOTTOM) {
-			ret = ask_user("Add?", &yn);
-			if (ret)
-				return;
+		update_card_menusforms(c);
+		update_screen();
 
-			if (!yn)
-				continue;
-		}
+		while (ENDKEY != (ctrl = getch()))
+			if (ENDKEY == main_driver(ctrl))
+				break;
 
-		ret = ask_user("kiroaa?", &curses);
-		if (ret)
-			return;
+		get_multi_bitmask(&multimask);
+		get_type_id(&type_id);
 
-		ret = ask_user("keräävä?", &gathers);
-		if (ret)
-			return;
+		get_prize_from_form(c);
+		get_tuhina_from_form(&tuhisee);
 
-		ret = ask_user("jatkuva?", &endures);
-		if (ret)
-			return;
-
-		ret = ask_user("tuhoava?", &destroys);
-		if (ret)
-			return;
-
-		ret = ask_user("Hyökkää?", &attack);
-		if (ret)
-			return;
-
-		ret = ask_user("Puolustaa?", &defence);
-		if (ret)
-			return;
-
-		printf("Tuhinakerroin 1 - 10\n");
-		ret = mva_get_knum(&tuhisee);
-		if (ret)
-			return;
-
-		ret = ask_user("Prize is debt?", &debt);
-		if (ret)
-			return;
-
-		if (debt)
+		if (multimask & MASK_DEBT)
 			prizetype_id = PRIZETYPE_DEBT;
 		else
 			prizetype_id = PRIZETYPE_NORMAL;
@@ -784,11 +1038,7 @@ add_dual:
 		if (ret)
 			return;
 
-		ret = get_cardtype(&type_id, c);
-		if (ret)
-			return;
-
-		add_card_to_db(c->name, expansion_id, type_id, prizetype_id, c->prize, attack, defence, endures, gathers, destroys, tuhisee, curses);
+		add_card_to_db(c->name, expansion_id, type_id, prizetype_id, c->prize, multimask, tuhisee);
 
 		if (dual_card == DUAL_CARD_TOP)
 			goto add_dual;
@@ -800,56 +1050,58 @@ add_dual:
 	}
 }
 
-int myslize()
+static int myslize()
 {
-	MYSQL_RES *res;
-	MYSQL_ROW row;
-
 	g_conn = mysql_init(NULL);
 	if (!g_conn) {
+		endwin();
 		printf("MySQL Connection failed %d\n", errno);
+
 		return -1;
 	}
 
-	if (!mysql_real_connect(g_conn, "hostname", "username", "password", "database", 0, NULL, 0)) {
+	if (!mysql_real_connect(g_conn, "host", "user", "pass", "database", 0, NULL, 0)) {
+		endwin();
 		fprintf(stderr, "real_conn: %s\n", mysql_error(g_conn));
 		return -1;
 	}
-	/* send SQL query */
-	if (mysql_query(g_conn, "show tables")) {
-		fprintf(stderr, "show tables: %s\n", mysql_error(g_conn));
-		return -1;
-      }
-
-	res = mysql_use_result(g_conn);
-
-	/* output table name */
-	printf("MySQL Tables in mysql database:\n");
-	while ((row = mysql_fetch_row(res)) != NULL)
-		printf("%s \n", row[0]);
-	mysql_free_result(res);
-
 	my_add_cards(g_conn);
 
 	/* close connection */
 	mysql_close(g_conn);
+	endwin();
 
 	return 0;
+}
+
+static void out(int sig)
+{
+	endwin();
+	printf("Got sig %d\n",sig);
+
+	printf("Thanks for using diceadmin :)\n");
+	fflush(stdout);
+	if(SIGINT==sig || SIGTERM == sig) {
+		signal(sig,SIG_DFL);
+		kill(getpid(),sig);
+	} else {
+		exit(sig);
+	}
 }
 
 int main(int argc, char *argv[])
 {
 	int ret, /*i,*/ c;
-	//int num_cards[] = {3, 3, 4};
-	int pr_stats = 0, pr_chaps = 0;
 	int index;
+
+	signal(SIGSTOP, SIG_IGN);
+	signal(SIGTERM, &out);
+	signal(SIGINT, &out);
 
 	init();
 
 	while (-1 != (c = getopt_long(argc, argv, OPTSTRING, long_options, &index)))
 	{
-		//char *chkptr;
-
 		switch(c) {
 		case 'E': 
 		{
@@ -860,28 +1112,6 @@ int main(int argc, char *argv[])
 				return ret;
 			break;
 		}
-		case 'C':
-			pr_chaps = 1;
-			break;
-/*		case 'c':
-	 		num_cards[NUM_CHEAP] = strtoul(optarg, &chkptr, 0);
-			if (chkptr == optarg || (*chkptr && *chkptr != '\n'))
-				return err_info(EINVAL);
-			break;
-		case 'f':
- 			num_cards[NUM_MID] = strtoul(optarg, &chkptr, 0);
-			if (chkptr == optarg || (*chkptr && *chkptr != '\n'))
-				return err_info(EINVAL);
-		break;
-		case 'e':
- 			num_cards[NUM_EXP] = strtoul(optarg, &chkptr, 0);
-			if (chkptr == optarg || (*chkptr && *chkptr != '\n'))
-				return err_info(EINVAL);
-		break;
-		*/
-		case 's':
-			pr_stats = 1;
-			break;
 		case 'v':
 			printf("%s version: %s\n",argv[0],VERSION);
 			return 0;
@@ -899,29 +1129,10 @@ int main(int argc, char *argv[])
 
 	ret = read_cards();
 	if (ret)
-		return ret;
-
-	if (pr_stats)
-		return print_stats();
-
-	if (pr_chaps)
-		return print_chapters();
+		out(ret);
 
 	if (!g_num_cards)
-		return -EINVAL;
+		err_out("No cards?\n", EINVAL);
 
 	return myslize();
-
-	/*
-
-
-	suffle();
-
-	for (i = 0; i < 3; i++) {
-		ret = display_cards(num_cards[i], i);
-		if (ret)
-			return ret;
-	}
-	*/
-//	return 0;
 }
