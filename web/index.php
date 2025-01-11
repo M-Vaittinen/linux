@@ -24,7 +24,7 @@ $limit_cheap = 3;
 $limit_mid = 3;
 $limit_exp = 4;
 
-require '../include/db.php';
+require 'include/db.php';
 
 echo "<h1>Dominion - Arvo kortit</h1>";
 
@@ -163,6 +163,6 @@ echo '</td></tr></table>';
 
 mysqli_close($conn);
 
-require '../include/footer.php';
+require 'include/footer.php';
 
 ?>
