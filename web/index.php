@@ -140,9 +140,9 @@ if ($all) {
 	}
 	$query_mid = $query_cheap;
 	$query_exp = $query_cheap;
-	$query_cheap .= ") ORDER BY RAND() " . $tuhinaorder  . "LIMIT $limit_cheap";
-	$query_mid .= ") ORDER BY RAND() " . $tuhinaorder  . "LIMIT $limit_mid";
-	$query_exp .= ") ORDER BY RAND() " . $tuhinaorder  . "LIMIT $limit_exp";
+	$query_cheap .= ") AND c.prize < 4 ORDER BY RAND() " . $tuhinaorder  . "LIMIT $limit_cheap";
+	$query_mid .= ")  AND c.prize = 4 ORDER BY RAND() " . $tuhinaorder  . "LIMIT $limit_mid";
+	$query_exp .= ") AND c.prize > 4 ORDER BY RAND() " . $tuhinaorder  . "LIMIT $limit_exp";
 }
 /*
 $result = mysqli_query($conn, $query_cheap);
