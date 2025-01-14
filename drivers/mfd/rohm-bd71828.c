@@ -191,12 +191,11 @@ static struct mfd_cell bd72720_mfd_cells[] = {
 		.name = BD72720_RTC_DRV_NAME,
 		.resources = bd72720_rtc_irqs,
 		.num_resources = ARRAY_SIZE(bd72720_rtc_irqs),
-	},
-/* {
+	}, {
 		.name = "gpio-keys",
 		.platform_data = &bd71828_powerkey_data,
 		.pdata_size = sizeof(bd71828_powerkey_data),
-	}, */
+	},
 };
 
 static const struct regmap_range bd71815_volatile_ranges[] = {
