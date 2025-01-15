@@ -34,6 +34,43 @@ patternProperties:
         description:
           should be "ldo1", ..., "ldo11"
 
+      rohm,dvs-runlevel0-voltage:
+        description:
+          Set the voltage which will be applied to the regulator when system
+          transitions to the (sub) runlevel 0. (Can only be applied to LDO1
+          and BUCK1)
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 1000000
+
+      rohm,dvs-runlevel1-voltage:
+        description:
+          Set the voltage which will be applied to the regulator when system
+          transitions to the (sub) runlevel 1. (Can only be applied to LDO1
+          and BUCK1)
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 1000000
+
+      rohm,dvs-runlevel2-voltage:
+        description:
+          Set the voltage which will be applied to the regulator when system
+          transitions to the (sub) runlevel 2. (Can only be applied to LDO1
+          and BUCK1)
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 1000000
+
+      rohm,dvs-runlevel3-voltage:
+        description:
+          Set the voltage which will be applied to the regulator when system
+          transitions to the (sub) runlevel 3. (Can only be applied to LDO1
+          and BUCK1)
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 1000000
+
+
       rohm,dvs-run-voltage:
         description:
           PMIC default "RUN" state voltage in uV. See below table for
@@ -99,6 +136,42 @@ patternProperties:
           with the offset voltage given here. This will improve the LDO efficiency.
         minimum: 50
         maximum: 300
+
+      rohm,dvs-runlevel0-voltage:
+        description:
+          Set the voltage which will be applied to the regulator when system
+          transitions to the (sub) runlevel 0. (Can only be applied to BUCK1
+          and LDO1)
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 1700000
+
+      rohm,dvs-runlevel1-voltage:
+        description:
+          Set the voltage which will be applied to the regulator when system
+          transitions to the (sub) runlevel 1. (Can only be applied to BUCK1
+          and LDO1)
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 1700000
+
+      rohm,dvs-runlevel2-voltage:
+        description:
+          Set the voltage which will be applied to the regulator when system
+          transitions to the (sub) runlevel 2. (Can only be applied to BUCK1
+          and LDO1)
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 1700000
+
+      rohm,dvs-runlevel3-voltage:
+        description:
+          Set the voltage which will be applied to the regulator when system
+          transitions to the (sub) runlevel 3. (Can only be applied to BUCK1
+          and LDO1)
+        $ref: /schemas/types.yaml#/definitions/uint32
+        minimum: 0
+        maximum: 1700000
 
       rohm,dvs-run-voltage:
         description:
