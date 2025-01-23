@@ -2360,6 +2360,9 @@ BD_ISR_AC(dcin_ovp_det, "DCIN OVER VOLTAGE", true)
 BD_ISR_DUMMY(dcin_mon_det, "DCIN voltage below threshold")
 BD_ISR_DUMMY(dcin_mon_res, "DCIN voltage above threshold")
 
+BD_ISR_DUMMY(vbus_curr_limit, "VBUS current limited")
+BD_ISR_DUMMY(vsys_ov_res, "VSYS over-voltage cleared")
+BD_ISR_DUMMY(vsys_ov_det, "VSYS over-voltage")
 BD_ISR_DUMMY(vsys_uv_res, "VSYS under-voltage cleared")
 BD_ISR_DUMMY(vsys_uv_det, "VSYS under-voltage")
 BD_ISR_DUMMY(vsys_low_res, "'VSYS low' cleared")
@@ -2612,6 +2615,54 @@ static int bd7182x_get_irqs(struct platform_device *pdev,
 		BDIRQ("bd71828-temp-125-over", bd71827_temp_vf125_det),
 		BDIRQ("bd71828-temp-125-under", bd71827_temp_vf125_res),
 	};
+	static const struct bd7182x_irq_res bd72720_irqs[] = {
+		BDIRQ("bd72720_int_vbus_rmv", BD_ISR_NAME(dcin_removed)),
+		BDIRQ("bd72720_int_vbus_det", bd7182x_dcin_detected),
+		BDIRQ("bd72720_int_vbus_mon_res", BD_ISR_NAME(dcin_mon_res)),
+		BDIRQ("bd72720_int_vbus_mon_det", BD_ISR_NAME(dcin_mon_det)),
+		BDIRQ("bd72720_int_vsys_mon_res", BD_ISR_NAME(vsys_mon_res)),
+		BDIRQ("bd72720_int_vsys_mon_det", BD_ISR_NAME(vsys_mon_det)),
+		BDIRQ("bd72720_int_vsys_uv_res", BD_ISR_NAME(vsys_uv_res)),
+		BDIRQ("bd72720_int_vsys_uv_det", BD_ISR_NAME(vsys_uv_det)),
+		BDIRQ("bd72720_int_vsys_lo_res", BD_ISR_NAME(vsys_low_res)),
+		BDIRQ("bd72720_int_vsys_lo_det", BD_ISR_NAME(vsys_low_det)),
+		BDIRQ("bd72720_int_vsys_ov_res", BD_ISR_NAME(vsys_ov_res)),
+		BDIRQ("bd72720_int_vsys_ov_det", BD_ISR_NAME(vsys_ov_det)),
+		BDIRQ("bd72720_int_bat_ilim", BD_ISR_NAME(vbus_curr_limit)),
+		BDIRQ("bd72720_int_chg_done", bd718x7_chg_done),
+		BDIRQ("bd72720_int_extemp_tout", BD_ISR_NAME(chg_wdg_temp)),
+		BDIRQ("bd72720_int_chg_wdt_exp", BD_ISR_NAME(chg_wdg)),
+		BDIRQ("bd72720_int_bat_mnt_out", BD_ISR_NAME(rechg_res)),
+		BDIRQ("bd72720_int_bat_mnt_in", BD_ISR_NAME(rechg_det)),
+		BDIRQ("bd72720_int_chg_trns", BD_ISR_NAME(chg_state_changed)),
+
+		BDIRQ("bd72720_int_vbat_mon_res", BD_ISR_NAME(bat_mon_res)),
+		BDIRQ("bd72720_int_vbat_mon_det", BD_ISR_NAME(bat_mon)),
+		BDIRQ("bd72720_int_vbat_sht_res", BD_ISR_NAME(bat_short_res)),
+		BDIRQ("bd72720_int_vbat_sht_det", BD_ISR_NAME(bat_short)),
+		BDIRQ("bd72720_int_vbat_lo_res", BD_ISR_NAME(bat_low_res)),
+		BDIRQ("bd72720_int_vbat_lo_det", BD_ISR_NAME(bat_low)),
+		BDIRQ("bd72720_int_vbat_ov_res", BD_ISR_NAME(bat_ov_res)),
+		BDIRQ("bd72720_int_vbat_ov_det", BD_ISR_NAME(bat_ov)),
+		BDIRQ("bd72720_int_bat_rmv", BD_ISR_NAME(bat_removed)),
+		BDIRQ("bd72720_int_bat_det", BD_ISR_NAME(bat_det)),
+		BDIRQ("bd72720_int_dbat_det", BD_ISR_NAME(bat_dead)),
+		BDIRQ("bd72720_int_bat_temp_trns", BD_ISR_NAME(temp_transit)),
+		BDIRQ("bd72720_int_lobtmp_res", BD_ISR_NAME(temp_bat_low_res)),
+		BDIRQ("bd72720_int_lobtmp_det", BD_ISR_NAME(temp_bat_low)),
+		BDIRQ("bd72720_int_ovbtmp_res", BD_ISR_NAME(temp_bat_hi_res)),
+		BDIRQ("bd72720_int_ovbtmp_det", BD_ISR_NAME(temp_bat_hi)),
+		BDIRQ("bd72720_int_ocur1_res", BD_ISR_NAME(bat_oc1_res)),
+		BDIRQ("bd72720_int_ocur1_det", BD_ISR_NAME(bat_oc1)),
+		BDIRQ("bd72720_int_ocur2_res", BD_ISR_NAME(bat_oc2_res)),
+		BDIRQ("bd72720_int_ocur2_det", BD_ISR_NAME(bat_oc2)),
+		BDIRQ("bd72720_int_ocur3_res", BD_ISR_NAME(bat_oc3_res)),
+		BDIRQ("bd72720_int_ocur3_det", BD_ISR_NAME(bat_oc3)),
+/*		BDIRQ("bd72720_int_cc_mon1_det", ), */
+		BDIRQ("bd72720_int_cc_mon2_det", BD_ISR_NAME(bat_cc_mon)),
+/*		BDIRQ("bd72720_int_cc_mon3_det", ), */
+	};
+
 	int num_irqs;
 	const struct bd7182x_irq_res *irqs;
 
@@ -2625,6 +2676,10 @@ static int bd7182x_get_irqs(struct platform_device *pdev,
 	case ROHM_CHIP_TYPE_BD71815:
 		irqs = &bd71815_irqs[0];
 		num_irqs = ARRAY_SIZE(bd71815_irqs);
+		break;
+	case ROHM_CHIP_TYPE_BD72720:
+		irqs = &bd72720_irqs[0];
+		num_irqs = ARRAY_SIZE(bd72720_irqs);
 		break;
 	default:
 		return -EINVAL;
