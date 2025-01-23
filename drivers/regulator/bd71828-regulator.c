@@ -2288,7 +2288,7 @@ static int bd72720_dt_parse(struct device *dev,
 			    struct regulator_desc *buck10_desc,
 			    struct regmap *regmap)
 {
-	struct device_node *nproot = dev->of_node;
+	struct device_node *nproot = dev->parent->of_node;
 	struct device_node *np;
 	int ret;
 
