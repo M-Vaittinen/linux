@@ -179,16 +179,16 @@ static struct mfd_cell bd71828_mfd_cells[] = {
 	},
 };
 
-#define BD72720_RTC_DRV_NAME "bd72720-rtc"
+#define BD72720_POWER_DRV_NAME "bd72720-power"
 
 static struct mfd_cell bd72720_mfd_cells[] = {
 	{ .name = "bd72720-pmic", },
 	{ .name = "bd72720-gpio", },
 	{ .name = "bd72720-led", .of_compatible = "rohm,bd72720-leds" },
 	{ .name = "bd72720-clk", },
-	{ .name = "bd72720-power", },
+	{ .name = BD72720_POWER_DRV_NAME, },
 	{
-		.name = BD72720_RTC_DRV_NAME,
+		.name = "bd72720-rtc",
 		.resources = bd72720_rtc_irqs,
 		.num_resources = ARRAY_SIZE(bd72720_rtc_irqs),
 	}, {
@@ -807,8 +807,7 @@ static int set_clk_mode(struct device *dev, struct regmap *regmap,
 				  OUT32K_MODE_CMOS);
 }
 
-static int bd72720_secondary_regmap(struct i2c_client *i2c,
-				    struct regmap **bd72720_chg_regmap)
+static int bd72720_secondary_regmap(struct i2c_client *i2c, struct regmap **bd72720_chg_regmap)
 {
 	struct i2c_client *secondary_i2c;
 
@@ -830,8 +829,8 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 	struct regmap_irq_chip_data *irq_data;
 	int ret;
 	struct regmap *regmap;
-	struct regmap *bd72720_chg_regmap = NULL;
 	const struct regmap_config *regmap_config;
+	struct regmap *bd72720_chg_regmap;
 	struct regmap_irq_chip *irqchip;
 	unsigned int chip_type;
 	struct mfd_cell *mfd;
@@ -884,10 +883,11 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 			return dev_err_probe(&i2c->dev, ret,
 					"Failed to initialize secondary I2C\n");
 		for (i = 0; i < cells; i++)
-			if (!strcmp(BD72720_RTC_DRV_NAME, mfd[i].name))
+			if (!strcmp(BD72720_POWER_DRV_NAME, mfd[i].name))
 				break;
 		WARN_ON(i >= cells);
-		mfd[i].platform_data = bd72720_chg_regmap;
+		mfd[i].platform_data = &bd72720_chg_regmap;
+		mfd[i].pdata_size = sizeof(bd72720_chg_regmap);
 
 		break;
 	}
