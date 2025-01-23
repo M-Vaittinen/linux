@@ -1771,12 +1771,12 @@ static int bd71827_init_hardware(struct bd71827_power *pwr)
 		return ret;
 
 	/* TODO: Collapse limit should come from device-tree ? */
-	if (pwr->regs->dcin_collapse_limit != -1) {
+	if (pwr->regs->dcin_collapse_limit != (u8)-1) {
 		ret = regmap_write(pwr->regmap, pwr->regs->dcin_collapse_limit,
 				   BD7182x_DCIN_COLLAPSE_DEFAULT);
 		if (ret) {
 			dev_err(pwr->dev,
-				"Failed to write DCIN collapse limit\n");
+				"Failed to write DCIN collapse limit (%d)\n", ret);
 			return ret;
 		}
 	}
@@ -2973,7 +2973,7 @@ static int bd71827_power_probe(struct platform_device *pdev)
 			return -ENOMEM;
 
 		bd72720_pwr->genregmap = pwr->regmap;
-		pwr->regmap = dev_get_platdata(&pdev->dev);
+		pwr->regmap = *(struct regmap **)dev_get_platdata(&pdev->dev);
 		if (!pwr->regmap)
 			return dev_err_probe(&pdev->dev, -EINVAL, "No charger regmap\n");
 
@@ -3000,7 +3000,6 @@ static int bd71827_power_probe(struct platform_device *pdev)
 		return ret;
 	}
 	fgauge_initial_values(pwr);
-
 	pwr->gdesc.drv_data = pwr;
 
 	ret = bd7182x_get_rsens(pwr);
@@ -3022,7 +3021,9 @@ static int bd71827_power_probe(struct platform_device *pdev)
 	pwr->regs->i_fst_term_r = tmp_lr;
 
 	dev_set_drvdata(&pdev->dev, pwr);
-	bd71827_init_hardware(pwr);
+	ret = bd71827_init_hardware(pwr);
+	if (ret)
+		return ret;
 
 	psycfg.attr_grp		= &bd71827_sysfs_attr_groups[0];
 	psycfg.of_node		= pdev->dev.parent->of_node;
