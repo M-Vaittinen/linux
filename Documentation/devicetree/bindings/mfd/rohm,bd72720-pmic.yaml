@@ -15,6 +15,69 @@ description: |
   switching charger. The IC also includes a Coulomb counter, a real-time
   clock (RTC), GPIOs and a 32.768 kHz clock gate.
 
+#
+# In addition to the properties found from the charger node, the ROHM BD72720
+# uses properties from a static battery node. Following properties are used
+# when present:
+#
+# charge-full-design-microamp-hours: Battry capacity in mAh
+# voltage-max-design-microvolt:      Maximum voltage
+# voltage-min-design-microvolt:      Minimum voltage system is still operating.
+# degrade-cycle-microamp-hours:      Capacity lost due to aging at each full
+#                                    charge cycle. 
+# ocv-capacity-celsius:              Array of OCV table temperatures. 1/table.
+# ocv-capacity-table-<N>:            Table of OCV voltage/SOC pairs. Corresponds
+#                                    N.th temperature in ocv-capacity-celsius
+#
+# ROHM specific properties:
+# rohm,voltage-vdr-thresh-microvolt: Threshold for starting the VDR correction
+# rohm,volt-drop-soc:                Table of capacity values matching the
+#                                    values in VDR tables.
+# rohm,volt-drop-high-temp-microvolt: VDR table for high temperature
+# rohm,volt-drop-normal-temp-microvolt: VDR table for normal temperature
+# rohm,volt-drop-low-temp-microvolt:  VDR table for low temperature
+# rohm,volt-drop-very-low-temp-microvolt: VDR table for very low temperature
+#
+# VDR tables are (usually) determined for a specific battery by ROHM.
+#
+# The battery node could look something like:
+#
+# testbattery: battery {
+#   compatible = "simple-battery";
+#
+#   ocv-capacity-celsius = <25>;
+#   ocv-capacity-table-0 = <4200000 100 4184314 100 4140723 95 4099487 90
+#         4060656 85 4024350 80 3991121 75 3954379 70 3913265 65 3877821 60
+#         3855577 55 3837466 50 3822194 45 3809012 40 3795984 35 3780647 30
+#         3760505 25 3741532 20 3718837 15 3696698 10 3690594 5 3581427 0>;
+#
+#  rohm,volt-drop-soc = <1000 1000 950 900 850 800 750 700 650 600 550 500
+#         450 400 350   300 250 200 150 100 50 00 (-50)>;
+#
+#  rohm,volt-drop-high-temp-microvolt =  <100 100 102 104 106 109 114 124
+#         117 107 107 109   112 116 117 108 109 109 108 109 122 126 130>;
+#
+#  rohm,volt-drop-normal-temp-microvolt = <100 100 102 105 98 100 105 102
+#         101 99 98 100 103 105 109 117 111 109 110 114 128 141 154>;
+#
+#  rohm,volt-drop-low-temp-microvolt = <100 100 98 107 112 114 118 118 112
+#         108 108 110 111 113 117 123 131 144 157 181 220 283 399>;
+#
+#  rohm,volt-drop-very-low-temp-microvolt = <86 86 105 109 114 110 115 115
+#         110 108 110 112 114 118 124 134 136 160 177 201 241 322 403>;
+#
+#  rohm,voltage-vdr-thresh-microvolt = <4150000>;
+#
+#  charge-full-design-microamp-hours = <1799000>;
+#  voltage-max-design-microvolt = <4200000>;
+#  voltage-min-design-microvolt = <3500000>;
+#  degrade-cycle-microamp-hours = <131>;
+#  };
+#
+# This node would then be referred from the charger node:
+#
+# monitored-battery = <&testbattery>;
+
 properties:
   compatible:
     const: rohm,bd72720
