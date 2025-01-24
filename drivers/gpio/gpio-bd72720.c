@@ -249,17 +249,23 @@ static int gpo_bd72720_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	g->chip = bd72720gpo_chip;
+	g->dev = dev;
+	g->chip.parent = parent;
+	g->regmap = dev_get_regmap(parent, NULL);
 
 	ret = bd72720_gpio_get_pins(g);
 	if (ret)
 		return ret;
 
+	if (!g->num_pins) {
+		dev_info(&pdev->dev, "No GPIO pins found\n");
+
+		return 0;
+	}
+
 	g->chip.ngpio = g->num_pins;
 
 	g->chip.base = -1;
-	g->chip.parent = parent;
-	g->regmap = dev_get_regmap(parent, NULL);
-	g->dev = dev;
 
 	return devm_gpiochip_add_data(dev, &g->chip, g);
 }
