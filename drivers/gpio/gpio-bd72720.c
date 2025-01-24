@@ -271,7 +271,7 @@ static int gpo_bd72720_probe(struct platform_device *pdev)
 }
 
 static const struct platform_device_id bd72720_gpio_id[] = {
-	{ "bd71815-gpio" },
+	{ "bd72720-gpio" },
 	{ },
 };
 MODULE_DEVICE_TABLE(platform, bd72720_gpio_id);
