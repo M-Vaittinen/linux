@@ -611,15 +611,23 @@ EXPORT_SYMBOL(bd71828_set_runlevel);
  */
 int bd71828_get_runlevel(struct regulator *regulator, unsigned int *level)
 {
-	struct regulator_dev *rdev = regulator->rdev;
-	struct bd71828_regulator_data *rd = rdev_get_drvdata(rdev);
+	struct regulator_dev *rdev;
+	struct bd71828_regulator_data *rd;
 	int ret;
 
+	if (!regulator)
+		return -ENOENT;
+
+	rdev = regulator->rdev;
+	if (!rdev)
+		return -ENOENT;
+
+	rd = rdev_get_drvdata(rdev);
 	if (!rd)
 		return -ENOENT;
 
-	if (!rd || !rd->allow_runlvl)
-		return -EINVAL; 
+	if (!rd->allow_runlvl)
+		return -ENOENT;
 
 	if (!rd->gps) {
 		if (!rd->get_run_level_i2c)
@@ -2365,7 +2373,7 @@ static int bd71828_probe(struct platform_device *pdev)
 
 		rd = &rdata[i];
 		rd->dev = &pdev->dev;
-		config.driver_data = &rd[i];
+		config.driver_data = rd;
 		rdev = devm_regulator_register(&pdev->dev,
 					       &rd->desc, &config);
 		if (IS_ERR(rdev))
