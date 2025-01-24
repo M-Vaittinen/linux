@@ -1862,6 +1862,11 @@ static int get_vdr_from_dt(struct bd71827_power *pwr,
 			temp_values, NUM_VDR_TEMPS);
 		return -EINVAL;
 	}
+
+	ret = fwnode_property_read_u32(node, "rohm,voltage-vdr-thresh-microvolt", &pwr->low_thr_voltage);
+	if (ret)
+		dev_warn(pwr->dev, "err %d, Failed to read low-threshold voltage. Using default\n", ret);
+
 	ret = fwnode_property_read_u32_array(node,
 					    "rohm,volt-drop-temp-millikelvin",
 					    &vdr_kelvin[0], NUM_VDR_TEMPS);
