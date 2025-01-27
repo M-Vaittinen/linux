@@ -469,9 +469,9 @@ static unsigned int bd72720_bit1_offsets[] = {2, 3};	/* DVS1 and DVS2 */
 static unsigned int bd72720_bit2_offsets[] = {4};	/* VBUS */
 static unsigned int bd72720_bit3_offsets[] = {5};	/* VSYS */
 static unsigned int bd72720_bit4_offsets[] = {6};	/* CHG */
-static unsigned int bd72720_bit5_offsets[] = {6, 7};	/* BAT1 and BAT2 */
-static unsigned int bd72720_bit6_offsets[] = {8};	/* IBAT */
-static unsigned int bd72720_bit7_offsets[] = {9, 10};	/* ETC1 and ETC2 */
+static unsigned int bd72720_bit5_offsets[] = {7, 8};	/* BAT1 and BAT2 */
+static unsigned int bd72720_bit6_offsets[] = {9};	/* IBAT */
+static unsigned int bd72720_bit7_offsets[] = {10, 11};	/* ETC1 and ETC2 */
 
 static struct regmap_irq_sub_irq_map bd718xx_sub_irq_offsets[] = {
 	REGMAP_IRQ_MAIN_REG_OFFSET(bit0_offsets),
