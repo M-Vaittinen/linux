@@ -10,6 +10,13 @@
  * Copyright 2025, Matti Vaittinen mazziesaccount@gmail.com>
  */
 
+mysqli_close($conn);
+
+echo '<hr style="height:10px;border-width:0;color:#d2691e;background-color:#d2691e">';
+
 echo "Copyright (c) 2025, Matti Vaittinen mazziesaccount (at) gmail com";
+
+echo "<a href='http://www.freevisitorcounters.com'>Counters</a> <script type='text/javascript' src='https://www.freevisitorcounters.com/auth.php?id=57ceb84220fd0f19e28a1c0659163db3326e40d4'></script>";
+echo '<script type="text/javascript" src="https://www.freevisitorcounters.com/en/home/counter/1289001/t/4"></script>';
 echo "</body> </html>";
 ?>
