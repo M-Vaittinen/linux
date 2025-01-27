@@ -70,9 +70,9 @@ function num_cards_in_res($result)
 function card_ids_in_res($result) {
 	$ids = array();
 
-	while ($row = mysqli_fetch_assoc($result)) {
-		$ids[] = $row['c.id'];
-	}
+	while ($row = mysqli_fetch_assoc($result))
+		$ids[] = $row['id'];
+
 	mysqli_data_seek($result, 0);
 
 	return $ids;
@@ -127,11 +127,17 @@ function card_query_start()
 function card_query_where($tuh_inafactor, $exp, $exclude_ids = array())
 {
 	$base_where = "WHERE p.id = c.prizetype_id AND c.expansion_id = e.id AND c.type_id = ct.id";
+	/*
+	 * TODO: Find a good way to prevent the cards which belong to same storage deck from being suffled in.
+	 * It'd be easy to just exclude all cards which belong to the "bottom deck" (see query below), but that would
+	 * exclude a few of the interesting options from 'tupina' and 'tuhina' weighing.
+	 *
+	 *	$base_where = "WHERE p.id = c.prizetype_id AND c.expansion_id = e.id AND c.type_id = ct.id AND c.dual_below_id = 0";
+	 */
 	$where = $base_where;
 
-	foreach($exclude_ids as $id) {
+	foreach($exclude_ids as $id)
 		$where .= " AND c.id !='" . $id . "'";
-	}
 
 	if (isset($tuh_inafactor)) {
 		if ($tuh_inafactor == 0)
@@ -290,14 +296,13 @@ if ($tup_inafactor > 0) {
 	$spec_res = query_cards($conn, $special_query);
 	$printed_prizes = num_cards_in_res($spec_res);
 
-	/* TODO: exclude IDs */
-	$exlude_ids = card_ids_in_res($spec_res);
+	$exclude_ids = card_ids_in_res($spec_res);
 
 	__print_cards($spec_res, "Tupina Specials", $mobile);
 }
 
 $query_start = card_query_start();
-$query_where = card_query_where($tuh_inafactor, $exp, $exlude_ids);
+$query_where = card_query_where($tuh_inafactor, $exp, $exclude_ids);
 
 $query_order = card_query_order($tuh_inafactor, $tup_inafactor);
 
