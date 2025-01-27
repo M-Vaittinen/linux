@@ -889,6 +889,7 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 	int cells;
 	int button_irq;
 	int clkmode_reg;
+	int main_lvl_mask_reg = 0, main_lvl_val = 0;
 
 	if (!i2c->irq) {
 		dev_err(&i2c->dev, "No IRQ configured\n");
@@ -941,6 +942,9 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 		mfd[i].platform_data = &bd72720_chg_regmap;
 		mfd[i].pdata_size = sizeof(bd72720_chg_regmap);
 
+		main_lvl_mask_reg = BD72720_REG_INT_LVL1_EN;
+		main_lvl_val = BD72720_MASK_LVL1_EN_ALL;
+
 		break;
 	}
 	default:
@@ -962,6 +966,20 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 	dev_dbg(&i2c->dev, "Registered %d IRQs for chip\n",
 		irqchip->num_irqs);
 
+	/*
+	 * On soem ICs the main IRQ register has corresponding mask register.
+	 * This is not handled by the regmap IRQ. Let's enable all the main
+	 * level IRQs here. Further writes to the main level MASK is not
+	 * needed because masking is handled by the per IRQ 2.nd level MASK
+	 * registers. 2.nd level masks are handled by the regmap IRQ.
+	 */
+	if (main_lvl_mask_reg) {
+		ret = regmap_write(regmap, main_lvl_mask_reg, main_lvl_val);
+		if (ret) {
+			return dev_err_probe(&i2c->dev, ret,
+					"Failed to enable main level IRQs\n");
+		}
+	}
 	if (button_irq) {
 		ret = regmap_irq_get_virq(irq_data, button_irq);
 		if (ret < 0)
