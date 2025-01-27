@@ -229,7 +229,7 @@ $output .= '<div class="slidecontainer">
 $output .= '<input type="checkbox" id="tuhinaenable" name="tuhinaenable" value="1">';
 $output .= '<label for="tuhinaenable">Enable Tuhina\'o-meter</label><br>';
 $output .= '<div class="help-tip">
-    <p>Tuhina\'o-meter&copy;ill&auml; voit muuttaa korttiarvontaa priorisoimaan toimintoketjuja lis&auml;&auml;vi&auml; kortteja. Asettamalla Tuhina\'o-meterin 0:aan est&auml;t isomman tuhinaindexin&copy; korttien valinnan kokonaan.</p>
+    <p>Tuhina\'o-meter&copy; :ll&auml; voit muuttaa korttiarvontaa priorisoimaan toimintoketjuja lis&auml;&auml;vi&auml; kortteja. Asettamalla arvon 0:aan voit my&ouml;s est&auml;&auml; isomman Tuhinaindex&copy; :n korttien valinnan kokonaan.</p>
 </div>';
 $output .= '</td>';
 
@@ -241,7 +241,7 @@ $output .= '<div class="slidecontainer">
 $output .= '<input type="checkbox" id="tupinaenable" name="tupinaenable" value="1">';
 $output .= '<label for="tupinaenable">Enable Tupina\'o-meter</label><br>';
 $output .= '<div class="help-tip">
-    <p>Voit k&auml;ytt&auml;&auml; Tupina\'o-meter&copy;i&auml; lis&auml;&auml;m&auml;&auml;n peliin tupinaa ja jupinaa aiheuttavia elementtej&auml;. Tupina\'o-meter&copy; eroaa Tuhina\'o-meter&copy;ist&auml; siin&auml;, ett&auml; arvon asettaminen 0:ksi ei kuitenkaan poista tupinaa aiheuttavien korttien mahdollisuutta pelist&auml;.</p>
+    <p>Tupina\'o-meter&copy; :ll&auml; lis&auml;&auml;t peliin tupinaa ja jupinaa aiheuttavia elementtej&auml;. Tupina\'o-meter&copy; eroaa Tuhina\'o-meter&copy; :st&auml; siin&auml;, ett&auml; arvon asettaminen 0:ksi ei kuitenkaan poista tupinaa aiheuttavien korttien mahdollisuutta pelist&auml;.</p>
 </div>';
 
 /* End of the form table and form */
