@@ -90,7 +90,7 @@ function __print_cards($result, $title, $mobile)
 	if (!$mobile) {
 		$out = '<h3>' . $title . '</h3>
 		<table class="cardlist"><tr>
-			<th>Kortti</th> <th>Hinta</th> <th>Hintatyyppi</th> <th>Peliosa</th> <th>Korttityyppi</th></tr>';
+			<th>Kortti</th><th>Korttityyppi</th><th>Hinta</th><th>Peliosa</th></tr>';
 	} else {
 		$out = '<h3>' . $title . '</h3>
 		<table class="cardlist"><tr>
@@ -104,7 +104,7 @@ function __print_cards($result, $title, $mobile)
 		$expansion = $row['e_name'];
 		$cardtype = $row['ct_name'];
 		if (!$mobile)
-			$out .= '<tr><td>' . $name . '</td><td>' . $prize . '</td><td>' . $prizetype . '</td><td>' . $expansion . '</td><td>' . $cardtype . '</td></tr>';
+			$out .= '<tr><td>' . $name . '</td><td>' . $cardtype . '</td><td>' . $prize . ' (' . $prizetype . ')</td><td>' . $expansion . '</td></tr>';
 		else
 			$out .= '<tr><td>' . $name . '</td><td>' . $expansion . '</td></tr>';
 	}
