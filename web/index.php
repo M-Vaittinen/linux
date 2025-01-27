@@ -235,7 +235,7 @@ $output .= '<div class="slidecontainer">
 $output .= '<input type="checkbox" id="tupinaenable" name="tupinaenable" value="1">';
 $output .= '<label for="tupinaenable">Enable Tupina\'o-meter</label><br>';
 $output .= '<div class="help-tip">
-    <p>Voit k&auml;ytt&auml;&auml; Tupina\'o-meter&copy;i&auml; lis&auml;&auml;m&auml;&auml;n peliin tupinaa ja jupinaa aiheuttavia elementtej&auml;. Tupina\'o-meter&copy; eroaa Tuhina\'-meter&copy;ist&auml; siin&auml;, ett&auml; arvon asettaminen 0:ksi ei kuitenkaan poista tupinaa aiheuttavien korttien mahdollisuutta pelist&auml;.</p>
+    <p>Voit k&auml;ytt&auml;&auml; Tupina\'o-meter&copy;i&auml; lis&auml;&auml;m&auml;&auml;n peliin tupinaa ja jupinaa aiheuttavia elementtej&auml;. Tupina\'o-meter&copy; eroaa Tuhina\'o-meter&copy;ist&auml; siin&auml;, ett&auml; arvon asettaminen 0:ksi ei kuitenkaan poista tupinaa aiheuttavien korttien mahdollisuutta pelist&auml;.</p>
 </div>';
 
 /* End of the form table and form */
