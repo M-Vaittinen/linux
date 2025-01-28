@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
+#include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
 
@@ -52,20 +53,47 @@ static int bd71828_led_brightness_set(struct led_classdev *led_cdev,
 			    l->force_mask, val);
 }
 
+/*
+ * This function is introduced to drivers/base/property.c later.
+ * Drop this internal copy of it when updating the kernel
+ */
+static int fwnode_property_match_property_string(const struct fwnode_handle *fwnode,
+	const char *propname, const char * const *array, size_t n)
+{
+	const char *string;
+	int ret;
+
+	ret = fwnode_property_read_string(fwnode, propname, &string);
+	if (ret)
+		return ret;
+
+	ret = match_string(array, n, string);
+	if (ret < 0)
+		ret = -ENOENT;
+
+	return ret;
+}
+
 static int bd71828_led_probe(struct platform_device *pdev)
 {
 	enum rohm_chip_type chip = platform_get_device_id(pdev)->driver_data;
+	struct fwnode_handle *np, *child;;
+	struct led_init_data init_data = {};
 	struct bd71828_leds *l;
 	struct bd71828_led *g, *a;
 	struct regmap *r;
-	int ret;
+	int ret, found = 0;
 
 	r = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!r)
 		return dev_err_probe(&pdev->dev, -ENODEV, "No regmap");
 
+	np = device_get_named_child_node(pdev->dev.parent, "leds");
+        if (!np)
+                return -ENODEV;
+
 	l = devm_kzalloc(&pdev->dev, sizeof(*l), GFP_KERNEL);
-	if (l)
+	if (!l)
 		return -ENOMEM;
 
 	l->regmap = r;
@@ -91,11 +119,34 @@ static int bd71828_led_probe(struct platform_device *pdev)
 			return -EINVAL;
 	}
 
-	ret = devm_led_classdev_register(&pdev->dev, &g->l);
-	if (ret)
-		return ret;
+	fwnode_for_each_available_child_node(np, child) {
+		const char * const compat[] = { "bd71828-grnled", "bd71828-ambled", "bd72720-grnled", "bd72720-ambled" };
 
-	return devm_led_classdev_register(&pdev->dev, &a->l);
+		ret = fwnode_property_match_property_string(child,
+				"rohm,led-compatible", compat,
+				ARRAY_SIZE(compat));
+		if (ret < 0)
+			continue;
+
+		init_data.fwnode = child;
+		if (ret == 0 || ret == 2) {
+			ret = devm_led_classdev_register_ext(&pdev->dev, &g->l, &init_data);
+			if (ret)
+				return ret;
+			found++;
+
+		} else if (ret == 1 || ret == 3) {
+			ret = devm_led_classdev_register_ext(&pdev->dev, &a->l, &init_data);
+			if (ret)
+				return ret;
+			found++;
+		}
+	}
+
+	if (!found)
+		return -ENODEV;
+
+	return 0;
 }
 
 static const struct platform_device_id bd71828_led_id[] = {
