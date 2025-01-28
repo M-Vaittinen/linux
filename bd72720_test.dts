@@ -106,16 +106,14 @@
 				rohm,clkout-open-drain = <0>;
 				#gpio-cells = <2>;
 				gpio-controller;
-				/* With default OTP the GPIO 1 is used for DVS0
-				   input (not usable as GPO) and GPIO 3 is used
-				   for DVS1 input. GPIO 2 can be used for GPO
-				   and is by default connected to EPDEN. Let's
-				   exclude GPIO 1 and 3 from use */
-/*				ngpios = <4>; */
+
+				/*
+				 * Try using these pins for GPIO.
+				 * This works only on certain OTP configs
+				 */
 				rohm,pin-exten0 = "gpo";
 				rohm,pin-dvs0 = "gpi";
 
-/*				gpio-reserved-ranges = <0 1>, <2 1>; */
 				rohm,dvs-vsel-gpios = <&gpio1 12 0>,
 						      <&gpio1 13 0>;
 				/* 30 milli Ohm RSENS resistor */ 
