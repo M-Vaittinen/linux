@@ -315,11 +315,11 @@
 						rohm,dvs-idle-voltage = <1000000>;
 						/* LDO1 supports sub-run states */
 						/* 0x55 .. 0x58 */
-						rohm,dvs-runlevel-microvolts =
-								<500000>,
-								<506250>,
-								<512500>,
-								<518750>;
+						rohm,dvs-runlvl-ctrl;
+						rohm,dvs-runlevel0-voltage = <500000>;
+						rohm,dvs-runlevel1-voltage = <506250>;
+						rohm,dvs-runlevel2-voltage = <512500>;
+						rohm,dvs-runlevel3-voltage = <518750>;
 						regulator-boot-on;
 					};
 					ldo2 {
