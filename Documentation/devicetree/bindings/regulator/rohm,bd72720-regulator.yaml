@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+u SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
 %YAML 1.2
 ---
 $id: http://devicetree.org/schemas/regulator/rohm,bd72720-regulator.yaml#
@@ -137,6 +137,13 @@ patternProperties:
         $ref: /schemas/types.yaml#/definitions/uint32
         minimum: 50
         maximum: 300
+
+      rohm,dvs-runlvl-ctrl: true
+        description:
+          Indicate that the regulator should not be individually controlled via
+          I2C, but it's state should follow the sub run states and take the
+          preconfigured voltage / enable states in use. This can only be applied
+          to the LDO1 and BUCK1. See also rohm,dvs-runlevel<N>-voltage.
 
       rohm,dvs-runlevel0-voltage:
         description:
