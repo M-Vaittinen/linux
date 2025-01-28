@@ -190,7 +190,7 @@ static int set_runlevel_voltage(struct regmap *regmap,
 {
 	int i, ret = -EINVAL;
 	/*
-	 * On bot the BD71828 and BD7220 the RUN level registers are right after the
+	 * On both the BD71828 and BD7220 the RUN level registers are right after the
 	 * vsel_reg, and the voltage values (and masks) are same as with normal vsel.
 	 * RUN0 reg is next, then is the RUN 1 reg and so on...
 	 */
@@ -221,9 +221,6 @@ static int __set_runlvl_hw_dvs_levels(struct device_node *np, const struct regul
 					      "rohm,dvs-runlevel3-voltage" };
 
 	data = container_of(desc, struct bd71828_regulator_data, desc);
-
-	pr_err("%s: reg %s desc\n", __func__, desc->name);
-	pr_err("%s: sub_run_mode_reg 0x%x\n", __func__, data->sub_run_mode_reg);
 
 	mutex_lock(&data->dvs_lock);
 	for (i = 0; i < DVS_RUN_LEVELS; i++) {
@@ -556,8 +553,11 @@ int bd71828_set_runlevel_voltage(struct regulator *regulator, unsigned int uv,
 	struct bd71828_regulator_data *data = rdev_get_drvdata(rdev);
 	int ret;
 
-	if (!data || !data->allow_runlvl)
+	if (!data || !data->allow_runlvl) {
+		dev_dbg(data->dev, "%s: runlevel voltage setting not supported\n",
+			data->desc.name);
 		return -EINVAL; 
+	}
 
 	mutex_lock(&data->dvs_lock);
 	ret = set_runlevel_voltage(rdev->regmap, rdev->desc, uv, level);
@@ -587,8 +587,12 @@ int bd71828_set_runlevel(struct regulator *regulator, unsigned int level)
 	if (!rd)
 		return -ENOENT;
 
-	if (!rd || !rd->allow_runlvl)
+	if (!rd || !rd->allow_runlvl) {
+		/* TODO: Drop these prints as they can be used to flood system w/ prints */
+		dev_dbg(rd->dev, "%s: runlevel change not supported\n",
+			rd->desc.name);
 		return -EINVAL; 
+	}
 
 	if (rd->gps) {
 		if (!rd->set_run_level_gpio)
@@ -2185,12 +2189,12 @@ static int get_runcontrolled_bucks_dt(struct device *dev,
 }
 
 static int check_dt_for_gpio_controls(struct device *d,
-				      struct bd71828_regulator_data *rd,
+				      struct bd71828_regulator_data *data,
 				      int num_rd)
 {
-	int ret;
+	int ret, i;
 
-	ret = get_runcontrolled_bucks_dt(d, rd, num_rd);
+	ret = get_runcontrolled_bucks_dt(d, data, num_rd);
 	if (ret < 0)
 		return ret;
 
@@ -2198,21 +2202,26 @@ static int check_dt_for_gpio_controls(struct device *d,
 	if (!ret)
 		return 0;
 
-	rd->allow_runlvl = true;
+	for (i = 0; i < num_rd; i++) {
+		struct bd71828_regulator_data *rd = &data[i];
 
-	rd->gps = devm_gpiod_get_array(d, "rohm,dvs-vsel", GPIOD_OUT_LOW);
-	if (IS_ERR(rd->gps)) {
-		ret = PTR_ERR(rd->gps);
-		if (ret != -ENOENT)
-			return ret;
+		if (!rd->allow_runlvl)
+			continue;
+
+		rd->gps = devm_gpiod_get_array(d, "rohm,dvs-vsel", GPIOD_OUT_LOW);
+		if (IS_ERR(rd->gps)) {
+			ret = PTR_ERR(rd->gps);
+			if (ret != -ENOENT)
+				return ret;
+		}
+
+		if (ret == -ENOENT || rd->gps->ndescs != 2)
+			rd->desc.ops = &dvs_buck_i2c_ops;
+		else
+			rd->desc.ops = &dvs_buck_gpio_ops;
+
+		rd->desc.of_parse_cb = rd->of_set_runlvl_levels;
 	}
-
-	if (ret == -ENOENT || rd->gps->ndescs != 2)
-		rd->desc.ops = &dvs_buck_i2c_ops;
-	else
-		rd->desc.ops = &dvs_buck_gpio_ops;
-
-	rd->desc.of_parse_cb = rd->of_set_runlvl_levels;
 
 	return 0;
 }
@@ -2375,6 +2384,13 @@ static int bd71828_probe(struct platform_device *pdev)
 		struct bd71828_regulator_data *rd;
 
 		rd = &rdata[i];
+
+		/* TODO: The rdev and config already have the regmap. Check if
+		 * every function could use those and if we could get rid of
+		 * the data->regmap altogether.
+		 */
+		rd->regmap = config.regmap;
+
 		rd->dev = &pdev->dev;
 		config.driver_data = rd;
 		rdev = devm_regulator_register(&pdev->dev,
