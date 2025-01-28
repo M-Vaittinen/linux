@@ -222,6 +222,9 @@ static int __set_runlvl_hw_dvs_levels(struct device_node *np, const struct regul
 
 	data = container_of(desc, struct bd71828_regulator_data, desc);
 
+	pr_err("%s: reg %s desc\n", __func__, desc->name);
+	pr_err("%s: sub_run_mode_reg 0x%x\n", __func__, data->sub_run_mode_reg);
+
 	mutex_lock(&data->dvs_lock);
 	for (i = 0; i < DVS_RUN_LEVELS; i++) {
 		ret = of_property_read_u32(np, props[i], &uv);
@@ -274,7 +277,7 @@ static int bd72720_set_runlvl_hw_dvs_levels(struct device_node *np,
 					 BD72720_MASK_RUN3_EN };
 	int en_reg = desc->enable_reg;
 
-	return __set_runlvl_hw_dvs_levels(np, desc, en_reg, en_masks);
+	return __set_runlvl_hw_dvs_levels(np, desc, en_reg, &en_masks[0]);
 }
 static int bd71828_set_runlvl_hw_dvs_levels(struct device_node *np,
 				       const struct regulator_desc *desc,
@@ -2145,7 +2148,7 @@ static bool mark_regulator_runlvl_controlled(struct device *dev,
 	bool ret = false;
 
 	for (i = 0; i < num_rd; i++)
-		if (!of_node_name_eq(np, rd[i].desc.of_match)) {
+		if (of_node_name_eq(np, rd[i].desc.of_match)) {
 			if (!rd[i].sub_run_mode_mask)
 				dev_warn(rd->dev,
 					 "%s: run-level dvs not supported\n",
