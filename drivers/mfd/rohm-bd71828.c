@@ -232,7 +232,7 @@ static const struct resource bd72720_power_irqs[] = {
 static struct mfd_cell bd72720_mfd_cells[] = {
 	{ .name = "bd72720-pmic", },
 	{ .name = "bd72720-gpio", },
-	{ .name = "bd72720-led", .of_compatible = "rohm,bd72720-leds" },
+	{ .name = "bd72720-led", },
 	{ .name = "bd72720-clk", },
 	{
 		.name = BD72720_POWER_DRV_NAME,
