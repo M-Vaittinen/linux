@@ -16,6 +16,9 @@
  * Öky'o-meter => Priorisoi isoja rahoja
  */
 
+global $DBG;
+$DBG=false;
+
 if (isset($_POST['expansion']))
 	$exp = $_POST['expansion'];
 
@@ -33,11 +36,20 @@ if (isset($_POST['tupinaenable'])) {
 	}
 }
 
+if (isset($_POST['add_nihilism'])) {
+	$nihilism = true;
+} else {
+	$nihilism = false;
+}
+
 require 'include/db.php';
 require 'include/header.php';
 
 function query_cards($conn, $query)
 {
+	if ($DBG)
+		echo $query;
+
 	$result = mysqli_query($conn, $query);
 	if (!$result)
 		die("no cards");
@@ -166,21 +178,34 @@ function card_query_where($tuh_inafactor, $exp, $exclude_ids = array())
 	return $where_arr;
 }
 
-function card_query_order($tuh_inafactor)
+function card_query_order($tuh_inafactor, $tup_inafactor, $nihilism)
 {
-	$base_order = 'ORDER BY RAND()';
-
+	$base_order = 'ORDER BY (RAND()';
 	$order = $base_order;
 
+	/*
+	 * Weighs to be added to the RAND for biasing the card selection based on
+	 * tuhinakerron and actionmoney.
+	 */
+	$tuhinaweigh = '(c.tuhinakerroin / 40 * '.$tuh_inafactor.' + 1 )';
+	$actionweigh = '( c.actionmoney / 12 * '. $tup_inafactor . ' + 1)';
+
+	/* echo "tuhweigh $tmp"; */
+
 	if (isset($tuh_inafactor) && $tuh_inafactor != 0) {
-		$order .= ' / ( c.tuhinakerroin * '. $tuh_inafactor . ')';
+		$order .= ' * ' . $tuhinaweigh;
 	}
-	if (isset($tup_inafactor) && $tup_inafactor != 0) {
-		if ($tup_inafactor > 0)
-			$order .= ' * ( c.actionmoney * '. $tup_inafactor . ')';
+	/*
+	 * If nihilism is checked, then we decrease the weigh for action cards with money.
+	 *
+	 * TODO: We should add information about the actions which allow picking more cards to hand. The
+	 * nihilism should probably also decrease probability of such cards to maximize the agony.
+	 */
+	if (isset($tup_inafactor) && $tup_inafactor > 0 && $nihilism) {
+		$order .= ' / ' . $actionweigh;
 	}
 
-	$order .= ' DESC';
+	$order .= ') DESC';
 
 	return $order;
 }
@@ -224,7 +249,7 @@ $output .= '</td>';
 /* ...Tuhina cell: */
 $output .= '<td>';
 $output .= '<div class="slidecontainer">
-  <input type="range" min="0" max="20" value="10" class="slider" name="tuhinarange" id="tuhinarange">
+  <input type="range" min="0" max="20" value="0" class="slider" name="tuhinarange" id="tuhinarange">
 </div>';
 $output .= '<input type="checkbox" id="tuhinaenable" name="tuhinaenable" value="1">';
 $output .= '<label for="tuhinaenable">Enable Tuhina\'o-meter</label><br>';
@@ -236,10 +261,12 @@ $output .= '</td>';
 /* Tupina cell: */
 $output .= '<td>';
 $output .= '<div class="slidecontainer">
-  <input type="range" min="0" max="20" value="10" class="slider" name="tupinarange" id="tupinarange">
+  <input type="range" min="0" max="20" value="0" class="slider" name="tupinarange" id="tupinarange">
 </div>';
 $output .= '<input type="checkbox" id="tupinaenable" name="tupinaenable" value="1">';
 $output .= '<label for="tupinaenable">Enable Tupina\'o-meter</label><br>';
+$output .= '<input type="checkbox" id="add_nihilism" name="add_nihilism" value="1">';
+$output .= '<label for="add_nihilism">...ripauksella nihilismi&auml;</label><br>';
 $output .= '<div class="help-tip">
     <p>Tupina\'o-meter&copy; :ll&auml; lis&auml;&auml;t peliin tupinaa ja jupinaa aiheuttavia elementtej&auml;. Tupina\'o-meter&copy; eroaa Tuhina\'o-meter&copy; :st&auml; siin&auml;, ett&auml; arvon asettaminen 0:ksi ei kuitenkaan poista tupinaa aiheuttavien korttien mahdollisuutta pelist&auml;.</p>
 </div>';
@@ -304,7 +331,7 @@ if ($tup_inafactor > 0) {
 $query_start = card_query_start();
 $query_where = card_query_where($tuh_inafactor, $exp, $exclude_ids);
 
-$query_order = card_query_order($tuh_inafactor, $tup_inafactor);
+$query_order = card_query_order($tuh_inafactor, $tup_inafactor, $nihilism);
 
 $query_limit = card_query_limit(3 - $printed_prizes[0], 3 - $printed_prizes[1], 4 - $printed_prizes[2]);
 
