@@ -251,9 +251,9 @@ if (mysqli_num_rows($result) <= 0)
 /* Output the form table */
 if (!$mobile) {
 	$output = '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Tuhina\'o-meter</th> <th>Tupina\'o-meter</th><th>Kapita\'o-meter</th></tr><tr><td>';
-} else {
+	} else {
 	$output = '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Painotukset</th></tr><tr><td>';
-}
+	}
 $output .= '<form action="" method="post">';
 
 /* Print expansion checkboxes */
@@ -267,6 +267,8 @@ $output .= '</td>';
 
 /* ...Tuhina cell: */
 $output .= '<td>';
+if ($mobile)
+	$output .= '<b>Tuhina\'o-meter</b> <br />';
 $output .= '<div class="slidecontainer">
   <input type="range" min="0" max="20" value="0" class="slider" name="tuhinarange" id="tuhinarange">
 </div>';
@@ -284,6 +286,8 @@ if ($mobile) {
 
 /* Tupina cell: */
 $output .= '<td>';
+if ($mobile)
+	$output .= '<b>Tupina\'o-meter</b><br />';
 $output .= '<div class="slidecontainer">
   <input type="range" min="0" max="20" value="0" class="slider" name="tupinarange" id="tupinarange">
 </div>';
@@ -303,6 +307,8 @@ if ($mobile) {
 
 /* ...Kapita cell: */
 $output .= '<td>';
+if ($mobile)
+	$output .= '<b>Kapita\'o-meter</b><br />';
 $output .= '<div class="slidecontainer">
   <input type="range" min="0" max="20" value="0" class="slider" name="kapitarange" id="kapitarange">
 </div>';
@@ -450,27 +456,27 @@ $query_exp = $query_start . ' ' . $query_where[2] . ' ' . $query_order . ' ' .$q
 echo '<hr style="height:10px;border-width:0;color:#d2691e;background-color:#d2691e">';
 
 /* Output cards */
-if (!$mobile)
+/* if (!$mobile)
 	echo '<table class="structure"><tr><td>';
-
+ */
 if ($printed_cheap != 3)
 	print_cards($conn, $query_cheap, "Hinta &lt; 4", $mobile);
 
-if (!$mobile)
+/* if (!$mobile)
 	echo '</td><td>';
-
+ */
 if ($printed_mid != 3)
 	print_cards($conn, $query_mid, "Hinta 4", $mobile);
 
-if (!$mobile)
+/* if (!$mobile)
 	echo '</td><td>';
-
+ */
 if ($printed_exp != 4)
 	print_cards($conn, $query_exp, "Hinta &gt; 4", $mobile);
 
-if (!$mobile)
+/* if (!$mobile)
 	echo '</td></tr></table>';
-
+ */
 echo '<p><a href="aloittaja.php">Arvo aloittaja?</a>';
 
 /* Close connection, print (c) and send </body> </html> */

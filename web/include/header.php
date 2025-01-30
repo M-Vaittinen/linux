@@ -5,6 +5,7 @@ echo '
 <!DOCTYPE html>
 <html>
 <head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 body {
   background-color: linen;
@@ -16,6 +17,7 @@ h1 {
 }
 
 table.structure {
+  width: 100%;
   border: none;
   border-spaceing: 18px;
   text-align: left;
@@ -39,6 +41,7 @@ table.structure {
   vertical-align: top;
 }
 table.cardlist {
+  width: 100%;
   border: 1px solid black;
   border-radius: 10px;
   border-collapse: collapse;
