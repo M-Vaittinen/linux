@@ -235,6 +235,10 @@ static const struct resource bd72720_power_irqs[] = {
 	DEFINE_RES_IRQ_NAMED(BD72720_INT_CC_MON3_DET, "bd72720_int_cc_mon3_det"),
 };
 
+static const struct resource bd72720_lid_irqs[] = {
+	DEFINE_RES_IRQ_NAMED(BD72720_INT_HALL_TGL, "bd71828-hall"),
+};
+
 #define BD72720_POWER_DRV_NAME "bd72720-power"
 
 static struct mfd_cell bd72720_mfd_cells[] = {
@@ -254,6 +258,10 @@ static struct mfd_cell bd72720_mfd_cells[] = {
 		.name = "gpio-keys",
 		.platform_data = &bd71828_powerkey_data,
 		.pdata_size = sizeof(bd71828_powerkey_data),
+	}, {
+		.name = "bd72720-lid",
+		.resources = bd72720_lid_irqs,
+		.num_resources = ARRAY_SIZE(bd72720_lid_irqs),
 	},
 };
 
