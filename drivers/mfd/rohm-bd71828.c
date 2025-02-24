@@ -830,6 +830,12 @@ static struct regmap_irq_chip bd71815_irq_chip = {
 
 static const unsigned int bd72720_irq_type_base = BD72720_REG_GPIO1_CTRL;
 
+static int debug_pre_irq(void *data) {
+	pr_info("BD71828: IRQ called\n");
+
+	return 0;
+}
+
 static struct regmap_irq_chip bd72720_irq_chip = {
 	.name = "bd72720_irq",
 	.main_status = BD72720_REG_INT_LVL1_STAT,
@@ -848,6 +854,7 @@ static struct regmap_irq_chip bd72720_irq_chip = {
 	.sub_reg_offsets = &bd72720_sub_irq_offsets[0],
 	.num_main_status_bits = 8,
 	.irq_reg_stride = 1,
+	.handle_pre_irq = debug_pre_irq,
 };
 
 static int set_clk_mode(struct device *dev, struct regmap *regmap,
@@ -990,6 +997,7 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 	 * registers. 2.nd level masks are handled by the regmap IRQ.
 	 */
 	if (main_lvl_mask_reg) {
+		pr_info("Enabling main IRQ reg at address 0x%x (val 0x%x)\n", main_lvl_mask_reg, main_lvl_val);
 		ret = regmap_write(regmap, main_lvl_mask_reg, main_lvl_val);
 		if (ret) {
 			return dev_err_probe(&i2c->dev, ret,
@@ -997,6 +1005,7 @@ static int bd71828_i2c_probe(struct i2c_client *i2c)
 		}
 	}
 	if (button_irq) {
+		pr_info("Adding button IRQ\n");
 		ret = regmap_irq_get_virq(irq_data, button_irq);
 		if (ret < 0)
 			return dev_err_probe(&i2c->dev, ret,
