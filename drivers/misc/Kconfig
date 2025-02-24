@@ -52,7 +52,7 @@ config AD525X_DPOT_SPI
 
 config BD71828_HALL
 	tristate "ROHM BD71828 HALL sensor input"
-	depends on MFD_ROHM_BD70528
+	depends on MFD_ROHM_BD71828
 	help
 	  This driver supports sending LID state event based on HALL sensor
 	  information provided by ROHM BD70528 PMIC. Say Y here if you have
