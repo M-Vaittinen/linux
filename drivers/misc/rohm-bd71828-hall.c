@@ -156,13 +156,13 @@ static ssize_t hall_enable_show(struct device *dev,
 
 static DEVICE_ATTR(hall_enable, 0644, hall_enable_show, hall_enable_store);
 
-struct attribute * bd71828_attrs[] = {
+static struct attribute * bd71828_attrs[] = {
 	&dev_attr_hall_hw_state.attr,
 	&dev_attr_hall_enable.attr,
 	NULL,
 };
 
-struct attribute_group bd71828_att_grp = {
+static struct attribute_group bd71828_att_grp = {
 	.attrs = bd71828_attrs,
 };
 
