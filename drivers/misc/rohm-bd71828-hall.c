@@ -4,6 +4,7 @@
 #include <linux/interrupt.h>
 #include <linux/kernel.h>
 #include <linux/mfd/rohm-bd71828.h>
+#include <linux/mfd/rohm-bd72720.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -16,6 +17,7 @@ struct bd71828_hall {
 	struct regmap *regmap;
 	struct device *dev;
 	unsigned int open_state;
+	int status_reg;
 	bool enabled;
 	struct delayed_work delayed_event;
 };
@@ -41,7 +43,7 @@ static int lid_is_open(struct bd71828_hall *hall)
 	unsigned int reg;
 	int ret;
 
-	ret = regmap_read(hall->regmap, BD71828_REG_IO_STAT, &reg);
+	ret = regmap_read(hall->regmap, hall->status_reg, &reg);
 	if (ret) {
 		dev_err(hall->dev, "getting HALL status failed\n");
 		return ret;
@@ -185,19 +187,28 @@ static int bd71828_probe(struct platform_device *pdev)
 {
 	int irq, ret;
 	struct bd71828_hall *hall;
-	struct rohm_regmap_dev *mfd;
+	enum rohm_chip_type chip = platform_get_device_id(pdev)->driver_data;
 
-	mfd = dev_get_drvdata(pdev->dev.parent);
-	if (!mfd) {
-		dev_err(&pdev->dev, "No MFD driver data\n");
-		return -EINVAL;
-	}
 	hall = devm_kzalloc(&pdev->dev, sizeof(*hall), GFP_KERNEL);
 	if (!hall)
 		return -ENOMEM;
 
-	hall->regmap = mfd->regmap;
+	hall->regmap = dev_get_regmap(pdev->dev.parent, NULL);
+	if (!hall->regmap)
+		return -ENODEV;
+
 	hall->dev = &pdev->dev;
+	switch (chip) {
+	case ROHM_CHIP_TYPE_BD71828:
+		hall->status_reg = BD71828_REG_IO_STAT; 
+		break;
+	case ROHM_CHIP_TYPE_BD72720:
+		hall->status_reg = BD72720_REG_HALL_STAT;
+		break;
+	default:
+		return dev_err_probe(&pdev->dev, -EINVAL, "Unknown IC\n");
+	}
+
 	dev_set_drvdata(&pdev->dev, hall);
 
 	if (of_property_read_bool(pdev->dev.parent->of_node,
@@ -219,10 +230,18 @@ static int bd71828_probe(struct platform_device *pdev)
 	return ret;
 }
 
+static const struct platform_device_id bd71828_hall_id[] = {
+	{ "bd71828-lid", ROHM_CHIP_TYPE_BD71828 },
+	{ "bd72720-lid", ROHM_CHIP_TYPE_BD72720 },
+	{ },
+};
+MODULE_DEVICE_TABLE(platform, bd71828_hall_id);
+
 static struct platform_driver bd71828_hall = {
 	.driver = {
 		.name = "bd71828-lid"
 	},
+	.id_table = bd71828_hall_id,
 	.probe = bd71828_probe,
 	.remove = bd71828_remove,
 };
