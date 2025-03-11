@@ -83,6 +83,7 @@ enum {
 #define BD96801_LDO6_VSEL_REG		0x26
 #define BD96801_LDO7_VSEL_REG		0x27
 #define BD96801_BUCK_VSEL_MASK		0x1F
+#define BD96805_BUCK_VSEL_MASK		0x3F
 #define BD96801_LDO_VSEL_MASK		0xff
 
 #define BD96801_MASK_RAMP_DELAY		0xc0
@@ -90,6 +91,7 @@ enum {
 #define BD96801_BUCK_INT_VOUT_MASK	0xff
 
 #define BD96801_BUCK_VOLTS		256
+#define BD96805_BUCK_VOLTS		64
 #define BD96801_LDO_VOLTS		256
 
 #define BD96801_OVP_MASK		0x03
@@ -158,6 +160,22 @@ static const struct linear_range bd96801_buck_init_volts[] = {
 	REGULATOR_LINEAR_RANGE(500000 - 150000, 0x00, 0xc8, 5000),
 	REGULATOR_LINEAR_RANGE(1550000 - 150000, 0xc9, 0xec, 50000),
 	REGULATOR_LINEAR_RANGE(3300000 - 150000, 0xed, 0xff, 0),
+};
+
+/*
+ * On BD96805 we have similar "negative tuning range" as on BD96801, except
+ * that the max tuning is -310 ... +310 mV (instead of the 150mV). We use same
+ * approach as with the BD96801 ranges.
+ */
+static const struct linear_range bd96805_tune_volts[] = {
+	REGULATOR_LINEAR_RANGE(310000, 0x00, 0x1F, 10000),
+	REGULATOR_LINEAR_RANGE(0, 0x20, 0x3F, 10000),
+};
+
+static const struct linear_range bd96805_buck_init_volts[] = {
+	REGULATOR_LINEAR_RANGE(500000 - 310000, 0x00, 0xc8, 5000),
+	REGULATOR_LINEAR_RANGE(1550000 - 310000, 0xc9, 0xec, 50000),
+	REGULATOR_LINEAR_RANGE(3300000 - 310000, 0xed, 0xff, 0),
 };
 
 static const struct linear_range bd96801_ldo_int_volts[] = {
@@ -690,6 +708,195 @@ static const struct bd96801_pmic_data bd96801_data = {
 	},
 };
 
+static const struct bd96801_pmic_data bd96805_data = {
+	.regulator_data = {
+	{
+		.desc = {
+			.name = "buck1",
+			.of_match = of_match_ptr("buck1"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD96801_BUCK1,
+			.ops = &bd96801_buck_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd96805_tune_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd96805_tune_volts),
+			.n_voltages = BD96805_BUCK_VOLTS,
+			.enable_reg = BD96801_REG_ENABLE,
+			.enable_mask = BD96801_BUCK1_EN_MASK,
+			.enable_is_inverted = true,
+			.vsel_reg = BD96801_BUCK1_VSEL_REG,
+			.vsel_mask = BD96805_BUCK_VSEL_MASK,
+			.ramp_reg = BD96801_BUCK1_VSEL_REG,
+			.ramp_mask = BD96801_MASK_RAMP_DELAY,
+			.ramp_delay_table = &buck_ramp_table[0],
+			.n_ramp_values = ARRAY_SIZE(buck_ramp_table),
+			.owner = THIS_MODULE,
+		},
+		.init_ranges = bd96805_buck_init_volts,
+		.num_ranges = ARRAY_SIZE(bd96805_buck_init_volts),
+		.irq_desc = {
+			.irqinfo = (struct bd96801_irqinfo *)&buck1_irqinfo[0],
+			.num_irqs = ARRAY_SIZE(buck1_irqinfo),
+		},
+	}, {
+		.desc = {
+			.name = "buck2",
+			.of_match = of_match_ptr("buck2"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD96801_BUCK2,
+			.ops = &bd96801_buck_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd96805_tune_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd96805_tune_volts),
+			.n_voltages = BD96805_BUCK_VOLTS,
+			.enable_reg = BD96801_REG_ENABLE,
+			.enable_mask = BD96801_BUCK2_EN_MASK,
+			.enable_is_inverted = true,
+			.vsel_reg = BD96801_BUCK2_VSEL_REG,
+			.vsel_mask = BD96805_BUCK_VSEL_MASK,
+			.ramp_reg = BD96801_BUCK2_VSEL_REG,
+			.ramp_mask = BD96801_MASK_RAMP_DELAY,
+			.ramp_delay_table = &buck_ramp_table[0],
+			.n_ramp_values = ARRAY_SIZE(buck_ramp_table),
+			.owner = THIS_MODULE,
+		},
+		.irq_desc = {
+			.irqinfo = (struct bd96801_irqinfo *)&buck2_irqinfo[0],
+			.num_irqs = ARRAY_SIZE(buck2_irqinfo),
+		},
+		.init_ranges = bd96805_buck_init_volts,
+		.num_ranges = ARRAY_SIZE(bd96805_buck_init_volts),
+	}, {
+		.desc = {
+			.name = "buck3",
+			.of_match = of_match_ptr("buck3"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD96801_BUCK3,
+			.ops = &bd96801_buck_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd96805_tune_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd96805_tune_volts),
+			.n_voltages = BD96805_BUCK_VOLTS,
+			.enable_reg = BD96801_REG_ENABLE,
+			.enable_mask = BD96801_BUCK3_EN_MASK,
+			.enable_is_inverted = true,
+			.vsel_reg = BD96801_BUCK3_VSEL_REG,
+			.vsel_mask = BD96805_BUCK_VSEL_MASK,
+			.ramp_reg = BD96801_BUCK3_VSEL_REG,
+			.ramp_mask = BD96801_MASK_RAMP_DELAY,
+			.ramp_delay_table = &buck_ramp_table[0],
+			.n_ramp_values = ARRAY_SIZE(buck_ramp_table),
+			.owner = THIS_MODULE,
+		},
+		.irq_desc = {
+			.irqinfo = (struct bd96801_irqinfo *)&buck3_irqinfo[0],
+			.num_irqs = ARRAY_SIZE(buck3_irqinfo),
+		},
+		.init_ranges = bd96805_buck_init_volts,
+		.num_ranges = ARRAY_SIZE(bd96805_buck_init_volts),
+	}, {
+		.desc = {
+			.name = "buck4",
+			.of_match = of_match_ptr("buck4"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD96801_BUCK4,
+			.ops = &bd96801_buck_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd96805_tune_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd96805_tune_volts),
+			.n_voltages = BD96805_BUCK_VOLTS,
+			.enable_reg = BD96801_REG_ENABLE,
+			.enable_mask = BD96801_BUCK4_EN_MASK,
+			.enable_is_inverted = true,
+			.vsel_reg = BD96801_BUCK4_VSEL_REG,
+			.vsel_mask = BD96805_BUCK_VSEL_MASK,
+			.ramp_reg = BD96801_BUCK4_VSEL_REG,
+			.ramp_mask = BD96801_MASK_RAMP_DELAY,
+			.ramp_delay_table = &buck_ramp_table[0],
+			.n_ramp_values = ARRAY_SIZE(buck_ramp_table),
+			.owner = THIS_MODULE,
+		},
+		.irq_desc = {
+			.irqinfo = (struct bd96801_irqinfo *)&buck4_irqinfo[0],
+			.num_irqs = ARRAY_SIZE(buck4_irqinfo),
+		},
+		.init_ranges = bd96805_buck_init_volts,
+		.num_ranges = ARRAY_SIZE(bd96805_buck_init_volts),
+	}, {
+		.desc = {
+			.name = "ldo5",
+			.of_match = of_match_ptr("ldo5"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD96801_LDO5,
+			.ops = &bd96801_ldo_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd96801_ldo_int_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd96801_ldo_int_volts),
+			.n_voltages = BD96801_LDO_VOLTS,
+			.enable_reg = BD96801_REG_ENABLE,
+			.enable_mask = BD96801_LDO5_EN_MASK,
+			.enable_is_inverted = true,
+			.vsel_reg = BD96801_LDO5_VSEL_REG,
+			.vsel_mask = BD96801_LDO_VSEL_MASK,
+			.owner = THIS_MODULE,
+		},
+		.irq_desc = {
+			.irqinfo = (struct bd96801_irqinfo *)&ldo5_irqinfo[0],
+			.num_irqs = ARRAY_SIZE(ldo5_irqinfo),
+		},
+		.ldo_vol_lvl = BD96801_LDO5_VOL_LVL_REG,
+	}, {
+		.desc = {
+			.name = "ldo6",
+			.of_match = of_match_ptr("ldo6"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD96801_LDO6,
+			.ops = &bd96801_ldo_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd96801_ldo_int_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd96801_ldo_int_volts),
+			.n_voltages = BD96801_LDO_VOLTS,
+			.enable_reg = BD96801_REG_ENABLE,
+			.enable_mask = BD96801_LDO6_EN_MASK,
+			.enable_is_inverted = true,
+			.vsel_reg = BD96801_LDO6_VSEL_REG,
+			.vsel_mask = BD96801_LDO_VSEL_MASK,
+			.owner = THIS_MODULE,
+		},
+		.irq_desc = {
+			.irqinfo = (struct bd96801_irqinfo *)&ldo6_irqinfo[0],
+			.num_irqs = ARRAY_SIZE(ldo6_irqinfo),
+		},
+		.ldo_vol_lvl = BD96801_LDO6_VOL_LVL_REG,
+	}, {
+		.desc = {
+			.name = "ldo7",
+			.of_match = of_match_ptr("ldo7"),
+			.regulators_node = of_match_ptr("regulators"),
+			.id = BD96801_LDO7,
+			.ops = &bd96801_ldo_ops,
+			.type = REGULATOR_VOLTAGE,
+			.linear_ranges = bd96801_ldo_int_volts,
+			.n_linear_ranges = ARRAY_SIZE(bd96801_ldo_int_volts),
+			.n_voltages = BD96801_LDO_VOLTS,
+			.enable_reg = BD96801_REG_ENABLE,
+			.enable_mask = BD96801_LDO7_EN_MASK,
+			.enable_is_inverted = true,
+			.vsel_reg = BD96801_LDO7_VSEL_REG,
+			.vsel_mask = BD96801_LDO_VSEL_MASK,
+			.owner = THIS_MODULE,
+		},
+		.irq_desc = {
+			.irqinfo = (struct bd96801_irqinfo *)&ldo7_irqinfo[0],
+			.num_irqs = ARRAY_SIZE(ldo7_irqinfo),
+		},
+		.ldo_vol_lvl = BD96801_LDO7_VOL_LVL_REG,
+	},
+	},
+};
+
+
+
 static int initialize_pmic_data(struct device *dev,
 				struct bd96801_pmic_data *pdata)
 {
@@ -867,6 +1074,7 @@ static int bd96801_rdev_intb_irqs(struct platform_device *pdev,
 
 static int bd96801_probe(struct platform_device *pdev)
 {
+	enum rohm_chip_type chip = platform_get_device_id(pdev)->driver_data;
 	struct regulator_dev *ldo_errs_rdev_arr[BD96801_NUM_LDOS];
 	struct regulator_dev *all_rdevs[BD96801_NUM_REGULATORS];
 	struct bd96801_regulator_data *rdesc;
@@ -881,8 +1089,19 @@ static int bd96801_probe(struct platform_device *pdev)
 
 	parent = pdev->dev.parent;
 
-	pdata = devm_kmemdup(&pdev->dev, &bd96801_data, sizeof(bd96801_data),
-			     GFP_KERNEL);
+	switch(chip)
+	{
+	case ROHM_CHIP_TYPE_BD96801:
+		pdata = devm_kmemdup(&pdev->dev, &bd96801_data,
+				     sizeof(bd96801_data), GFP_KERNEL);
+		break;
+	case ROHM_CHIP_TYPE_BD96805:
+		pdata = devm_kmemdup(&pdev->dev, &bd96805_data,
+				     sizeof(bd96805_data), GFP_KERNEL);
+		break;
+	default:
+		return dev_err_probe(&pdev->dev, -EINVAL, "Unknown IC\n");
+	}
 	if (!pdata)
 		return -ENOMEM;
 
@@ -981,7 +1200,8 @@ static int bd96801_probe(struct platform_device *pdev)
 }
 
 static const struct platform_device_id bd96801_pmic_id[] = {
-	{ "bd96801-regulator", },
+	{ "bd96801-regulator", ROHM_CHIP_TYPE_BD96801, },
+	{ "bd96805-regulator", ROHM_CHIP_TYPE_BD96805, },
 	{ }
 };
 MODULE_DEVICE_TABLE(platform, bd96801_pmic_id);
