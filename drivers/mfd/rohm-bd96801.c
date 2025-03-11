@@ -147,9 +147,29 @@ enum {
 	REGULATOR_CELL,
 };
 
+struct bd96801_data {
+	struct mfd_cell *mfd_cells;
+	int num_cells;
+};
+
 static struct mfd_cell bd96801_cells[] = {
 	[WDG_CELL] = { .name = "bd96801-wdt", },
 	[REGULATOR_CELL] = { .name = "bd96801-regulator", },
+};
+
+static const struct bd96801_data bd96801_info = {
+	.mfd_cells = &bd96801_cells[0],
+	.num_cells = ARRAY_SIZE(bd96801_cells),
+};
+
+static struct mfd_cell bd96805_cells[] = {
+	[WDG_CELL] = { .name = "bd96801-wdt", },
+	[REGULATOR_CELL] = { .name = "bd96805-regulator", },
+};
+
+static const struct bd96801_data bd96805_info = {
+	.mfd_cells = &bd96805_cells[0],
+	.num_cells = ARRAY_SIZE(bd96805_cells),
 };
 
 static const struct regmap_range bd96801_volatile_ranges[] = {
@@ -348,6 +368,7 @@ static const struct regmap_config bd96801_regmap_config = {
 static int bd96801_i2c_probe(struct i2c_client *i2c)
 {
 	struct regmap_irq_chip_data *intb_irq_data, *errb_irq_data;
+	const struct bd96801_data *chip_info = i2c_get_match_data(i2c);
 	struct irq_domain *intb_domain, *errb_domain;
 	const struct fwnode_handle *fwnode;
 	struct resource *regulator_res;
@@ -356,6 +377,9 @@ static int bd96801_i2c_probe(struct i2c_client *i2c)
 	int intb_irq, errb_irq, num_intb, num_errb = 0;
 	int num_regu_irqs, wdg_irq_no;
 	int i, ret;
+
+	if (!chip_info)
+		return dev_err_probe(&i2c->dev, -ENODEV, "No chip data\n");
 
 	fwnode = dev_fwnode(&i2c->dev);
 	if (!fwnode)
@@ -414,8 +438,8 @@ static int bd96801_i2c_probe(struct i2c_client *i2c)
 
 	wdg_irq_no = irq_create_mapping(intb_domain, BD96801_WDT_ERR_STAT);
 	wdg_irq = DEFINE_RES_IRQ_NAMED(wdg_irq_no, "bd96801-wdg");
-	bd96801_cells[WDG_CELL].resources = &wdg_irq;
-	bd96801_cells[WDG_CELL].num_resources = 1;
+	chip_info->mfd_cells[WDG_CELL].resources = &wdg_irq;
+	chip_info->mfd_cells[WDG_CELL].num_resources = 1;
 
 	if (!num_errb)
 		goto skip_errb;
@@ -436,11 +460,12 @@ static int bd96801_i2c_probe(struct i2c_client *i2c)
 	}
 
 skip_errb:
-	bd96801_cells[REGULATOR_CELL].resources = regulator_res;
-	bd96801_cells[REGULATOR_CELL].num_resources = num_regu_irqs;
+	chip_info->mfd_cells[REGULATOR_CELL].resources = regulator_res;
+	chip_info->mfd_cells[REGULATOR_CELL].num_resources = num_regu_irqs;
 
-	ret = devm_mfd_add_devices(&i2c->dev, PLATFORM_DEVID_AUTO, bd96801_cells,
-				   ARRAY_SIZE(bd96801_cells), NULL, 0, NULL);
+	ret = devm_mfd_add_devices(&i2c->dev, PLATFORM_DEVID_AUTO,
+				   chip_info->mfd_cells, chip_info->num_cells,
+				   NULL, 0, NULL);
 	if (ret)
 		dev_err_probe(&i2c->dev, ret, "Failed to create subdevices\n");
 
@@ -448,7 +473,8 @@ skip_errb:
 }
 
 static const struct of_device_id bd96801_of_match[] = {
-	{ .compatible = "rohm,bd96801",	},
+	{ .compatible = "rohm,bd96801",	.data = &bd96801_info },
+	{ .compatible = "rohm,bd96805",	.data = &bd96805_info },
 	{ }
 };
 MODULE_DEVICE_TABLE(of, bd96801_of_match);
