@@ -29,13 +29,12 @@ struct adc128_configuration {
 struct adc128 {
 	struct spi_device *spi;
 
-	struct regulator *reg;
 	/*
 	 * Serialize the SPI 'write-channel + read data' accesses and protect
 	 * the shared buffer.
 	 */
 	struct mutex lock;
-
+	int vref;
 	union {
 		__be16 rx_buffer;
 		u8 tx_buffer[2];
@@ -82,11 +81,7 @@ static int adc128_read_raw(struct iio_dev *indio_dev,
 
 	case IIO_CHAN_INFO_SCALE:
 
-		ret = regulator_get_voltage(adc->reg);
-		if (ret < 0)
-			return ret;
-
-		*val = ret / 1000;
+		*val = adc->vref / 1000;
 		*val2 = 12;
 		return IIO_VAL_FRACTIONAL_LOG2;
 
@@ -156,11 +151,6 @@ static const struct iio_info adc128_info = {
 	.read_raw = adc128_read_raw,
 };
 
-static void adc128_disable_regulator(void *reg)
-{
-	regulator_disable(reg);
-}
-
 static int adc128_probe(struct spi_device *spi)
 {
 	const struct adc128_configuration *config;
@@ -184,17 +174,10 @@ static int adc128_probe(struct spi_device *spi)
 	indio_dev->channels = config->channels;
 	indio_dev->num_channels = config->num_channels;
 
-	adc->reg = devm_regulator_get(&spi->dev, config->refname);
-	if (IS_ERR(adc->reg))
-		return PTR_ERR(adc->reg);
-
-	ret = regulator_enable(adc->reg);
-	if (ret < 0)
-		return ret;
-	ret = devm_add_action_or_reset(&spi->dev, adc128_disable_regulator,
-				       adc->reg);
-	if (ret)
-		return ret;
+	adc->vref = devm_regulator_get_enable_read_voltage(&spi->dev,
+							   config->refname);
+	if (adc->vref < 0)
+		return adc->vref;
 
 	if (config->num_other_regulators) {
 		ret = devm_regulator_bulk_get_enable(&spi->dev,
