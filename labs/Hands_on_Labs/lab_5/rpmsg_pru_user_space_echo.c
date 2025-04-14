@@ -37,8 +37,8 @@
 #include <string.h>
 #include <sys/poll.h>
 
-#define MAX_BUFFER_SIZE		512
-char readBuf[MAX_BUFFER_SIZE];
+#define RPMSG_MESSAGE_SIZE      496
+char readBuf[RPMSG_MESSAGE_SIZE];
 
 #define NUM_MESSAGES		100
 #define DEVICE_NAME		"/dev/rpmsg1"
