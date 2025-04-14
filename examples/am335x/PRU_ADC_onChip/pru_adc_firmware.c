@@ -59,7 +59,6 @@ volatile register uint32_t __R31;
  * at linux-x.y.z/drivers/rpmsg/rpmsg_char.c
  */
 #define CHAN_NAME			"rpmsg-raw"
-#define CHAN_DESC			"Channel 30"
 #define CHAN_PORT			30
 
 /*

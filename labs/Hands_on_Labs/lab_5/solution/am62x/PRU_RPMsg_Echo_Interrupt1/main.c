@@ -61,7 +61,6 @@ volatile register uint32_t __R31;
 #define CHAN_NAME			"rpmsg-client-sample"
 //#define CHAN_NAME			"rpmsg-raw"
 
-#define CHAN_DESC			"Channel 31"
 #define CHAN_PORT			31
 
 /*
