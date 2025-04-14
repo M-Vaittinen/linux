@@ -49,7 +49,7 @@ int main(void)
 	int i;
 	int result = 0;
 
-	/* Open the rpmsg_pru character device file */
+	/* Open the rpmsg_char character device file */
 	pollfds[0].fd = open(DEVICE_NAME, O_RDWR);
 
 	/*
@@ -81,7 +81,7 @@ int main(void)
 	/* Received all the messages the example is complete */
 	printf("Received %d messages, closing %s\n", NUM_MESSAGES, DEVICE_NAME);
 
-	/* Close the rpmsg_pru character device file */
+	/* Close the rpmsg_char character device file */
 	close(pollfds[0].fd);
 
 	return 0;
