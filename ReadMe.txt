@@ -1,4 +1,4 @@
-Programmable Real-time Unit (PRU) Software Support Package v6.3.0
+Programmable Real-time Unit (PRU) Software Support Package v6.5.0
 
 
 DESCRIPTION
