@@ -99,29 +99,39 @@ int main(int argc, char *argv[])
 
 
 /* 
- * readADCchannel sends ADC channel number to PRU0 by writing to rpmsg_pru30
- * and receives the voltage as a 12 bit binary value
+ * readADCchannel sends ADC channel number to PRU0 by writing to rpmsg character
+ * device. We assume PRU0 is the first core that Linux initializes RPMsg
+ * communication with, so the character device is /dev/rpmsg0.
+ *
+ * readADCchannel receives the voltage as a 12 bit binary value
  */
 static uint16_t readADCchannel(const char *adcChannel)
 {
 
 	struct shared_struct message;
 
-	/* use character device /dev/rpmsg_pru30 */
-	char outputFilename[] = "/dev/rpmsg_pru30";
+	/* character device name */
+	char outputFilename[] = "/dev/rpmsg0";
 
-	/* test that /dev/rpmsg_pru30 exists */
+	/* test that /dev/rpmsg0 exists */
 	FILE *ofp;
 	uint16_t returnedVoltage;
 	ofp = fopen(outputFilename, "r");
 
 	if (ofp == NULL) {
 
-		printf("/dev/rpmsg_pru30 could not be opened. \n");
+		printf("/dev/rpmsg0 could not be opened. \n");
 		printf("Trying to initialize PRU using sysfs interface.\n");
 
+		/*
+		 * This code assumes PRU0 is remoteproc0, which is not
+		 * guaranteed. Production code should check the "name" entry
+		 * of /sys/class/remoteproc/remoteproc* to verify which
+		 * remoteprocX instance is associated with the desired PRU
+		 * core.
+		 */
 		FILE *sysfs_node;
-		char firmware[] = "/sys/class/remoteproc/remoteproc1/firmware";
+		char firmware[] = "/sys/class/remoteproc/remoteproc0/firmware";
 		char firmwareName[] = "PRU_ADC_onChip.out";
 		sysfs_node = fopen(firmware, "r+");
 		if (sysfs_node == NULL) {
@@ -132,7 +142,7 @@ static uint16_t readADCchannel(const char *adcChannel)
 			sysfs_node);
 		fclose(sysfs_node);
 
-		char pruState[] = "/sys/class/remoteproc/remoteproc1/state";
+		char pruState[] = "/sys/class/remoteproc/remoteproc0/state";
 		char start[] = "start";
 		sysfs_node = fopen(pruState, "r+");
 		if (sysfs_node == NULL) {
@@ -148,7 +158,7 @@ static uint16_t readADCchannel(const char *adcChannel)
 		ofp = fopen(outputFilename, "r");
 
 		if (ofp == NULL) {
-			printf("ERROR: Could not open /dev/rpmsg_pru30\n");
+			printf("ERROR: Could not open /dev/rpmsg0\n");
 			exit(EXIT_FAILURE);
 		}
 	}
@@ -160,7 +170,7 @@ static uint16_t readADCchannel(const char *adcChannel)
 	struct pollfd pfds[1];
 	pfds[0].fd = open(outputFilename, O_RDWR);
 	if (pfds[0].fd < 0) {
-		printf("failed to open /dev/rpmsg_pru30");
+		printf("failed to open /dev/rpmsg0");
 		exit(EXIT_FAILURE);
 	}
 
