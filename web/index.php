@@ -76,6 +76,8 @@ function num_cards_in_res($result)
 	$retprize[2] = 0;
 	
 	while ($row = mysqli_fetch_assoc($result)) {
+		if (!is_numeric($row['prize']))
+			die('bad data in database: prize');
 		if ($row['prize'] < 4)
 			$retprize[0]++;
 		if ($row['prize'] == 4)
@@ -91,8 +93,11 @@ function num_cards_in_res($result)
 function card_ids_in_res($result) {
 	$ids = array();
 
-	while ($row = mysqli_fetch_assoc($result))
+	while ($row = mysqli_fetch_assoc($result)) {
+		if (!is_numeric($row['id']))
+			die('bad data in database: id');
 		$ids[] = $row['id'];
+	}
 
 	mysqli_data_seek($result, 0);
 
@@ -104,6 +109,8 @@ function __print_cards($result, $title, $mobile)
 {
 	$tuhinasum = 0;
 	while ($row = mysqli_fetch_assoc($result)) {
+		if (!is_numeric($row['tuhinakerroin']))
+			die('invalid data in database - tuhinakerroin');
 		$tuhinasum += $row['tuhinakerroin'];
 	}
 	mysqli_data_seek($result, 0);
@@ -119,11 +126,11 @@ function __print_cards($result, $title, $mobile)
 	}
 
 	while ($row = mysqli_fetch_assoc($result)) {
-		$name = $row['c_name'];
-		$prize = $row['prize'];
-	       	$prizetype = $row['p_name'];
-		$expansion = $row['e_name'];
-		$cardtype = $row['ct_name'];
+		$name = htmlspecialchars($row['c_name']);
+		$prize = htmlspecialchars($row['prize']);
+		$prizetype = htmlspecialchars($row['p_name']);
+		$expansion = htmlspecialchars($row['e_name']);
+		$cardtype = htmlspecialchars($row['ct_name']);
 		if (!$mobile)
 			$out .= '<tr><td>' . $name . '</td><td>' . $cardtype . '</td><td>' . $prize . ' (' . $prizetype . ')</td><td>' . $expansion . '</td></tr>';
 		else
@@ -259,8 +266,11 @@ while ($row = mysqli_fetch_assoc($result)) {
 		$checked = "";
 	}
 
-	$output .= '<input type="checkbox" id="' . $row['name'] . '" name="expansion[]" value="' . $row['id'] . '"'."$checked>";
-	$output .= '<label for="' . $row['name'] . '">' . $row['name'] . '</label><br>';
+	if (!is_numeric($row['id']))
+		die("bad data in database - expansion id");
+
+	$output .= '<input type="checkbox" id="' . htmlspecialchars($row['name']) . '" name="expansion[]" value="' . $row['id'] . '"'."$checked>";
+	$output .= '<label for="' . htmlspecialchars($row['name']) . '">' . htmlspecialchars($row['name']) . '</label><br>';
 }
 $output .= '</td>';
 
