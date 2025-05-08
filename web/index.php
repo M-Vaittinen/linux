@@ -50,6 +50,7 @@ if (isset($_POST['kapitaenable'])) {
 
 require 'include/db.php';
 require 'include/header.php';
+require 'include/dominion_common.php';
 
 function query_cards($conn, $query)
 {
@@ -238,15 +239,7 @@ $mobile = isMobileDevice();
 do_head("Dominion - korttiarvonta");
 echo "<h1>Dominion - Arvo kortit</h1>";
 
-
-$query = "SELECT DISTINCT e.id, e.name FROM expansion AS e JOIN cards as c WHERE e.id = c.expansion_id";
-$result = mysqli_query($conn, $query);
-if (!$result)
-	die("no expansions");
-
-if (mysqli_num_rows($result) <= 0)
-	die("still no expansions");
-
+$result = get_expansions($conn);
 
 /* Output the form table */
 if (!$mobile) {
@@ -257,8 +250,16 @@ if (!$mobile) {
 $output .= '<form action="" method="post">';
 
 /* Print expansion checkboxes */
+$tmp_exp_idx = 0;
 while ($row = mysqli_fetch_assoc($result)) {
-	$output .= '<input type="checkbox" id="' . $row['name'] . '" name="expansion[]" value="' . $row['id'] . '" checked>';
+	if ($row['id'] == $exp[$tmp_exp_idx]) {
+		$checked = " checked";
+		$tmp_exp_idx ++;
+	} else {
+		$checked = "";
+	}
+
+	$output .= '<input type="checkbox" id="' . $row['name'] . '" name="expansion[]" value="' . $row['id'] . '"'."$checked>";
 	$output .= '<label for="' . $row['name'] . '">' . $row['name'] . '</label><br>';
 }
 $output .= '</td>';
