@@ -2,6 +2,7 @@
 /*
  * Analog Devices AD7466/7/8 AD7476/5/7/8 (A) SPI ADC driver
  * TI ADC081S/ADC101S/ADC121S 8/10/12-bit SPI ADC driver
+ * ROHM BD79100G 12-bit SPI ADC driver
  *
  * Copyright 2010 Analog Devices Inc.
  */
@@ -72,6 +73,7 @@ enum ad7476_supported_device_ids {
 	ID_ADS7866,
 	ID_ADS7867,
 	ID_ADS7868,
+	ID_BD79100G,
 	ID_LTC2314_14,
 };
 
@@ -281,6 +283,10 @@ static const struct ad7476_chip_info ad7476_chip_info_tbl[] = {
 		.channel[0] = ADS786X_CHAN(8),
 		.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
 	},
+	[ID_BD79100G] = {
+		.channel[0] = ADS786X_CHAN(12),
+		.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	},
 	[ID_LTC2314_14] = {
 		.channel[0] = AD7940_CHAN(14),
 		.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
@@ -301,6 +307,7 @@ static void ad7476_reg_disable(void *data)
 
 static int ad7476_probe(struct spi_device *spi)
 {
+	struct spi_device_id *spi_dev_id;
 	struct ad7476_state *st;
 	struct iio_dev *indio_dev;
 	struct regulator *reg;
@@ -311,8 +318,13 @@ static int ad7476_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	st = iio_priv(indio_dev);
+
+	spi_dev_id = spi_get_device_match_data(spi);
+	if (!spi_dev_id)
+		return -ENODEV;
+
 	st->chip_info =
-		&ad7476_chip_info_tbl[spi_get_device_id(spi)->driver_data];
+		&ad7476_chip_info_tbl[spi_dev_id->driver_data];
 
 	reg = devm_regulator_get(&spi->dev, "vcc");
 	if (IS_ERR(reg))
@@ -435,14 +447,24 @@ static const struct spi_device_id ad7476_id[] = {
 	{ "ads7866", ID_ADS7866 },
 	{ "ads7867", ID_ADS7867 },
 	{ "ads7868", ID_ADS7868 },
+	{ "bd79100g", ID_BD79100G },
 	{ "ltc2314-14", ID_LTC2314_14 },
 	{ }
 };
 MODULE_DEVICE_TABLE(spi, ad7476_id);
 
+static const struct spi_device_id bd79100_match_data = { "bd79100g", ID_BD79100G };
+
+static const struct of_device_id ad7476_of_match[] = {
+	{ .compatible = "rohm,bd79100g", .data = &bd79100_match_data, },
+	{ }
+};
+MODULE_DEVICE_TABLE(of, ad7476_of_match);
+
 static struct spi_driver ad7476_driver = {
 	.driver = {
 		.name	= "ad7476",
+		.of_match_table = ad7476_of_match,
 	},
 	.probe		= ad7476_probe,
 	.id_table	= ad7476_id,
