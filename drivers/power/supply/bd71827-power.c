@@ -1220,12 +1220,13 @@ static int bd71827_get_ocv(struct simple_gauge *sw, int dsoc, int temp, int *ocv
 	int i = 0;
 	struct bd71827_power *pwr;
 
+	if (!sw)
+		return -EINVAL;
+
+	pwr = simple_gauge_get_drvdata(sw);
+
 	/* If soc_table is not given try luck with batinfo */
 	if (!use_load_bat_params || !ocv_table[0]) {
-		if (!sw)
-			return -EINVAL;
-
-		pwr = simple_gauge_get_drvdata(sw);
 		*ocv = power_supply_batinfo_dcap2ocv(pwr->batinfo, dsoc, temp);
 		if (*ocv < 0)
 			return *ocv;
