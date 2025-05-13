@@ -365,8 +365,8 @@ static int g_num_vdr_params;
 
 static struct pwr_regs pwr_regs_bd71827 = {
 	.i_trick_r = &bdxx_i_trickle[0],
-	.num_i_trick_r = ARRAY_SIZE(bdxx_i_pre),
-	.i_pre_r = &bdxx_i_trickle[0],
+	.num_i_trick_r = ARRAY_SIZE(bdxx_i_trickle),
+	.i_pre_r = &bdxx_i_pre[0],
 	.num_i_pre_r = ARRAY_SIZE(bdxx_i_pre),
 	/* The ifst_term_r is computed and populated at probe */
 	.num_i_fst_term_r = ARRAY_SIZE(bd71827_ifst_term_base),
@@ -414,7 +414,7 @@ static struct pwr_regs pwr_regs_bd71827 = {
 static struct pwr_regs pwr_regs_bd71828 = {
 	.i_trick_r = &bdxx_i_trickle[0],
 	.num_i_trick_r = ARRAY_SIZE(bdxx_i_trickle),
-	.i_pre_r = &bdxx_i_trickle[0],
+	.i_pre_r = &bdxx_i_pre[0],
 	.num_i_pre_r = ARRAY_SIZE(bdxx_i_pre),
 	.num_i_fst_term_r = ARRAY_SIZE(bd71828_ifst_term_base),
 	.i_fst_r = &bd71828_ifst[0],
@@ -463,7 +463,7 @@ static struct pwr_regs pwr_regs_bd71828 = {
 static struct pwr_regs pwr_regs_bd71815 = {
 	.i_trick_r = &bd71815_i_trickle[0],
 	.num_i_trick_r = ARRAY_SIZE(bd71815_i_trickle),
-	.i_pre_r = &bd71815_i_trickle[0],
+	.i_pre_r = &bd71815_i_pre[0],
 	.num_i_pre_r = ARRAY_SIZE(bd71815_i_pre),
 	.num_i_fst_term_r = ARRAY_SIZE(bd71815_ifst_term_base),
 	.i_fst_r = &bd71815_ifst_internal[0],
@@ -513,7 +513,7 @@ static struct pwr_regs pwr_regs_bd71815 = {
 static struct pwr_regs pwr_regs_bd72720 = {
 	.i_trick_r = &bdxx_i_trickle[0],
 	.num_i_trick_r = ARRAY_SIZE(bdxx_i_trickle),
-	.i_pre_r = &bdxx_i_trickle[0],
+	.i_pre_r = &bdxx_i_pre[0],
 	.num_i_pre_r = ARRAY_SIZE(bdxx_i_pre),
 	.num_i_fst_term_r = ARRAY_SIZE(bd71828_ifst_term_base),
 	.i_fst_r = &bd72720_ifst[0],
