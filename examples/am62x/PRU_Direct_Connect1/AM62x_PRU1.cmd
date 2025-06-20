@@ -4,7 +4,7 @@
  * Example Linker command file for linking programs built with the C compiler
  * on AM62x PRU1 cores
  *
- * Copyright (C) 2022 Texas Instruments Incorporated - https://www.ti.com/
+ * Copyright (C) 2022-2025 Texas Instruments Incorporated - https://www.ti.com/
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -41,8 +41,8 @@
 MEMORY
 {
       PAGE 0:
-	/* 12 KB PRU Instruction RAM */
-	PRU_IMEM	: org = 0x00000000 len = 0x00003000
+	/* 16 KB PRU Instruction RAM */
+	PRU_IMEM	: org = 0x00000000 len = 0x00004000
 
       PAGE 1:
 	/* Data RAMs */
