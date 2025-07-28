@@ -3005,6 +3005,8 @@ static int bd71827_power_probe(struct platform_device *pdev)
 		pwr->set_ifst = bd71815_set_ifst,
 		psycfg.psy_name	= "bd71815-charger";
 		dev_dbg(pwr->dev, "Found ROHM BD71815\n");
+
+		break;
 	case ROHM_CHIP_TYPE_BD72720:
 	{
 		struct bd72720_power *bd72720_pwr;
@@ -3047,7 +3049,6 @@ static int bd71827_power_probe(struct platform_device *pdev)
 
 		break;
 	}
-	break;
 	default:
 		dev_err(pwr->dev, "Unknown PMIC\n");
 		return -EINVAL;
