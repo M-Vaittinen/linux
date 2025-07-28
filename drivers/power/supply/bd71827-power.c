@@ -250,7 +250,7 @@ static const struct linear_range bdxx_vpre_r[] = {
 	},
 };
 
-static const struct linear_range dcin_collapse = {
+static const struct linear_range dcin_collapse __attribute__((unused)) = {
 	.min = 0,
 	.min_sel = 0,
 	.max_sel = 0xff,
