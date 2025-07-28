@@ -1062,7 +1062,7 @@ EXPORT_SYMBOL_GPL(simple_gauge_get_drvdata);
  * psy_register_simple_gauge - register driver to simple_gauge
  *
  * @parent:	Parent device for power-supply class device.
- * @psycfg:	Confiurations for power-supply class.
+ * @pcfg:	Confiurations for power-supply class.
  * @ops:	simple_gauge specific operations.
  * @desc:	simple_gauge configuration data.
  *
