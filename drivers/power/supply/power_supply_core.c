@@ -579,7 +579,6 @@ int power_supply_dev_get_battery_info(struct device *dev,
 	u32 *dgrd_table;
 	struct power_supply_battery_info *info;
 	struct device_node *battery_np;
-	struct fwnode_reference_args args;
 	struct fwnode_handle *fwnode = NULL;
 	const char *value;
 	int err, len, index;
