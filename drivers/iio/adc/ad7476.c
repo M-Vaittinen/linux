@@ -26,23 +26,43 @@
 
 struct ad7476_state;
 
+#define AD7476_VCC_SUPPLY "vcc"
+#define AD7476_VDRIVE_SUPPLY "vdrive"
+#define AD7476_VREF_SUPPLY "vref"
+
+/*
+ * No reference supplies:
+ *
+ * These devices may have supplies which aren't used as a reference. For those
+ * it is enough to get them enabled. No voltage settings need to be read.
+ * Usually is a supply for the whole IC "vcc" (when a separate VREF
+ * exists). Sometimes the digital logic has own supply for the I/O, "vdrive".
+ */
+static const char * const ad7476_vcc_only[] = { AD7476_VCC_SUPPLY };
+static const char * const ad7476_vcc_vdrive[] = {
+	AD7476_VCC_SUPPLY,
+	AD7476_VDRIVE_SUPPLY
+};
+
 struct ad7476_chip_info {
 	unsigned int			int_vref_uv;
 	struct iio_chan_spec		channel[2];
 	/* channels used when convst gpio is defined */
 	struct iio_chan_spec		convst_channel[2];
 	void (*reset)(struct ad7476_state *);
-	bool				has_vref;
-	bool				has_vdrive;
+	/* The supply used as a reference. vcc or vref */
+	const char *			ref_supply;
+	const char * const *		non_ref_supplies;
+	unsigned int			num_non_ref_supplies;
 };
 
 struct ad7476_state {
 	struct spi_device		*spi;
 	const struct ad7476_chip_info	*chip_info;
-	struct regulator		*ref_reg;
 	struct gpio_desc		*convst_gpio;
 	struct spi_transfer		xfer;
 	struct spi_message		msg;
+	int				scale_mv;
 	/*
 	 * DMA (thus cache coherency maintenance) may require the
 	 * transfer buffers to live in their own cache lines.
@@ -111,7 +131,6 @@ static int ad7476_read_raw(struct iio_dev *indio_dev,
 {
 	int ret;
 	struct ad7476_state *st = iio_priv(indio_dev);
-	int scale_uv;
 
 	switch (m) {
 	case IIO_CHAN_INFO_RAW:
@@ -126,14 +145,7 @@ static int ad7476_read_raw(struct iio_dev *indio_dev,
 			GENMASK(st->chip_info->channel[0].scan_type.realbits - 1, 0);
 		return IIO_VAL_INT;
 	case IIO_CHAN_INFO_SCALE:
-		if (st->ref_reg) {
-			scale_uv = regulator_get_voltage(st->ref_reg);
-			if (scale_uv < 0)
-				return scale_uv;
-		} else {
-			scale_uv = st->chip_info->int_vref_uv;
-		}
-		*val = scale_uv / 1000;
+		*val = st->scale_mv;
 		*val2 = chan->scan_type.realbits;
 		return IIO_VAL_FRACTIONAL_LOG2;
 	}
@@ -172,6 +184,7 @@ static const struct ad7476_chip_info ad7091_chip_info = {
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
 	.convst_channel[0] = AD7091R_CONVST_CHAN(12),
 	.convst_channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.ref_supply = AD7476_VCC_SUPPLY,
 	.reset = ad7091_reset,
 };
 
@@ -181,123 +194,139 @@ static const struct ad7476_chip_info ad7091r_chip_info = {
 	.convst_channel[0] = AD7091R_CONVST_CHAN(12),
 	.convst_channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
 	.int_vref_uv = 2500000,
-	.has_vref = true,
+	.ref_supply = AD7476_VREF_SUPPLY,
+	.non_ref_supplies = ad7476_vcc_only, 
+	.num_non_ref_supplies = sizeof(ad7476_vcc_only),
 	.reset = ad7091_reset,
 };
 
 static const struct ad7476_chip_info ad7273_chip_info = {
 	.channel[0] = AD7940_CHAN(10),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
-	.has_vref = true,
+	.ref_supply = AD7476_VREF_SUPPLY,
+	.non_ref_supplies = ad7476_vcc_only, 
+	.num_non_ref_supplies = sizeof(ad7476_vcc_only),
 };
 
 static const struct ad7476_chip_info ad7274_chip_info = {
 	.channel[0] = AD7940_CHAN(12),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
-	.has_vref = true,
+	.ref_supply = AD7476_VREF_SUPPLY,
+	.non_ref_supplies = ad7476_vcc_only, 
+	.num_non_ref_supplies = sizeof(ad7476_vcc_only),
 };
 
 static const struct ad7476_chip_info ad7276_chip_info = {
 	.channel[0] = AD7940_CHAN(12),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.ref_supply = AD7476_VCC_SUPPLY,
 };
 
 static const struct ad7476_chip_info ad7277_chip_info = {
 	.channel[0] = AD7940_CHAN(10),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.ref_supply = AD7476_VCC_SUPPLY,
 };
 
 static const struct ad7476_chip_info ad7278_chip_info = {
 	.channel[0] = AD7940_CHAN(8),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.ref_supply = AD7476_VCC_SUPPLY,
 };
 
 static const struct ad7476_chip_info ad7466_chip_info = {
 	.channel[0] = AD7476_CHAN(12),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.ref_supply = AD7476_VCC_SUPPLY,
 };
 
 static const struct ad7476_chip_info ad7467_chip_info = {
 	.channel[0] = AD7476_CHAN(10),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.ref_supply = AD7476_VCC_SUPPLY,
 };
 
 static const struct ad7476_chip_info ad7468_chip_info = {
 	.channel[0] = AD7476_CHAN(8),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.ref_supply = AD7476_VCC_SUPPLY,
 };
 
 static const struct ad7476_chip_info ad7475_chip_info = {
 	.channel[0] = AD7476_CHAN(12),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
-	.has_vref = true,
-	.has_vdrive = true,
+	.ref_supply = AD7476_VREF_SUPPLY,
+	.non_ref_supplies = ad7476_vcc_vdrive, 
+	.num_non_ref_supplies = sizeof(ad7476_vcc_vdrive),
 };
 
 static const struct ad7476_chip_info ad7495_chip_info = {
 	.channel[0] = AD7476_CHAN(12),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
 	.int_vref_uv = 2500000,
-	.has_vdrive = true,
+	.non_ref_supplies = ad7476_vcc_vdrive, 
+	.num_non_ref_supplies = sizeof(ad7476_vcc_vdrive),
 };
 
 static const struct ad7476_chip_info ad7940_chip_info = {
 	.channel[0] = AD7940_CHAN(14),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.ref_supply = AD7476_VCC_SUPPLY,
 };
 
 static const struct ad7476_chip_info adc081s_chip_info = {
 	.channel[0] = ADC081S_CHAN(8),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.ref_supply = AD7476_VCC_SUPPLY,
 };
 
 static const struct ad7476_chip_info adc101s_chip_info = {
 	.channel[0] = ADC081S_CHAN(10),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.ref_supply = AD7476_VCC_SUPPLY,
 };
 
 static const struct ad7476_chip_info adc121s_chip_info = {
 	.channel[0] = ADC081S_CHAN(12),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.ref_supply = AD7476_VCC_SUPPLY,
 };
 
 static const struct ad7476_chip_info ads7866_chip_info = {
 	.channel[0] = ADS786X_CHAN(12),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.ref_supply = AD7476_VCC_SUPPLY,
 };
 
 static const struct ad7476_chip_info ads7867_chip_info = {
 	.channel[0] = ADS786X_CHAN(10),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.ref_supply = AD7476_VCC_SUPPLY,
 };
 
 static const struct ad7476_chip_info ads7868_chip_info = {
 	.channel[0] = ADS786X_CHAN(8),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
+	.ref_supply = AD7476_VCC_SUPPLY,
 };
 
 static const struct ad7476_chip_info ltc2314_14_chip_info = {
 	.channel[0] = AD7940_CHAN(14),
 	.channel[1] = IIO_CHAN_SOFT_TIMESTAMP(1),
-	.has_vref = true,
+	.ref_supply = AD7476_VREF_SUPPLY,
+	.non_ref_supplies = ad7476_vcc_only, 
+	.num_non_ref_supplies = sizeof(ad7476_vcc_only),
 };
 
 static const struct iio_info ad7476_info = {
 	.read_raw = &ad7476_read_raw,
 };
 
-static void ad7476_reg_disable(void *data)
-{
-	struct regulator *reg = data;
-
-	regulator_disable(reg);
-}
-
 static int ad7476_probe(struct spi_device *spi)
 {
 	struct ad7476_state *st;
+	struct ad7476_chip_info *cinfo;
 	struct iio_dev *indio_dev;
-	struct regulator *reg;
 	int ret;
 
 	indio_dev = devm_iio_device_alloc(&spi->dev, sizeof(*st));
@@ -305,65 +334,38 @@ static int ad7476_probe(struct spi_device *spi)
 		return -ENOMEM;
 
 	st = iio_priv(indio_dev);
-	st->chip_info =
-		(struct ad7476_chip_info *)spi_get_device_id(spi)->driver_data;
+	cinfo = (struct ad7476_chip_info *)spi_get_device_id(spi)->driver_data;
 
-	reg = devm_regulator_get(&spi->dev, "vcc");
-	if (IS_ERR(reg))
-		return PTR_ERR(reg);
+	st->chip_info = cinfo;
 
-	ret = regulator_enable(reg);
-	if (ret)
-		return ret;
+	if (!cinfo->ref_supply && !cinfo->int_vref_uv)
+		return dev_err_probe(&spi->dev, -EINVAL, "No reference\n");
 
-	ret = devm_add_action_or_reset(&spi->dev, ad7476_reg_disable, reg);
-	if (ret)
-		return ret;
+	if (cinfo->num_non_ref_supplies) {
+		ret = devm_regulator_bulk_get_enable(&spi->dev,
+						     cinfo->num_non_ref_supplies,
+						     cinfo->non_ref_supplies);
+		if (ret)
+			return ret;
+	}
 
-	/* Either vcc or vref (below) as appropriate */
-	if (!st->chip_info->int_vref_uv)
-		st->ref_reg = reg;
+	if (cinfo->ref_supply) {
+		ret = devm_regulator_get_enable_read_voltage(&spi->dev,
+							     cinfo->ref_supply);
+		if (ret < 0) {
+			if (!cinfo->int_vref_uv || ret != -ENOENT)
 
-	if (st->chip_info->has_vref) {
-
-		/* If a device has an internal reference vref is optional */
-		if (st->chip_info->int_vref_uv) {
-			reg = devm_regulator_get_optional(&spi->dev, "vref");
-			if (IS_ERR(reg) && (PTR_ERR(reg) != -ENODEV))
-				return PTR_ERR(reg);
-		} else {
-			reg = devm_regulator_get(&spi->dev, "vref");
-			if (IS_ERR(reg))
-				return PTR_ERR(reg);
-		}
-
-		if (!IS_ERR(reg)) {
-			ret = regulator_enable(reg);
-			if (ret)
 				return ret;
-
-			ret = devm_add_action_or_reset(&spi->dev,
-						       ad7476_reg_disable,
-						       reg);
-			if (ret)
-				return ret;
-			st->ref_reg = reg;
 		} else {
-			/*
-			 * Can only get here if device supports both internal
-			 * and external reference, but the regulator connected
-			 * to the external reference is not connected.
-			 * Set the reference regulator pointer to NULL to
-			 * indicate this.
-			 */
-			st->ref_reg = NULL;
+			st->scale_mv = ret / 1000;
 		}
 	}
 
-	if (st->chip_info->has_vdrive) {
-		ret = devm_regulator_get_enable(&spi->dev, "vdrive");
-		if (ret)
-			return ret;
+	if (!st->scale_mv) {
+		if (!cinfo->int_vref_uv)
+			return dev_err_probe(&spi->dev, -EINVAL, "No reference\n");
+
+		st->scale_mv = cinfo->int_vref_uv / 1000;
 	}
 
 	st->convst_gpio = devm_gpiod_get_optional(&spi->dev,
