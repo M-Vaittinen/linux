@@ -32,6 +32,7 @@
  */
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <pru_cfg.h>
 #include <pru_intc.h>
@@ -65,8 +66,81 @@ volatile register uint32_t __R31;
  */
 #define VIRTIO_CONFIG_S_DRIVER_OK	4
 
+#define PRU_START_MSG '1'
+#define PRU_STOP_MSG '0'
+#define PRU_ADC_DATA_FLUSH '2'
 
-uint8_t payload[RPMSG_MESSAGE_SIZE];
+uint8_t payload_rx[RPMSG_MESSAGE_SIZE];
+uint8_t payload_tx[RPMSG_MESSAGE_SIZE];
+
+#define WINDEX (payload_tx[RPMSG_MESSAGE_SIZE - 1])
+#define RINDEX (payload_tx[RPMSG_MESSAGE_SIZE - 2])
+
+/* The last two bytes in message are read and write index */
+#define MAX_ADC_DATA_BUF (RPMSG_MESSAGE_SIZE - 2)
+#define WATERMARK (MAX_ADC_DATA_BUF - 2)
+
+enum pru_state {
+	PRU_IDLE = 0,
+	PRU_STARTED,
+	PRU_STOPPED,
+	PRU_NUM_STATES,
+};
+
+struct pru_data {
+	struct pru_rpmsg_transport  *transport;
+	uint32_t src;
+	uint32_t dst;
+	uint8_t measured_channels;
+	enum pru_state state;
+};
+
+static struct pru_data g_data;
+
+static int pru_spi_read_adc_data(uint16_t *data)
+{
+	*data = 0xabba;
+
+	return 0;
+}
+
+static void pru_add_data(uint16_t data)
+{
+	*((uint16_t *)&payload_tx[WINDEX]) = data;
+
+	WINDEX = (WINDEX + 2) % MAX_ADC_DATA_BUF;
+	/*
+	 * Should not happend as the data should be sent and indexes cleared
+	 * when the WATERMARK is reached
+	 */
+	if (WINDEX == RINDEX)
+		RINDEX = (RINDEX + 2) % MAX_ADC_DATA_BUF;
+}
+
+static void pru_adc_data_send(struct pru_data *d)
+{
+	/* ATM, the RINDEX is always expected to be 0 */
+	pru_rpmsg_send(g_data.transport, g_data.src, g_data.dst, payload_tx, sizeof(payload_tx));
+	RINDEX = WINDEX = 0;
+}
+
+static void pru_adc_read(struct pru_data *d)
+{
+	uint16_t data;
+	int ret;
+
+	ret = pru_spi_read_adc_data(&data);
+	if (!ret)
+		pru_add_data(data);
+
+	if (WINDEX == WATERMARK)
+		pru_adc_data_send(d);
+}
+
+static void pru_adc_cleanup(void)
+{
+	return;
+}
 
 /*
  * main.c
@@ -92,16 +166,45 @@ void main(void)
 
 	/* Create the RPMsg channel between the PRU and ARM user space using the transport structure. */
 	while (pru_rpmsg_channel(RPMSG_NS_CREATE, &transport, CHAN_NAME, CHAN_PORT) != PRU_RPMSG_SUCCESS);
+
+	g_data.transport = &transport;
+
 	while (1) {
 		/* Check bit 30 of register R31 to see if the ARM has kicked us */
 		if (__R31 & HOST_INT) {
 			/* Clear the event status */
 			CT_INTC.SICR_bit.STS_CLR_IDX = FROM_ARM_HOST;
 			/* Receive all available messages, multiple messages can be sent per kick */
-			while (pru_rpmsg_receive(&transport, &src, &dst, payload, &len) == PRU_RPMSG_SUCCESS) {
+			while (pru_rpmsg_receive(g_data.transport, &src, &dst, payload_rx, &len) == PRU_RPMSG_SUCCESS) {
+				bool ack = false;
+
+				if (len >= 2) {
+					if (payload_rx[0] == PRU_START_MSG && payload_rx[1]) {
+						g_data.measured_channels |= payload_rx[1];
+						g_data.state = PRU_STARTED;
+						g_data.dst = src;
+						g_data.src = dst;
+						ack = true;
+					} else if (payload_rx[0] == PRU_STOP_MSG && payload_rx[1]) {
+						g_data.measured_channels &= (~payload_rx[1]);
+						if (!g_data.measured_channels)
+							g_data.state = PRU_STOPPED;
+						ack = true;
+					}
+					if (payload_rx[0] == PRU_ADC_DATA_FLUSH)
+						pru_adc_data_send(&g_data);
+				}
+	
 				/* Echo the message back to the same address from which we just received */
-				pru_rpmsg_send(&transport, dst, src, payload, len);
+				if (ack)
+					pru_rpmsg_send(g_data.transport, dst, src, payload_rx, len);
 			}
 		}
+		if (g_data.state == PRU_STOPPED) {
+			pru_adc_cleanup();
+			g_data.state = PRU_IDLE;
+		}
+		if (g_data.state == PRU_STARTED)
+			pru_adc_read(&g_data);
 	}
 }
