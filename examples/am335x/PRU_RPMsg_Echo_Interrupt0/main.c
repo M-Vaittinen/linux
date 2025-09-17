@@ -75,10 +75,11 @@ uint8_t payload_tx[RPMSG_MESSAGE_SIZE];
 
 #define WINDEX (payload_tx[RPMSG_MESSAGE_SIZE - 1])
 #define RINDEX (payload_tx[RPMSG_MESSAGE_SIZE - 2])
+#define MEASURED_CHANS (payload_tx[RPMSG_MESSAGE_SIZE - 3])
 
 /* The last two bytes in message are read and write index */
-#define MAX_ADC_DATA_BUF (RPMSG_MESSAGE_SIZE - 2)
-#define WATERMARK (MAX_ADC_DATA_BUF - 2)
+#define MAX_ADC_DATA_BUF (RPMSG_MESSAGE_SIZE - 3)
+//#define WATERMARK (MAX_ADC_DATA_BUF - 3)
 
 enum pru_state {
 	PRU_IDLE = 0,
@@ -96,8 +97,9 @@ struct pru_data {
 };
 
 static struct pru_data g_data;
+static unsigned int WATERMARK;
 
-static int pru_spi_read_adc_data(uint16_t *data)
+static int pru_spi_read_adc_data(int chan, uint16_t *data)
 {
 	*data = 0xabba;
 
@@ -128,17 +130,24 @@ static void pru_adc_read(struct pru_data *d)
 {
 	uint16_t data;
 	int ret;
+	int chan;
 
-	ret = pru_spi_read_adc_data(&data);
-	if (!ret)
-		pru_add_data(data);
 
-	if (WINDEX == WATERMARK)
+	for (chan = 0; chan < 8; chan++)
+		if (MEASURED_CHANS & (1 << chan))
+		ret = pru_spi_read_adc_data(chan, &data);
+		if (!ret)
+			pru_add_data(data);
+		else
+			pru_add_data(0xffff);
+
+	if (WINDEX >= WATERMARK)
 		pru_adc_data_send(d);
 }
 
 static void pru_adc_cleanup(void)
 {
+	WINDEX = RINDEX = 0;
 	return;
 }
 
@@ -179,16 +188,47 @@ void main(void)
 				bool ack = false;
 
 				if (len >= 2) {
-					if (payload_rx[0] == PRU_START_MSG && payload_rx[1]) {
+					if (payload_rx[0] == PRU_START_MSG &&
+					    payload_rx[1] && g_data.state == PRU_IDLE) {
+						unsigned int i, samplesize;
+						uint8_t enabled = 0;
+
 						g_data.measured_channels |= payload_rx[1];
+						MEASURED_CHANS = payload_rx[1];
+
+						for (i = 0; i < 8; i++)
+							if ((1 << i) & payload_rx[1])
+								enabled++;
+
+						/*
+						 * Calculate sample size and watermark
+						 * position
+						 */
+						samplesize = sizeof(uint16_t) * enabled;
+						/*
+						 * Watermark position will be 'How many
+						 * samples we can store * samplesize'.
+						 * For the mathematicians:
+						 * foo * bar / bar makes sense because
+						 * the flooring of division makes our
+						 * watermark to be full samples.
+						 */
+						WATERMARK = MAX_ADC_DATA_BUF / samplesize * samplesize;
+
 						g_data.state = PRU_STARTED;
 						g_data.dst = src;
 						g_data.src = dst;
 						ack = true;
-					} else if (payload_rx[0] == PRU_STOP_MSG && payload_rx[1]) {
+					} else if (payload_rx[0] == PRU_STOP_MSG && payload_rx[1] && g_data.state == PRU_STARTED) {
+						/*
+						 * For now we don't allow changing channels when measurement is running. This simplifies the buffer handling as we always know which channels have data in the buffer.
 						g_data.measured_channels &= (~payload_rx[1]);
+
 						if (!g_data.measured_channels)
 							g_data.state = PRU_STOPPED;
+						*/
+						MEASURED_CHANS = 0;
+						g_data.state = PRU_STOPPED;
 						ack = true;
 					}
 					if (payload_rx[0] == PRU_ADC_DATA_FLUSH)
