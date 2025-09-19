@@ -57,7 +57,7 @@ volatile register uint32_t __R31;
  * Using the name 'rpmsg-raw' will probe the rpmsg_char driver found
  * at linux-x.y.z/drivers/rpmsg/rpmsg_char.c
  */
-#define CHAN_NAME			"rpmsg-raw"
+#define CHAN_NAME			"rpmsg-bd79104"
 #define CHAN_PORT			30
 
 /*
@@ -71,15 +71,15 @@ volatile register uint32_t __R31;
 #define PRU_ADC_DATA_FLUSH '2'
 
 uint8_t payload_rx[RPMSG_MESSAGE_SIZE];
-uint8_t payload_tx[RPMSG_MESSAGE_SIZE];
+uint16_t payload_tx[RPMSG_MESSAGE_SIZE / 2];
 
-#define WINDEX (payload_tx[RPMSG_MESSAGE_SIZE - 1])
-#define RINDEX (payload_tx[RPMSG_MESSAGE_SIZE - 2])
-#define MEASURED_CHANS (payload_tx[RPMSG_MESSAGE_SIZE - 3])
+#define WINDEX (((char *)payload_tx)[RPMSG_MESSAGE_SIZE - 1])
+//#define RINDEX (((char *)payload_tx)[RPMSG_MESSAGE_SIZE - 2])
+#define MEASURED_CHANS (((char *)payload_tx)[RPMSG_MESSAGE_SIZE - 2])
 
 /* The last two bytes in message are read and write index */
-#define MAX_ADC_DATA_BUF (RPMSG_MESSAGE_SIZE - 3)
-//#define WATERMARK (MAX_ADC_DATA_BUF - 3)
+#define MAX_ADC_DATA_BUF (RPMSG_MESSAGE_SIZE - 2)
+#define MAX_ADC_DATA_BUF_IDX (MAX_ADC_DATA_BUF / 2)
 
 enum pru_state {
 	PRU_IDLE = 0,
@@ -96,34 +96,82 @@ struct pru_data {
 	enum pru_state state;
 };
 
-static struct pru_data g_data;
+static struct pru_data g_data = {0};
 static unsigned int WATERMARK;
 
+static void mva_debug(uint8_t *buf, int len)
+{
+	if (len > MAX_ADC_DATA_BUF)
+		len = MAX_ADC_DATA_BUF;
+	memcpy(payload_rx, buf, len);
+	pru_rpmsg_send(g_data.transport, g_data.src, g_data.dst, payload_rx, len);
+//	__delay_cycles(0xffffff);
+}
+
+/*
+ * CPU speed is 200 MHz. Assuming this equals to cycles..
+ * Our SPI Max freq is 20 MHz. So, 10 cycles delay for 1 clk.
+ * One data transfer is 16 clks => 160 cycles. Let's see how our ARM dies...
+ *
+ * To just calculate further, we can fit 240 samples (when 8 channels enabled)
+ * in the buffer.
+ *
+ * 1 clk cycle is 1 000 000 000 nsec / 20 000 000 MHz
+ * => 50 ns.
+ * 1 sample is 16 cycles =>
+ * 50 ns * 16 => 800 ns.
+ *
+ * Filling the buffer takes 800 ns * 240 = 192000 ns which is
+ * 192 us.
+ */
+#define TEST_DELAY 160
+
+/*
+ * Let's verify above assumption. If cycles equal to 200 MHz CPU speed -
+ * then there should be 200 000 000 cycles in a second.
+ */
+#define ONESEC_TEST_DELAY 200000000
 static int pru_spi_read_adc_data(int chan, uint16_t *data)
 {
 	*data = 0xabba;
+	/* Just try out some delay */
+	//__delay_cycles(0xffff);
+	__delay_cycles(TEST_DELAY);
 
 	return 0;
 }
 
 static void pru_add_data(uint16_t data)
 {
-	*((uint16_t *)&payload_tx[WINDEX]) = data;
+	uint8_t dbg[3];
 
-	WINDEX = (WINDEX + 2) % MAX_ADC_DATA_BUF;
+	payload_tx[WINDEX] = data;
+
+	WINDEX++;
+	//dbg[0] = WINDEX;
+	//(*((uint16_t *)&dbg[1])) = data;
+	//mva_debug(&dbg, 3);
 	/*
 	 * Should not happend as the data should be sent and indexes cleared
 	 * when the WATERMARK is reached
 	 */
-	if (WINDEX == RINDEX)
-		RINDEX = (RINDEX + 2) % MAX_ADC_DATA_BUF;
+	if (WINDEX == MAX_ADC_DATA_BUF_IDX)
+		WINDEX = 0;
+	/*
+	 * Should not happend as the data should be sent and indexes cleared
+	 * when the WATERMARK is reached
+	 */
+//	if (WINDEX == RINDEX)
+//		RINDEX = (RINDEX + 1) % MAX_ADC_DATA_BUF_IDX;
 }
 
 static void pru_adc_data_send(struct pru_data *d)
 {
 	/* ATM, the RINDEX is always expected to be 0 */
 	pru_rpmsg_send(g_data.transport, g_data.src, g_data.dst, payload_tx, sizeof(payload_tx));
-	RINDEX = WINDEX = 0;
+	/* RINDEX = 0; */
+	WINDEX = 0;
+	__delay_cycles(ONESEC_TEST_DELAY);
 }
 
 static void pru_adc_read(struct pru_data *d)
@@ -132,10 +180,9 @@ static void pru_adc_read(struct pru_data *d)
 	int ret;
 	int chan;
 
-
 	for (chan = 0; chan < 8; chan++)
 		if (MEASURED_CHANS & (1 << chan))
-		ret = pru_spi_read_adc_data(chan, &data);
+			ret = pru_spi_read_adc_data(chan, &data);
 		if (!ret)
 			pru_add_data(data);
 		else
@@ -147,7 +194,7 @@ static void pru_adc_read(struct pru_data *d)
 
 static void pru_adc_cleanup(void)
 {
-	WINDEX = RINDEX = 0;
+	WINDEX /*= RINDEX */ = 0;
 	return;
 }
 
@@ -208,18 +255,14 @@ void main(void)
 						/*
 						 * Watermark position will be 'How many
 						 * samples we can store * samplesize'.
-						 * For the mathematicians:
-						 * foo * bar / bar makes sense because
-						 * the flooring of division makes our
-						 * watermark to be full samples.
 						 */
-						WATERMARK = MAX_ADC_DATA_BUF / samplesize * samplesize;
+						WATERMARK = MAX_ADC_DATA_BUF_IDX / samplesize * samplesize;
 
 						g_data.state = PRU_STARTED;
 						g_data.dst = src;
 						g_data.src = dst;
 						ack = true;
-					} else if (payload_rx[0] == PRU_STOP_MSG && payload_rx[1] && g_data.state == PRU_STARTED) {
+					} else if (payload_rx[0] == PRU_STOP_MSG && g_data.state == PRU_STARTED) {
 						/*
 						 * For now we don't allow changing channels when measurement is running. This simplifies the buffer handling as we always know which channels have data in the buffer.
 						g_data.measured_channels &= (~payload_rx[1]);
@@ -231,13 +274,19 @@ void main(void)
 						g_data.state = PRU_STOPPED;
 						ack = true;
 					}
-					if (payload_rx[0] == PRU_ADC_DATA_FLUSH)
+					else if (payload_rx[0] == PRU_ADC_DATA_FLUSH && g_data.state == PRU_STARTED)
 						pru_adc_data_send(&g_data);
 				}
 	
 				/* Echo the message back to the same address from which we just received */
-				if (ack)
-					pru_rpmsg_send(g_data.transport, dst, src, payload_rx, len);
+				if (ack) {
+					int test;
+
+//					for (test = 0; test < 10; test++) {
+						//__delay_cycles(ONESEC_TEST_DELAY);
+						pru_rpmsg_send(g_data.transport, g_data.src, g_data.dst, payload_rx, len);
+//					}
+				}
 			}
 		}
 		if (g_data.state == PRU_STOPPED) {
