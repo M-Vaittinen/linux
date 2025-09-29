@@ -1,0 +1,53 @@
+/dts-v1/;
+/plugin/;
+
+#include <dt-bindings/pinctrl/omap.h>
+#include <dt-bindings/pinctrl/am33xx.h>
+
+/{ /* this is our device tree overlay root node */
+	compatible = "ti,beaglebone", "ti,beaglebone-black";
+	part-number = "BBB-PLAAPLAAPLAA"; // you can choose any name here but it should be memorable
+	version = "00A0";
+
+	/*
+	 * This DTS was added so that the ARM configures the SPI pins. We could probably do that
+	 * from the PRU as well and keep the SPI completely invisible to ARM.
+	 * Another thing to warrant the DT node are power-supplies. We can use the DT to describe
+	 * the supply regulators. We probably want to support enabling the regulators when needed
+	 * and the IIO driver also needs to know the Vref so it can provide the scale.
+	 */
+	fragment@0 {
+		target = <&am33xx_pinmux>;
+		__overlay__ {
+		spi0_pins_s0: spi0_pins_s0 {
+			pinctrl-single,pins = <
+				AM33XX_PADCONF(AM335X_PIN_SPI0_CS0, PIN_INPUT_PULLUP, MUX_MODE0)
+				AM33XX_PADCONF(AM335X_PIN_SPI0_D0, PIN_INPUT_PULLUP, MUX_MODE0)
+				AM33XX_PADCONF(AM335X_PIN_SPI0_D1, PIN_OUTPUT_PULLUP, MUX_MODE0)
+				AM33XX_PADCONF(AM335X_PIN_SPI0_SCLK, PIN_INPUT_PULLUP, MUX_MODE0)>;
+			};
+		};
+	};
+	fragment@2 {
+		target-path = "/";
+		__overlay__ {
+			dummyreg: dummyreg {
+				compatible = "regulator-fixed";
+				regulator-name = "dummyreg";
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-boot-on;
+				regulator-always-on;
+			};
+			remote_adc {
+				reg = <0>;
+				#address-cells = <1>;
+				#size-cells = <0>;
+				compatible = "rohm,bd79104-rpmsg";
+				pinctrl-0 = <&spi0_pins_s0>;
+				pinctrl-names = "default";
+			};
+		};
+	};
+
+}; /* root node end */
