@@ -1629,6 +1629,20 @@ static int bd71828_probe(struct platform_device *pdev)
 	enum rohm_chip_type chip = platform_get_device_id(pdev)->driver_data;
 	struct bd71828_regulator_data *rdata;
 
+	/*
+	 * The BD72720 has two separate I2C slave addresses. We hide this by
+	 * using a wrapper regmap which can decide the correct slave address
+	 * based on the passed register address as we add 0x100 offset to the
+	 * addresses used by one of the slaves.
+	 * This results having two regmaps for the parent MFD device, one is
+	 * the 'wrapper regmap', and the other is the 'real regmap'.
+	 * The regulator driver only accesses the same slave address MFD driver
+	 * is bound to. This address also uses unaltered registers addresses
+	 * (no 0x100 offset applied) - thus it can use either the 'wrapper
+	 * map', or directly the 'real regmap'.
+	 * TLDR; We don't need to pass the name of the regmap here even though
+	 * there is two regmaps for parent MFD on BD72720.
+	 */
 	config.regmap = dev_get_regmap(pdev->dev.parent, NULL);
 	if (!config.regmap)
 		return -ENODEV;
