@@ -163,20 +163,9 @@ function card_query_where($tuh_inafactor, $exp, $exclude_ids = array())
 		if ($tuh_inafactor == 0)
 			$where .= ' AND c.tuhinakerroin = 0';
 	}
-	if ($exp) {
-		$i = 0;
-		$where .= ' AND (';
-		foreach( $exp as $e) {
-			if (!is_numeric($e))
-				die('Bad expansion ID');
-			if ($i == 0)
-				$where .= "c.expansion_id = '" . $e . "'";
-			else
-				$where .= " OR c.expansion_id = '" . $e . "'";
-			$i++;
-		}
-		$where .= ')';
-	}
+	$expansion_where = SQL_add_expansion_where('c.expansion_id', $exp);
+	if ($expansion_where)
+		$where .= " AND ".$expansion_where;
 	
 	$where_arr[] = $where . ' AND c.prize < 4';
 	$where_arr[] = $where . ' AND c.prize = 4';
