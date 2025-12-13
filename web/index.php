@@ -52,23 +52,6 @@ require 'include/db.php';
 require 'include/header.php';
 require 'include/dominion_common.php';
 
-function query_cards($conn, $query)
-{
-	global $DBG;
-
-	if ($DBG)
-		echo $query;
-
-	$result = mysqli_query($conn, $query);
-	if (!$result)
-		die("no cards");
-
-	if (mysqli_num_rows($result) <= 0)
-		die("still no cards");
-
-	return $result;
-}
-
 function num_cards_in_res($result)
 {
 	$retprize[0] = 0;
@@ -127,10 +110,15 @@ function __print_cards($result, $title, $mobile)
 
 	while ($row = mysqli_fetch_assoc($result)) {
 		$name = htmlspecialchars($row['c_name']);
+		$en_name = htmlspecialchars($row['en_name']);
 		$prize = htmlspecialchars($row['prize']);
 		$prizetype = htmlspecialchars($row['p_name']);
 		$expansion = htmlspecialchars($row['e_name']);
 		$cardtype = htmlspecialchars($row['ct_name']);
+
+		if ($name != "" && $en_name != "" && $name != $en_name)
+			$name = $name . " (" . $en_name . ")";
+
 		if (!$mobile)
 			$out .= '<tr><td>' . $name . '</td><td>' . $cardtype . '</td><td>' . $prize . ' (' . $prizetype . ')</td><td>' . $expansion . '</td></tr>';
 		else
@@ -149,7 +137,7 @@ function print_cards($conn, $query, $title, $mobile)
 
 function card_query_start()
 {
-	return 'SELECT c.id, c.tuhinakerroin, c.prize, c.name AS c_name, p.name AS p_name, e.name AS e_name, ct.name AS ct_name FROM cards AS c JOIN prizetype as p JOIN expansion AS e JOIN cardtype AS ct';
+	return 'SELECT c.id, c.tuhinakerroin, c.prize, c.en_name, c.name AS c_name, p.name AS p_name, e.name AS e_name, ct.name AS ct_name FROM cards AS c JOIN prizetype as p JOIN expansion AS e JOIN cardtype AS ct';
 }
 
 function card_query_where($tuh_inafactor, $exp, $exclude_ids = array())
@@ -246,7 +234,7 @@ $mobile = isMobileDevice();
 do_head("Dominion - korttiarvonta");
 echo "<h1>Dominion - Arvo kortit</h1>";
 
-$result = get_expansions($conn);
+$result = get_expansions($conn, false);
 
 /* Output the form table */
 if (!$mobile) {
