@@ -1,27 +1,42 @@
 <?php
+/*
+ * Dominon card randomizer.
+ * Uses MySQL database.
+ *
+ * AUTHOR: Matti Vaittinen <mazziesaccount@gmail.com>
+ *
+ * Written just for fun. No Warranty. Use at your own risk!
+ *
+ * Copyright 2025, Matti Vaittinen mazziesaccount@gmail.com>
+ *
+ * Tuhina'o-meter => paljon toimintoja (tuhinaa)
+ * Tupina'o-meter => Nihilistipeli (paljon tupinaa)
+ *
+ * TODO:
+ * Öky'o-meter => Priorisoi isoja rahoja
+ */
 
-//$DBG=true;
 $DBG=false;
-$TESTING=false;
 
 if (isset($_POST['expansion']))
 	$exp = $_POST['expansion'];
 else
-	if ($TESTING)
-		$exp = array(3,4,5,6, 15);
-	else
-		$exp = 0;
+	$exp = 0;
 
-$tuh_inafactor = 0;
-if (is_numeric($_POST['tuhinarange'])) {
-	if ($_POST['tuhinarange'] <= 10 && $_POST['tuhinarange'] >= -10)
-		$tuh_inafactor = $_POST['tuhinarange'];
+$tuh_inafactor = null;
+if (isset($_POST['tuhinaenable'])) {
+	if (is_numeric($_POST['tuhinarange'])) {
+		if ($_POST['tuhinarange'] <= 20 && $_POST['tuhinarange'] >= 0)
+			$tuh_inafactor = $_POST['tuhinarange'];
+	}
 }
 
-$tup_inafactor = 0;
-if (is_numeric($_POST['tupinarange'])) {
-	if ($_POST['tupinarange'] <= 10 && $_POST['tupinarange'] >= -10)
-		$tup_inafactor = $_POST['tupinarange'];
+$tup_inafactor = null;
+if (isset($_POST['tupinaenable'])) {
+	if (is_numeric($_POST['tupinarange'])) {
+		if ($_POST['tupinarange'] <= 20 && $_POST['tupinarange'] >= 0)
+			$tup_inafactor = $_POST['tupinarange'];
+	}
 }
 
 if (isset($_POST['add_nihilism'])) {
@@ -30,230 +45,435 @@ if (isset($_POST['add_nihilism'])) {
 	$nihilism = false;
 }
 
-$kap_itafactor = 0;
-if (is_numeric($_POST['kapitarange'])) {
-	if ($_POST['kapitarange'] <= 10 && $_POST['kapitarange'] >= -10)
-		$kap_itafactor = $_POST['kapitarange'];
+$kap_itafactor = null;
+if (isset($_POST['kapitaenable'])) {
+	if (is_numeric($_POST['kapitarange'])) {
+		if ($_POST['kapitarange'] <= 20 && $_POST['kapitarange'] >= 0)
+			$kap_itafactor = $_POST['kapitarange'];
+	}
 }
 
 require 'include/db.php';
 require 'include/header.php';
 require 'include/dominion_common.php';
-require 'include/card.php';
-require 'include/dom_card_set.php';
+
+function num_cards_in_res($result)
+{
+	$retprize[0] = 0;
+	$retprize[1] = 0;
+	$retprize[2] = 0;
+	
+	while ($row = mysqli_fetch_assoc($result)) {
+		if (!is_numeric($row['prize']))
+			die('bad data in database: prize');
+		if ($row['prize'] < 4)
+			$retprize[0]++;
+		if ($row['prize'] == 4)
+			$retprize[1]++;
+		if ($row['prize'] > 4)
+			$retprize[2]++;
+	}
+	mysqli_data_seek($result, 0);
+
+	return $retprize;
+}
+
+function card_ids_in_res($result) {
+	$ids = array();
+
+	while ($row = mysqli_fetch_assoc($result)) {
+		if (!is_numeric($row['id']))
+			die('bad data in database: id');
+		$ids[] = $row['id'];
+	}
+
+	mysqli_data_seek($result, 0);
+
+	return $ids;
+}
+
+function __print_cards($result, $title, $mobile)
+{
+	$tuhinasum = 0;
+	while ($row = mysqli_fetch_assoc($result)) {
+		if (!is_numeric($row['tuhinakerroin']))
+			die('invalid data in database - tuhinakerroin');
+		$tuhinasum += $row['tuhinakerroin'];
+	}
+	mysqli_data_seek($result, 0);
+
+	if (!$mobile) {
+		$out = '<h3>' . $title . '</h3>
+		<table class="cardlist"><tr>
+			<th>Kortti</th><th>Korttityyppi</th><th>Hinta</th><th>Peliosa</th></tr>';
+	} else {
+		$out = '<h3>' . $title . '</h3>
+		<table class="cardlist"><tr>
+			<th>Kortti</th> <th>Peliosa</th></tr>';
+	}
+
+	while ($row = mysqli_fetch_assoc($result)) {
+		$name = htmlspecialchars($row['c_name']);
+		$en_name = htmlspecialchars($row['en_name']);
+		$prize = htmlspecialchars($row['prize']);
+		$prizetype = htmlspecialchars($row['p_name']);
+		$expansion = htmlspecialchars($row['e_name']);
+		$cardtype = htmlspecialchars($row['ct_name']);
+
+		if ($name != "" && $en_name != "" && $name != $en_name)
+			$name = $name . " (" . $en_name . ")";
+
+		if (!$mobile)
+			$out .= '<tr><td>' . $name . '</td><td>' . $cardtype . '</td><td>' . $prize . ' (' . $prizetype . ')</td><td>' . $expansion . '</td></tr>';
+		else
+			$out .= '<tr><td>' . $name . '</td><td>' . $expansion . '</td></tr>';
+	}
+	$out .= "</table>";
+	echo $out;
+	echo "Tuhina " . $tuhinasum;
+}
+
+function print_cards($conn, $query, $title, $mobile)
+{
+	$result = query_cards($conn, $query);
+	__print_cards($result, $title, $mobile);
+}
+
+function card_query_start()
+{
+	return 'SELECT c.id, c.tuhinakerroin, c.prize, c.en_name, c.name AS c_name, p.name AS p_name, e.name AS e_name, ct.name AS ct_name FROM cards AS c JOIN prizetype as p JOIN expansion AS e JOIN cardtype AS ct';
+}
+
+function card_query_where($tuh_inafactor, $exp, $exclude_ids = array())
+{
+	$base_where = "WHERE p.id = c.prizetype_id AND c.expansion_id = e.id AND c.type_id = ct.id";
+	/*
+	 * TODO: Find a good way to prevent the cards which belong to same storage deck from being suffled in.
+	 * It'd be easy to just exclude all cards which belong to the "bottom deck" (see query below), but that would
+	 * exclude a few of the interesting options from 'tupina' and 'tuhina' weighing.
+	 *
+	 *	$base_where = "WHERE p.id = c.prizetype_id AND c.expansion_id = e.id AND c.type_id = ct.id AND c.dual_below_id = 0";
+	 */
+	$where = $base_where;
+
+	foreach($exclude_ids as $id)
+		$where .= " AND c.id !='" . $id . "'";
+
+	if (isset($tuh_inafactor)) {
+		if ($tuh_inafactor == 0)
+			$where .= ' AND c.tuhinakerroin = 0';
+	}
+	$expansion_where = SQL_add_expansion_where('c.expansion_id', $exp);
+	if ($expansion_where)
+		$where .= " AND ".$expansion_where;
+	
+	$where_arr[] = $where . ' AND c.prize < 4';
+	$where_arr[] = $where . ' AND c.prize = 4';
+	$where_arr[] = $where . ' AND c.prize > 4';
+	$where_arr[] = $where;
+
+	return $where_arr;
+}
+
+function card_query_order($tuh_inafactor, $tup_inafactor, $nihilism, $kap_itafactor)
+{
+	$base_order = 'ORDER BY (RAND()';
+	$order = $base_order;
+
+	/*
+	 * Weighs to be added to the RAND for biasing the card selection based on
+	 * tuhinakerron and actionmoney.
+	 */
+	$tuhinaweigh = '(c.tuhinakerroin / 40 * '.$tuh_inafactor.' + 1 )';
+	$actionweigh = '( c.actionmoney / 12 * '. $tup_inafactor . ' + 1)';
+	$kapitaweigh = '(c.actionmoney / 40 * ' . $kap_itafactor .' + 1 )';
+
+	/* echo "tuhweigh $tmp"; */
+
+	if (isset($tuh_inafactor) && $tuh_inafactor != 0) {
+		$order .= ' * ' . $tuhinaweigh;
+	}
+	/*
+	 * If nihilism is checked, then we decrease the weigh for action cards with money.
+	 *
+	 * TODO: We should add information about the actions which allow picking more cards to hand. The
+	 * nihilism should probably also decrease probability of such cards to maximize the agony.
+	 */
+	if (isset($tup_inafactor) && $tup_inafactor > 0 && $nihilism) {
+		$order .= ' / ' . $actionweigh;
+	}
+
+	if (isset($kap_itafactor) && $kap_itafactor > 0) {
+		$order .= ' * ' . $kapitaweigh;
+	}
+
+	$order .= ') DESC';
+
+	return $order;
+}
+
+function card_query_limit($num_ch, $num_md, $num_ex)
+{
+	$limit[] = 'LIMIT ' . $num_ch;
+	$limit[] = 'LIMIT ' . $num_md;
+	$limit[] = 'LIMIT ' . $num_ex;
+
+	return $limit;
+}
 
 /* On a mobile device we try to fit the tables on a screen */
 $mobile = isMobileDevice();
+
 do_head("Dominion - korttiarvonta");
 echo "<h1>Dominion - Arvo kortit</h1>";
 
-echo output_input_form($conn, $mobile, $exp);
+echo '<p>Heps Kukkuu. Olet vanhalla korttiarvontasivulla. Uusi on <a href="index.php">t&auml;&auml;ll&auml;</a><br />'."\n";
 
-function random_card_from_array(&$card, $min_weight)
-{
-	$idx = 0;
-	$sum_weigh = 0;
+$result = get_expansions($conn, false);
 
-	debug_print(count($card)." cards");
-	foreach($card as $c)
-		$sum_weigh += $c->weight - $min_weight + 1;
-
-	$random = mt_rand(1, $sum_weigh);
-
-	$weigh_accum = 0;
-	foreach($card as $c) {
-		$weigh_accum += $c->weight - $min_weight + 1;
-
-		if ($weigh_accum >= $random) {
-			$picked = $c;
-			break;
-		}
-		$idx++;
+/* Output the form table */
+if (!$mobile) {
+	$output = '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Tuhina\'o-meter</th> <th>Tupina\'o-meter</th><th>Kapita\'o-meter</th></tr><tr><td>';
+	} else {
+	$output = '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Painotukset</th></tr><tr><td>';
 	}
-	if (!isset($picked))
-		die("<br />Weighing failed!");
-	array_splice($card, $idx, 1);
+$output .= '<form action="" method="post">';
 
-	return $picked;
+/* Print expansion checkboxes */
+$tmp_exp_idx = 0;
+while ($row = mysqli_fetch_assoc($result)) {
+	if ($exp && $row['id'] == $exp[$tmp_exp_idx]) {
+		$checked = " checked";
+		$tmp_exp_idx ++;
+	} else {
+		$checked = "";
+	}
+
+	if (!is_numeric($row['id']))
+		die("bad data in database - expansion id");
+
+	$output .= '<input type="checkbox" id="' . htmlspecialchars($row['name']) . '" name="expansion[]" value="' . $row['id'] . '"'."$checked>";
+	$output .= '<label for="' . htmlspecialchars($row['name']) . '">' . htmlspecialchars($row['name']) . '</label><br>';
+}
+$output .= '</td>';
+
+
+
+/* ...Tuhina cell: */
+$output .= '<td>';
+if ($mobile)
+	$output .= '<b>Tuhina\'o-meter</b> <br />';
+$output .= '<div class="slidecontainer">
+  <input type="range" min="0" max="20" value="0" class="slider" name="tuhinarange" id="tuhinarange">
+</div>';
+$output .= '<input type="checkbox" id="tuhinaenable" name="tuhinaenable" value="1">';
+$output .= '<label for="tuhinaenable">Ota Tuhina\'o-meter k&auml;ytt&ouml;&ouml;n</label><br>';
+$output .= '<div class="help-tip">
+    <p>Tuhina\'o-meter&copy; :ll&auml; voit muuttaa korttiarvontaa priorisoimaan toimintoketjuja lis&auml;&auml;vi&auml; kortteja. Asettamalla arvon 0:aan voit my&ouml;s est&auml;&auml; isomman Tuhinaindex&copy; :n korttien valinnan kokonaan.</p>
+</div>';
+$output .= '</td>';
+
+if ($mobile) {
+	/* On a mobile we end the row here */
+	$output .= '</tr><tr><td></td>';
 }
 
-function randomize_cards($card, $tuh_inafactor, $tup_inafactor, $nihilism, $kap_itafactor, $num_cards)
-{
-	global $CARDTYPE_MONEY;
-	global $CARD_DEFAULT_WEIGH;
+/* Tupina cell: */
+$output .= '<td>';
+if ($mobile)
+	$output .= '<b>Tupina\'o-meter</b><br />';
+$output .= '<div class="slidecontainer">
+  <input type="range" min="0" max="20" value="0" class="slider" name="tupinarange" id="tupinarange">
+</div>';
+$output .= '<input type="checkbox" id="tupinaenable" name="tupinaenable" value="1">';
+$output .= '<label for="tupinaenable">Ota Tupina\'o-meter k&auml;ytt&ouml;&ouml;n...</label><br>';
+$output .= '<input type="checkbox" id="add_nihilism" name="add_nihilism" value="1">';
+$output .= '<label for="add_nihilism">...ripauksella nihilismi&auml;</label><br>';
+$output .= '<div class="help-tip">
+    <p>Tupina\'o-meter&copy; :ll&auml; lis&auml;&auml;t peliin tupinaa ja jupinaa aiheuttavia elementtej&auml;. Tupina\'o-meter&copy; eroaa Tuhina\'o-meter&copy; :st&auml; siin&auml;, ett&auml; arvon asettaminen 0:ksi ei kuitenkaan kokonaan poista tupinaa aiheuttavien korttien mahdollisuutta pelist&auml;. <br /><br />Ja jos todella haluat koetella k&auml;rsiv&auml;llisyytesi rajoja niin voit h&ouml;yst&auml;&auml; peli&auml; ripauksella nihilismi&auml; ja pienent&auml;&auml; rahaa tuovien toimintojen mahdollisuutta.</p>
+</div>';
+$output .= '</td>';
 
-	debug_print("weighing ... $num_cards");
-
-	$min_weight = $CARD_DEFAULT_WEIGH;
-
-	if (isset($tuh_inafactor)) {
-		/*
-		 * Each card has "tuhinakerroin" from 0 => 10, describing how much "hassle" the card causes.
-		 * The "$tuh_inafactor" is user's preference (selected by slider), ranging from -10 to +10.
-		 * If user enables the slider, we will either increase or decrease the card's chance of being
-		 * selected by adding a factor to it's weigh. The addition is user's selection * card's
-		 * "tuhinakerroin", so maximum 10 * 10 (100), minimum -10 * 10 (-100).
-		 * Original unaltered weight for every card is 100, so this can either double or zero specific
-		 * card's chances to be selected. TODO: Do we really want to zero card's chance? If so, we can
-		 * simply omit all cards with weight 0 or less when randomizing.
-		 */
-		foreach($card as $c) {
-			$c->weight += $c->tuhinakerroin * $tuh_inafactor - 10;
-			if ($c->weight < $min_weight)
-				$min_weight = $c->weight;
-		}
-	}
-	if (isset($tup_inafactor)) {
-		foreach($card as $c) {
-			/* Let's increase/decrease the chances of cards which are attacks or curses */
-			/* Attack or curse cards get -100 ... 100 added to weigh */
-			if ($c->attack || $c->curse) {
-				$c->weight += $tup_inafactor * 10;
-			}
-			if ($nihilism) {
-				/*
-				 * Oh, you really want to suffer ?
-				 * We decrease chances of defensive cards and cards with 'actionmoney'
-				 * The largest 'actionmoney' ATM is the Death Cart, 5. This means the
-				 * weigh can change -50..0
-				 */
-				$c->weight -= $c->actionmoney * 10;
-				/* And, for defence cards, another -50 */
-				if ($c->defence)
-					$c->weight -= 50;
-
-			}
-			if ($c->weight < $min_weight)
-				$min_weight = $c->weight;
-		}
-	}
-	if (isset($kap_itafactor)) {
-		foreach($card as $c) {
-			/*
-			 * And here the biggest change is Death Cart's actionmoney 5 * min/max capitafactor * 2
-			 * => 5 * (+/-)10 * 2 => -100 ... +100
-			 */
-			$c->weight += $c->actionmoney * $kap_itafactor * 2;
-			if ($c->type_id == $CARDTYPE_MONEY)
-				$c->weight += $kap_itafactor * 10;
-			if ($c->weight < $min_weight)
-				$min_weight = $c->weight;
-		}
-	}
-
-	for ($i = 0; $i < $num_cards; $i++) {
-		debug_print("weighing loop, $i of ".($num_cards - 1)." ...");
-		$selected[] = random_card_from_array($card, $min_weight);
-	}
-
-	return $selected;
+if ($mobile) {
+	/* On a mobile we end the row here */
+	$output .= '</tr><tr><td></td>';
 }
 
-function get_prize_buckets($conn, $exp)
-{
-	if ($exp)
-		$QUERY = "SELECT prize FROM cards WHERE" . SQL_add_expansion_where( 'expansion_id', $exp);
-	else
-		$QUERY = "SELECT prize FROM cards";
+/* ...Kapita cell: */
+$output .= '<td>';
+if ($mobile)
+	$output .= '<b>Kapita\'o-meter</b><br />';
+$output .= '<div class="slidecontainer">
+  <input type="range" min="0" max="20" value="0" class="slider" name="kapitarange" id="kapitarange">
+</div>';
+$output .= '<input type="checkbox" id="kapitaenable" name="kapitaenable" value="1">';
+$output .= '<label for="kapitaenable">Ota Kapita\'o-meter k&auml;ytt&ouml;&ouml;n</label><br>';
+$output .= '<div class="help-tip">
+    <p>Kapita\'o-meter&copy; :ll&auml; voit muuttaa korttiarvontaa priorisoimaan raha- ja rahaa lis&auml;&auml;vi&auml; toimintakortteja.</p>
+</div>';
+$output .= '</td>';
 
-	$res = query_cards($conn, $QUERY);
-	$num_cards = mysqli_num_rows($res);
 
-	$bucket_optimal = $num_cards / 3;
+/* End of the form table and form */
+$output .= '</tr></table>';
+$output .= '<input type="submit" value="Submit">';
+$output .= '</form>';
 
-	$prizes = array();
-	while ($row = mysqli_fetch_assoc($res)) {
-		$prize = $row['prize'];
-		if (!isset($prizes[$prize]))
-			$prizes[$prize] = 1;
+/* Output the input form */
+echo $output;
+
+$printed_prizes[0] = 0;
+$printed_prizes[1] = 0;
+$printed_prizes[2] = 0;
+
+$exclude_ids = array();
+$exclude_ids_kapita = array();
+
+$printed_prizes_kapita[0] = 0;
+$printed_prizes_kapita[1] = 0;
+$printed_prizes_kapita[2] = 0;
+
+if (isset($kap_itafactor) && $kap_itafactor > 0) {
+	if ($kap_itafactor < 7) {
+		$num_money = 2;
+	} else if ($kap_itafactor < 14) {
+		$num_money = 3;
+	} else {
+		$num_money = 4;
+	}
+	$special_query_base .= card_query_start();
+	$special_where = card_query_where(0, $exp);
+	$special_where_type .= " AND c.type_id = 1";
+
+	$special_query = $special_query_base . ' ' . $special_where[3] . $special_where_type . ' ORDER BY RAND() LIMIT ' . $num_money;
+
+	$spec_res = query_cards($conn, $special_query);
+	$printed_prizes_kapita = num_cards_in_res($spec_res);
+
+	$exclude_ids_kapita = card_ids_in_res($spec_res);
+
+	__print_cards($spec_res, "Kauppakillan Erikoiset", $mobile);
+}
+
+if (isset($tup_inafactor) && $tup_inafactor > 0) {
+	$num_curses = 0;
+	$num_drops = 0;
+	if ($tup_inafactor < 5) {
+		$num_attack = 2;
+	} else if ($tup_inafactor < 10) {
+		$num_attack = 2;
+		$num_drops = 1;
+	} else if ($tup_inafactor < 15) {
+		$num_attack = 1;
+		$num_curses = 1;
+		$num_drops = 1;
+	} else {
+		$num_attack = 2;
+		$num_curses = 1;
+		$num_drops = 1;
+	}
+
+	$special_query = "";
+
+	$special_query_base = card_query_start();
+	$special_where = card_query_where(0, $exp);
+	if ($num_drops > 0)
+		$special_query .= '(' . $special_query_base. ' ' . $special_where[3] . ' AND c.dropcards = 1 ORDER BY RAND() LIMIT ' . $num_drops . ')';
+	if ($num_curses > 0) {
+		if ($num_drops > 0)
+			$special_query .= ' UNION ' . '('. $special_query_base. ' ' . $special_where[3] . ' AND c.curse = 1 ORDER BY RAND() LIMIT ' . $num_curses . ')';
 		else
-			$prizes[$prize] ++;
+			$special_query = '('. $special_query_base. ' ' . $special_where[3] . ' AND c.curse = 1 ORDER BY RAND() LIMIT ' . $num_curses . ')';
 	}
-	ksort($prizes);
+	if ($num_drops > 0 || $num_curses > 0)
+		$special_query .= ' UNION (' . $special_query_base . ' ' . $special_where[3] . ' AND c.attack = 1 ORDER BY RAND() )';
+	else
+		$special_query = $special_query_base . ' ' . $special_where[3] . ' AND c.attack = 1 ORDER BY RAND()'; 
 
-	$sumnum = 0;
-	$prevprize = 0;
+	$special_query .= ' LIMIT ' . $num_attack + $num_drops + $num_curses;
 
-	$dbg = $num_cards;
+	$spec_res = query_cards($conn, $special_query);
+	$printed_prizes = num_cards_in_res($spec_res);
 
-	foreach($prizes as $prize => $num) {
-		debug_print("prize $prize, cards $num, bucket-size ". ($sumnum + $num) .", optimal $bucket_optimal ");
-		if ($sumnum + $num > $bucket_optimal) {
-			if ($sumnum > 3) {
-				$boundary[] = $prevprize;
-				debug_print("BOUNDARY: $prevprize, ($sumnum cards)");
-				$dbg -= $sumnum;
-				$sumnum = $num;
-			} else {
-				$boundary[] = $prize;
-				debug_print("BOUNDARY: $prize, (".($sumnum + $num)." cards)");
-				$dbg -= ($sumnum + $num);
-				$sumnum = 0;
-			}
-			if (count($boundary) == 2) {
-				debug_print("last bucket has $dbg cards");
-				return $boundary;
-			}
-		} else {
-			$sumnum += $num;
-		}
-		$prevprize = $prize;
-	}
+	$exclude_ids = card_ids_in_res($spec_res);
 
-	die("Can't create prize buckets. Too few cards in selected expansions?<br />");
+	__print_cards($spec_res, "Tupina Specials", $mobile);
 }
 
-function do_prize_bucket_where($boundaries, $prize_column)
-{
-	$where[] = "$prize_column <= $boundaries[0]";
-	$where[] = "($prize_column > $boundaries[0] AND $prize_column <= $boundaries[1])";
-	$where[] = "$prize_column > $boundaries[1]";
+$exclude_ids = array_merge($exclude_ids, $exclude_ids_kapita);
 
-	return $where;
+$query_start = card_query_start();
+$query_where = card_query_where($tuh_inafactor, $exp, $exclude_ids);
+
+$query_order = card_query_order($tuh_inafactor, $tup_inafactor, $nihilism, $kap_itafactor);
+
+$printed_cheap = $printed_prizes_kapita[0] + $printed_prizes[0];
+$printed_mid = $printed_prizes_kapita[1] + $printed_prizes[1];
+$printed_exp = $printed_prizes_kapita[2] + $printed_prizes[2];
+
+while ($printed_cheap > 3) {
+	$printed_mid++;
+	$printed_cheap--;
 }
 
-$boundary_prizes = get_prize_buckets($conn, $exp);
-
-$QUERY_BASE = 'SELECT id, tuhinakerroin, actionmoney, curse, attack, defence, type_id FROM cards WHERE ';  
-
-
-$PRIZEBUCKETS = do_prize_bucket_where($boundary_prizes, 'prize');
-
-$num_cards = array(3, 3, 4);
-$i = 0;
-
-$card_group_names = array('Halpaa ku saippua', 'Keskiluokan keskiostos', 'N&auml;&auml; M&auml;&auml; Tahdon!');
-$card_set = dom_card_set::prepare_set($conn);
-
-foreach($PRIZEBUCKETS as $PRIZE_LIMIT) {
-	$exp_where = SQL_add_expansion_where('expansion_id', $exp);
-
-	$query = $QUERY_BASE.$PRIZE_LIMIT;
-	if ($exp_where)
-		$query .= " AND ".$exp_where;
-
-	$result = query_cards($conn, $query);
-	$foo = 0;
-	while ($row = mysqli_fetch_assoc($result)) {
-		$foo++;
-		$card[] = dom_card::from_partial_row($row);
-	}
-	debug_print("$foo cards fetched");
-
-	$selected = randomize_cards($card, $tuh_inafactor, $tup_inafactor, $nihilism, $kap_itafactor, $num_cards[$i]);
-	$card_set->add_set($selected, $card_group_names[$i]);
-	$card = array();
-
-	$i++;
-
-	debug_print("bucket $i: $PRIZE_LIMIT");
+while ($printed_mid > 3) {
+	$printed_exp++;
+	$printed_mid--;
 }
 
-$card_set->get_cards();
-$card_set->show_sets($mobile);
+while ($printed_exp > 4) {
+	$printed_exp--;
+	$printed_mid++;
+}
+
+while ($printed_mid > 3) {
+	$printed_cheap++;
+	$printed_mid--;
+}
+
+if ($printed_cheap > 3)
+	die('Sorry, cheap > 3');
+
+if ($printed_mid > 3)
+	die('Sorry, cheap > 3');
+
+if ($printed_exp > 4)
+	die('Sorry, cheap > 3');
+
+$query_limit = card_query_limit(3 - $printed_cheap, 3 - $printed_mid, 4 - $printed_exp);
+
+$query_cheap = $query_start . ' ' . $query_where[0] . ' ' . $query_order . ' ' .$query_limit[0];
+$query_mid = $query_start . ' ' . $query_where[1] . ' ' . $query_order . ' ' .$query_limit[1];
+$query_exp = $query_start . ' ' . $query_where[2] . ' ' . $query_order . ' ' .$query_limit[2];
+
+
+echo '<hr style="height:10px;border-width:0;color:#d2691e;background-color:#d2691e">';
+
+/* Output cards */
+/* if (!$mobile)
+	echo '<table class="structure"><tr><td>';
+ */
+if ($printed_cheap != 3)
+	print_cards($conn, $query_cheap, "Hinta &lt; 4", $mobile);
+
+/* if (!$mobile)
+	echo '</td><td>';
+ */
+if ($printed_mid != 3)
+	print_cards($conn, $query_mid, "Hinta 4", $mobile);
+
+/* if (!$mobile)
+	echo '</td><td>';
+ */
+if ($printed_exp != 4)
+	print_cards($conn, $query_exp, "Hinta &gt; 4", $mobile);
+
+/* if (!$mobile)
+	echo '</td></tr></table>';
+ */
+echo '<p><h1><a href="aloittaja.php" target="_blank">Arvo my&ouml;s aloittaja?</a></h1>';
 
 /* Close connection, print (c) and send </body> </html> */
-echo '<p><h1><a href="aloittaja.php" target="_blank">Arvo my&ouml;s aloittaja?</a></h1>';
 require 'include/footer.php';
 
 ?>
