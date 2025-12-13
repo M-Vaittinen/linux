@@ -38,6 +38,38 @@ function get_type_id($type)
 }
  */
 
+function view_last_added_cards($conn, &$output)
+{
+	$sql = "SELECT c.*, e.name AS expansion FROM cards AS c JOIN expansion as e ON e.id = c.expansion_id ORDER BY c.id DESC LIMIT 10";
+	$result = mysqli_query($conn, $sql);
+
+	if (mysqli_num_rows($result) > 0) {
+	    $output .= "<table border='1' cellpadding='5'>";
+
+	    // Fetch and print table headers
+	    $fields = mysqli_fetch_fields($result);
+	    $output .= "<tr>";
+	    foreach ($fields as $field) {
+	        $output .= "<th>" . htmlspecialchars($field->name) . "</th>";
+	    }
+	    $output .= "</tr>";
+
+	    // Fetch and print rows
+	    while ($row = mysqli_fetch_assoc($result)) {
+	        $output .= "<tr>";
+	        foreach ($row as $value) {
+		       
+			$output .= "<td>" . htmlspecialchars($value) . "</td>";
+	        }
+	        $output .= "</tr>";
+	    }
+
+	    $output .= "</table>";
+	} else {
+	    $output .= "No cards found.";
+	}
+}
+
 function die_bad_input($reason)
 {
 	echo $reason."</br>\n";
@@ -439,7 +471,7 @@ function valid_name_or_die($str)
 	__valid_name($str, true);
 }
 
-function check_n_add_to_cards($conn, $i)
+function check_n_add_to_cards($conn, $i, $expansion)
 {
 	$known_types[1] = 'raha';
 	$known_types[2] = 'toiminto';
@@ -597,7 +629,7 @@ if ($data_sent) {
 	if (!isset($expansion))
 		die('Missing Expansion');
 	for ($i = 0; $i < 5; $i++)
-		check_n_add_to_cards($conn, $i);
+		check_n_add_to_cards($conn, $i, $expansion);
 }
 
 $tuhina_query = "SELECT name, en_name, tuhinakerroin FROM cards ORDER BY tuhinakerroin DESC LIMIT 5";
@@ -631,7 +663,7 @@ for ($idx = 0; $row = mysqli_fetch_assoc($res); $idx++) {
 $output .= '</table>';
 $output .= '<input type="submit" value="Add cards">'."\n";
 $output .= '</form>';
-$output .= 'Examples of cards and their respective tuhinafactors:<br />';
+$output .= '<h3>Examples of cards and their respective tuhinafactors:</h3>';
 $output .= '<table class="structure"><tr><th>name</th><th>name en</th><th>tuhinafactor</th></tr>';
 while ($row = mysqli_fetch_assoc($tuhina_hi_res))
 	$output .= '<tr><td>'.$row['name'].'</td><td>'.$row['en_name'].'</td><td>'.$row['tuhinakerroin'].'</td><tr>';
@@ -643,6 +675,11 @@ array_reverse($lores, true);
 
 foreach($lores as $lore)
 	$output .= '<tr><td>'.$lore['name'].'</td><td>'.$lore['en_name'].'</td><td>'.$lore['tuhinakerroin'].'</td><tr>';
+
+$output .= '</table>';
+
+$output .= '<h3>Lastly added cards</h3>';
+view_last_added_cards($conn, $output);
 
 echo $output;
 
