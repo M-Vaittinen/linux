@@ -69,13 +69,13 @@ class dom_card
 		$this->prizetype_id = isset($row['prizetype_id']) ? $row['prizetype_id'] : null;
 		$this->expansion_id = isset($row['expansion_id']) ? $row['expansion_id'] : null;
 		$this->drawcards = isset($row['drawcards']) ? $row['drawcards'] : null;
-		$this->buys = isset($row['buys']) ? $row['buys'] : null;
-		$this->attack = isset($row['attack']) ? $row['attack'] : null;
-		$this->defence = isset($row['defence']) ? $row['defence'] : null;
-		$this->endure = isset($row['endure']) ? $row['endure'] : null;
-		$this->gather = isset($row['gather']) ? $row['gather'] : null;
-		$this->destroy = isset($row['destroy']) ? $row['destroy'] : null;
-		$this->curse = isset($row['curse']) ? $row['curse'] : null;
+		$this->buys = isset($row['buys']) ? $row['buys'] : 0;
+		$this->attack = isset($row['attack']) ? $row['attack'] : 0;
+		$this->defence = isset($row['defence']) ? $row['defence'] : 0;
+		$this->endure = isset($row['endure']) ? $row['endure'] : 0;
+		$this->gather = isset($row['gather']) ? $row['gather'] : 0;
+		$this->destroy = isset($row['destroy']) ? $row['destroy'] : 0;
+		$this->curse = isset($row['curse']) ? $row['curse'] : 0;
 		$this->tuhinakerroin = isset($row['tuhinakerroin']) ? $row['tuhinakerroin'] : null;
 		$this->dropcards = isset($row['dropcards']) ? $row['dropcards'] : null;
 		$this->actionmoney = isset($row['actionmoney']) ? $row['actionmoney'] : null;
@@ -113,7 +113,7 @@ class dom_card
 			$row['name'] = $row['en_name'];
 
 		/* Check all required data is given */
-		$required_keys = array('id', 'name', 'en_name', 'dual_top_of_id', 'prize', 'type_id', 'prizetype_id', 'expansion_id', 'drawcards', 'attack', 'defence', 'endure', 'gather', 'destroy', 'curse', 'tuhinakerroin', 'dropcards', 'actionmoney', 'type_name', 'prizetype_name', 'expansion_name');
+		$required_keys = array('id', 'name', 'en_name', 'dual_top_of_id', 'prize', 'type_id', 'prizetype_id', 'expansion_id', 'drawcards', 'tuhinakerroin', 'dropcards', 'actionmoney', 'type_name', 'prizetype_name', 'expansion_name');
 		$card->check_row_has($row, $required_keys);
 
 		$card->__populate($row);
@@ -129,11 +129,8 @@ class dom_card
 
 		if (!isset($row['id']) ||
 		    !isset($row['tuhinakerroin']) ||
-		    !isset($row['actionmoney']) ||
-		    !isset($row['curse']) ||
-		    !isset($row['attack']) ||
-		    !isset($row['defence']))
-	    	    die('Info missing');
+		    !isset($row['actionmoney']))
+			die('Info necessary for randomizing is missing');
 
 		$card->__populate($row);
 		$card->weight = $CARD_DEFAULT_WEIGH;
