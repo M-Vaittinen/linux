@@ -61,7 +61,7 @@ require 'include/dom_card_set.php';
 /* On a mobile device we try to fit the tables on a screen */
 $mobile = isMobileDevice();
 do_head("Dominion - korttiarvonta v2");
-echo '<h1>Dominion - Arvo kortit v2 (<a href="index.php">Yhyy, Wanha oli parempi</a>)</h1>';
+echo '<h1>Dominion - Arvo kortit v2 (<a href="index2.php">Yhyy, Wanha oli parempi</a>)</h1>';
 
 echo output_input_form($conn, $mobile, $exp);
 
