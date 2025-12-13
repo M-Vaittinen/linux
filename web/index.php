@@ -20,7 +20,10 @@ $DBG=false;
 
 if (isset($_POST['expansion']))
 	$exp = $_POST['expansion'];
+else
+	$exp = 0;
 
+$tuh_inafactor = null;
 if (isset($_POST['tuhinaenable'])) {
 	if (is_numeric($_POST['tuhinarange'])) {
 		if ($_POST['tuhinarange'] <= 20 && $_POST['tuhinarange'] >= 0)
@@ -28,6 +31,7 @@ if (isset($_POST['tuhinaenable'])) {
 	}
 }
 
+$tup_inafactor = null;
 if (isset($_POST['tupinaenable'])) {
 	if (is_numeric($_POST['tupinarange'])) {
 		if ($_POST['tupinarange'] <= 20 && $_POST['tupinarange'] >= 0)
@@ -41,6 +45,7 @@ if (isset($_POST['add_nihilism'])) {
 	$nihilism = false;
 }
 
+$kap_itafactor = null;
 if (isset($_POST['kapitaenable'])) {
 	if (is_numeric($_POST['kapitarange'])) {
 		if ($_POST['kapitarange'] <= 20 && $_POST['kapitarange'] >= 0)
@@ -85,7 +90,6 @@ function card_ids_in_res($result) {
 	mysqli_data_seek($result, 0);
 
 	return $ids;
-
 }
 
 function __print_cards($result, $title, $mobile)
@@ -159,7 +163,7 @@ function card_query_where($tuh_inafactor, $exp, $exclude_ids = array())
 		if ($tuh_inafactor == 0)
 			$where .= ' AND c.tuhinakerroin = 0';
 	}
-	if (isset($exp)) {
+	if ($exp) {
 		$i = 0;
 		$where .= ' AND (';
 		foreach( $exp as $e) {
@@ -247,7 +251,7 @@ $output .= '<form action="" method="post">';
 /* Print expansion checkboxes */
 $tmp_exp_idx = 0;
 while ($row = mysqli_fetch_assoc($result)) {
-	if ($row['id'] == $exp[$tmp_exp_idx]) {
+	if ($exp && $row['id'] == $exp[$tmp_exp_idx]) {
 		$checked = " checked";
 		$tmp_exp_idx ++;
 	} else {
