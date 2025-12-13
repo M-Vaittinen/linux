@@ -167,6 +167,34 @@ function randomize_cards($card, $tuh_inafactor, $tup_inafactor, $nihilism, $kap_
 
 function get_prize_buckets($conn, $exp)
 {
+	return array(3, 4);
+	/*
+	 * Idea of this code was to split the cards to 3 buckets, cheap, mid and expensive (as previous version did).
+	 * Original versions used prizes prize < 4, prize == 4 and prize > 4 for categories.
+	 *
+	 * While testing things with 'Nousukausi' expansion alone, I noticed that it only had 3 cards that costed less than 3.
+	 * So, with the original division, this resulted same 3 cards to always be selected for 'cheap' category.
+	 *
+	 * So, I developed the code below, which queried the prizes of the cards in selected expansions, and tried to
+	 * compute them into 3 roughly same-sized buckets. Fine ?
+	 *
+	 * No. There are severe problems with this approach.
+	 * 
+	 * 1. Several expansions have majority of cards costing around 3 and 4 coins. With the code below, for example the
+	 * 'Guilds' expansion will have no cards in the 'expensive' set - and things just break apart.
+	 *
+	 * 2. When the game begins, there is 10 cards in hand, 7 of which are copper, 3 are victory cards. It means that the
+	 * typical hand(s) during first rounds will be 3 and 4 coins - which means that if the 'cheap' bucket ends up having
+	 * only cards costing 4, it gets unlikely players have an option to buy other but silver. This sounds boring. Even more
+	 * boring it gets if low limit could climb to 5 or more.
+	 *
+	 * So, let's just keep the old ranges: ([<4], [4], [>4]) for now.
+	 *
+	 * TODO: Find a way to make amount of cards in each bucket more flexible. This helps if some expansions don't have
+	 * enough cards in a specific bucket.
+	 *
+	 *
+
 	if ($exp)
 		$QUERY = "SELECT prize FROM cards WHERE" . SQL_add_expansion_where( 'expansion_id', $exp);
 	else
@@ -217,6 +245,7 @@ function get_prize_buckets($conn, $exp)
 	}
 
 	die("Can't create prize buckets. Too few cards in selected expansions?<br />");
+	*/
 }
 
 function do_prize_bucket_where($boundaries, $prize_column)
