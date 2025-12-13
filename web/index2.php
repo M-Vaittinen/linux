@@ -29,13 +29,13 @@ else
 		$exp = 0;
 
 $tuh_inafactor = 0;
-if (is_numeric($_POST['tuhinarange'])) {
+if (isset($_POST['tuhinarange']) && is_numeric($_POST['tuhinarange'])) {
 	if ($_POST['tuhinarange'] <= 10 && $_POST['tuhinarange'] >= -10)
 		$tuh_inafactor = $_POST['tuhinarange'];
 }
 
 $tup_inafactor = 0;
-if (is_numeric($_POST['tupinarange'])) {
+if (isset($_POST['tupinarange']) && is_numeric($_POST['tupinarange'])) {
 	if ($_POST['tupinarange'] <= 10 && $_POST['tupinarange'] >= -10)
 		$tup_inafactor = $_POST['tupinarange'];
 }
@@ -47,7 +47,7 @@ if (isset($_POST['add_nihilism'])) {
 }
 
 $kap_itafactor = 0;
-if (is_numeric($_POST['kapitarange'])) {
+if (isset($_POST['kapitarange']) && is_numeric($_POST['kapitarange'])) {
 	if ($_POST['kapitarange'] <= 10 && $_POST['kapitarange'] >= -10)
 		$kap_itafactor = $_POST['kapitarange'];
 }
@@ -61,7 +61,7 @@ require 'include/dom_card_set.php';
 /* On a mobile device we try to fit the tables on a screen */
 $mobile = isMobileDevice();
 do_head("Dominion - korttiarvonta v2");
-echo '<h1>Dominion - Arvo kortit v2 (<a href="index2.php">Yhyy, Wanha oli parempi</a>)</h1>';
+echo '<h1>Dominion - Arvo kortit v2 (<a href="index.php">Yhyy, Wanha oli parempi</a>)</h1>';
 
 echo output_input_form($conn, $mobile, $exp);
 
@@ -254,7 +254,7 @@ foreach($PRIZEBUCKETS as $PRIZE_LIMIT) {
 		$foo++;
 		$card[] = dom_card::from_partial_row($row);
 	}
-	debug_print("$foo cards fetched");
+	debug_print("$foo cards fetched for $card_group_names[$i] - selecting from those:");
 
 	$selected = randomize_cards($card, $tuh_inafactor, $tup_inafactor, $nihilism, $kap_itafactor, $num_cards[$i]);
 	$card_set->add_set($selected, $card_group_names[$i]);
