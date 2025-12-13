@@ -19,7 +19,6 @@ h1 {
 table.structure {
   width: 100%;
   border: none;
-  border-spaceing: 18px;
   text-align: left;
   vertical-align: top;
 }
@@ -93,6 +92,10 @@ table.aarvonta {
   background-color: ##ffdead;
   color: brown;
   border-radius: 10px;
+}
+
+.mandatory {
+    border: thin red solid;
 }
 
 .help-tip{
