@@ -469,7 +469,7 @@ if ($printed_exp != 4)
 /* if (!$mobile)
 	echo '</td></tr></table>';
  */
-echo '<p><a href="aloittaja.php">Arvo aloittaja?</a>';
+echo '<p><h1><a href="aloittaja.php" target="_blank">Arvo my&ouml;s aloittaja?</a></h1>';
 
 /* Close connection, print (c) and send </body> </html> */
 require 'include/footer.php';
