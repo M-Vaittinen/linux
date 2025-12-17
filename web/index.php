@@ -20,6 +20,7 @@
 $DBG=false;
 $TESTING=false;
 
+$preselected = null;
 if (isset($_POST['keepid'])) {
 	foreach ($_POST['keepid'] AS $keepid) {
 		if (!is_numeric($keepid))
@@ -74,6 +75,7 @@ if (isset($_POST['kapitarange']) && is_numeric($_POST['kapitarange'])) {
 	if ($_POST['kapitarange'] <= 10 && $_POST['kapitarange'] >= -10)
 		$kap_itafactor = $_POST['kapitarange'];
 }
+
 
 require 'include/db.php';
 require 'include/header.php';
@@ -218,7 +220,6 @@ function get_prize_buckets($conn, $exp)
 	 * enough cards in a specific bucket.
 	 *
 	 *
-
 	if ($exp)
 		$QUERY = "SELECT prize FROM cards WHERE" . SQL_add_expansion_where( 'expansion_id', $exp);
 	else
