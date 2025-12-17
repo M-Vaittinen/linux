@@ -89,7 +89,7 @@ function output_input_form($conn, $mobile, $exp)
 		} else {
 		$output = '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Painotukset</th></tr><tr><td>';
 		}
-	$output .= '<form action="" method="post">';
+	$output .= '<form action="" method="post" id="theform">';
 
 	/* Print expansion checkboxes */
 	$tmp_exp_idx = 0;
@@ -114,6 +114,7 @@ function output_input_form($conn, $mobile, $exp)
 	$output .= '<td>';
 	if ($mobile)
 		$output .= '<b>Tuhina\'o-meter</b> <br />';
+
 	$output .= '<div class="slidecontainer">
   <span class="label">-10</span>
   <div class="slider-wrapper">
@@ -163,6 +164,7 @@ function output_input_form($conn, $mobile, $exp)
 	$output .= '<td>';
 	if ($mobile)
 		$output .= '<b>Kapita\'o-meter</b><br />';
+
 	$output .= '<div class="slidecontainer">
   <span class="label">-10</span>
   <div class="slider-wrapper">

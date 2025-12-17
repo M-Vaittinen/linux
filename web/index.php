@@ -20,6 +20,29 @@
 $DBG=false;
 $TESTING=false;
 
+if (isset($_POST['keepid'])) {
+	foreach ($_POST['keepid'] AS $keepid) {
+		if (!is_numeric($keepid))
+			die('Non numeric KID');
+		if (!isset($_POST['keepprize'.$keepid]))
+			die('Prizeless KID');
+		$kidprize = $_POST['keepprize'.$keepid];
+		if (!is_numeric($kidprize))
+			die('KID is not a number');
+		if ($kidprize < 4) {
+			$preselected[0][] = $keepid;
+			$preselected_prize[0][] = $kidprize;
+		} else if ($kidprize == 4) {
+			$preselected[1][] = $keepid;
+			$preselected_prize[1][] = $kidprize;
+		} else {
+			$preselected[2][] = $keepid;
+			$preselected_prize[2][] = $kidprize;
+		}
+	}
+}
+
+
 if (isset($_POST['expansion']))
 	$exp = $_POST['expansion'];
 else
@@ -58,6 +81,7 @@ require 'include/dominion_common.php';
 require 'include/card.php';
 require 'include/dom_card_set.php';
 
+debug_print("Recv'd tuhina: $tuh_inafactor, Tupina: $tup_inafactor (nihilism $nihilism), Kapita: $kap_itafactor");
 /* On a mobile device we try to fit the tables on a screen */
 $mobile = isMobileDevice();
 do_head("Dominion - korttiarvonta v2");
@@ -258,24 +282,49 @@ function do_prize_bucket_where($boundaries, $prize_column)
 }
 
 $boundary_prizes = get_prize_buckets($conn, $exp);
+$PRIZEBUCKETS = do_prize_bucket_where($boundary_prizes, 'prize');
 
 $QUERY_BASE = 'SELECT id, tuhinakerroin, actionmoney, curse, attack, defence, type_id FROM cards WHERE ';  
 
-
-$PRIZEBUCKETS = do_prize_bucket_where($boundary_prizes, 'prize');
-
 $num_cards = array(3, 3, 4);
-$i = 0;
-
 $card_group_names = array('Halpaa ku saippua', 'Keskiluokan keskiostos', 'N&auml;&auml; M&auml;&auml; Tahdon!');
+
 $card_set = dom_card_set::prepare_set($conn);
 
+function add_existing(&$selected, $preselected)
+{
+	foreach($preselected AS $new_id) {
+		$new_card = new dom_card();
+
+		$new_card->id = $new_id;
+		$selected[] = $new_card;	
+	}
+}
+
+function exclude_presel_id($presel)
+{
+	$where = '';
+	foreach($presel AS $exclude_id)
+		$where .= " AND id != $exclude_id";
+
+	return $where;
+}
+
+$i = 0;
 foreach($PRIZEBUCKETS as $PRIZE_LIMIT) {
 	$exp_where = SQL_add_expansion_where('expansion_id', $exp);
 
 	$query = $QUERY_BASE.$PRIZE_LIMIT;
 	if ($exp_where)
 		$query .= " AND ".$exp_where;
+
+	if (isset($preselected[$i]))
+		$num_presel=count($preselected[$i]);
+	else
+		$num_presel = 0;
+	if ($num_presel) {
+		$query .= exclude_presel_id($preselected[$i]);
+	}
 
 	$result = query_cards($conn, $query);
 	$foo = 0;
@@ -285,7 +334,10 @@ foreach($PRIZEBUCKETS as $PRIZE_LIMIT) {
 	}
 	debug_print("$foo cards fetched for $card_group_names[$i] - selecting from those:");
 
-	$selected = randomize_cards($card, $tuh_inafactor, $tup_inafactor, $nihilism, $kap_itafactor, $num_cards[$i]);
+	$selected = randomize_cards($card, $tuh_inafactor, $tup_inafactor, $nihilism, $kap_itafactor, $num_cards[$i] - $num_presel);
+	if ($num_presel)
+		add_existing($selected, $preselected[$i]);
+
 	$card_set->add_set($selected, $card_group_names[$i]);
 	$card = array();
 
@@ -295,7 +347,7 @@ foreach($PRIZEBUCKETS as $PRIZE_LIMIT) {
 }
 
 $card_set->get_cards();
-$card_set->show_sets($mobile);
+$card_set->show_sets($preselected, $mobile);
 
 /* Close connection, print (c) and send </body> </html> */
 echo '<p><h1><a href="aloittaja.php" target="_blank">Arvo my&ouml;s aloittaja?</a></h1>';

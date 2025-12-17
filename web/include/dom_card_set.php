@@ -17,6 +17,13 @@ class dom_card_set {
 	public $cards		= null;
 	private $conn		= null;
 
+	private function add_change_input($id, $set_num, $prize, $checked)
+	{
+		$out .= ''."\n";
+		$out .= '<input form="theform" type="checkbox" name="keepid[]" value="'.$id.'"'.$checked.'>'."\n";
+		$out .= '<input form="theform" type="hidden" name="keepprize'.$id.'" value="'.$prize.'"'.$checked.'>'."\n";
+		return $out;
+	}
 	public function add_set($skeleton_cards, $set_name) {
 		$this->set_name[] = $set_name;
 
@@ -45,28 +52,35 @@ class dom_card_set {
 		while ($row = mysqli_fetch_assoc($res))
 			$this->cards[] = dom_card::from_full_row($row);
 	}
-	public function show_sets($mobile = 0) {
+	public function show_sets($keepids, $mobile = 0) {
 
 		$vals_on_sets = array(3,3,4);
 
 		$out = "";
+		$out .= '<form method="post" action="" id="changeform">';
 		for ($i = 0; $i < 3; $i++) {
 			$title = $this->set_name[$i];
-	
+
 			if (!$mobile) {
 				$out .= '<h3>' . $title . '</h3>'."\n";
 				$out .= '<table class="cardlist"><tr>'."\n";
-				$out .= '<th>Kortti</th><th>Korttityyppi</th><th>Hinta</th><th>Peliosa</th></tr>'."\n";
+				$out .= '<th>[pid&auml;] Kortti</th><th>Korttityyppi</th><th>Hinta</th><th>Peliosa</th></tr>'."\n";
 			} else {
 				$out .= "<h3> . $title . </h3>\n";
 				$out .= '<table class="cardlist"><tr>'."\n";
-				$out .= '<th>Kortti</th> <th>Peliosa</th></tr>'."\n";
+				$out .= '<th>[pid&auml;] Kortti</th> <th>Peliosa</th></tr>'."\n";
 			}
 			$tuhinasum = 0;
 			/* This is a horrible hack, trusting sets have 3, 3, 4 cards */
 			for ($j = 0; $j < $vals_on_sets[$i]; $j++) {
 				$c = $this->cards[$j + 3 * $i];
 				$tuhinasum += $c->tuhinakerroin;
+
+				$checked = "";
+				foreach($keepids[$i] AS $keep) {
+					if ($c->id == $keep)
+						$checked = " checked";
+				}
 
 				$name = htmlspecialchars($c->name);
 				$en_name = htmlspecialchars($c->en_name);
@@ -79,15 +93,16 @@ class dom_card_set {
 					$name = $name . " (" . $en_name . ")";
 
 				if (!$mobile)
-					$out .= '<tr><td>' . $name . '</td><td>' . $cardtype . '</td><td>' . $prize . ' (' . $prizetype . ')</td><td>' . $expansion . '</td></tr>'."\n";
+					$out .= '<tr><td>' . $this->add_change_input($c->id, $i, $c->prize, $checked) . $name . '</td><td>' . $cardtype . '</td><td>' . $prize . ' (' . $prizetype . ')</td><td>' . $expansion . '</td></tr>'."\n";
 				else
-					$out .= '<tr><td>' . $name . '</td><td>' . $expansion . '</td></tr>'."\n";
+					$out .= '<tr><td>' . $this->add_change_input($c->id, $i, $c->prize, $checked) . $name . '</td><td>' . $expansion . '</td></tr>'."\n";
 			}
 			$out .= "</table>"."\n";
 			$out .= "Tuhina " . $tuhinasum."\n";
 		}
 		echo $out;
 	}
+
 	public static function prepare_set($conn) {
 		$card_set =  new self();
 

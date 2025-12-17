@@ -7,6 +7,52 @@ echo '
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
+
+/* The table stuff for admin forms to work in "one form / row" way, which shouldn\'t be done using real tables */
+
+DIV.table 
+{
+    display:table;
+}
+FORM.tr, DIV.tr
+{
+    display:table-row;
+}
+SPAN.td
+{
+    display:table-cell;
+}
+
+/*
+.slider {
+  -webkit-appearance: none;
+  width: 300px;
+  height: 6px;
+  border-radius: 3px;
+  background: blue;
+  outline: none;
+}
+
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #333;
+  cursor: pointer;
+}
+
+.slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #333;
+  cursor: pointer;
+}
+
+*/
+
 .slidecontainer {
   display: flex;
   align-items: center;
@@ -68,6 +114,10 @@ echo '
   white-space: nowrap;
   pointer-events: none;
 }
+
+
+
+
 
 body {
   background-color: linen;
@@ -246,6 +296,7 @@ table.aarvonta {
 }
 
 </style>
+
 <script>
 
 function updateSlider(slider) {
@@ -289,6 +340,88 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 });
 
+
+/*
+function updateSlider(slider) {
+  const min = parseInt(slider.min, 10);
+  const max = parseInt(slider.max, 10);
+  const value = parseInt(slider.value, 10);
+
+  const valueSpan = document.getElementById("sliderValue");
+  valueSpan.textContent = value;
+
+  // Normalize value to percentage (0–100)
+  const percent = ((value - min) / (max - min)) * 100;
+  const center = ((0 - min) / (max - min)) * 100;
+
+  let gradient;
+
+  if (value < 0) {
+    gradient = `
+      linear-gradient(
+        to right,
+        red 0%,
+        red ${percent}%,
+        #ccc ${percent}%,
+        #ccc 100%
+      )
+    `;
+  } else if (value > 0) {
+    gradient = `
+      linear-gradient(
+        to right,
+        #ccc 0%,
+        #ccc ${center}%,
+        green ${center}%,
+        green ${percent}%,
+        #ccc ${percent}%,
+        #ccc 100%
+      )
+    `;
+  } else {
+    gradient = `
+      linear-gradient(
+        to right,
+        #ccc 0%,
+        #ccc ${center - 1}%,
+        blue ${center}%,
+        #ccc ${center + 1}%,
+        #ccc 100%
+      )
+    `;
+  }
+
+  slider.style.background = gradient;
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  const slider = document.getElementById("tuhinarange");
+  updateSlider(slider);
+});
+
+*/
+
+/*
+function updateSliderColor(slider) {
+  const value = parseInt(slider.value, 10);
+
+  let color;
+  if (value < 0) {
+    color = "red";
+  } else if (value === 0) {
+    color = "blue";
+  } else {
+    color = "green";
+  }
+
+  slider.style.background = color;
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  const slider = document.getElementById("tuhinarange");
+  updateSliderColor(slider);
+});
+*/
 </script>
 
 
