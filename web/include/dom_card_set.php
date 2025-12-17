@@ -19,8 +19,7 @@ class dom_card_set {
 
 	private function add_change_input($id, $set_num, $prize, $checked)
 	{
-		$out .= ''."\n";
-		$out .= '<input form="theform" type="checkbox" name="keepid[]" value="'.$id.'"'.$checked.'>'."\n";
+		$out = '<input form="theform" type="checkbox" name="keepid[]" value="'.$id.'"'.$checked.'>'."\n";
 		$out .= '<input form="theform" type="hidden" name="keepprize'.$id.'" value="'.$prize.'"'.$checked.'>'."\n";
 		return $out;
 	}
@@ -77,9 +76,11 @@ class dom_card_set {
 				$tuhinasum += $c->tuhinakerroin;
 
 				$checked = "";
-				foreach($keepids[$i] AS $keep) {
-					if ($c->id == $keep)
-						$checked = " checked";
+				if (isset($keepids[$i])) {
+					foreach($keepids[$i] AS $keep) {
+						if ($c->id == $keep)
+							$checked = " checked";
+					}
 				}
 
 				$name = htmlspecialchars($c->name);
