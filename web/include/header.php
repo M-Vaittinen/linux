@@ -169,6 +169,23 @@ table.cardlist {
   border-collapse: collapse;
 }
 
+.cardlist th.checkbox {
+/*	max-width:10px
+	text-align: left;
+*/
+	width:50px;
+}
+.cardlist td.checkbox {
+	width:50px;
+/*
+	max-width:10px
+	text-align: left;
+*/
+//  overflow: hidden;
+ // text-overflow: ellipsis;
+ // white-space: nowrap;
+}
+
 .cardlist td {
   border: 1px solid black;
   border-collapse: collapse;
