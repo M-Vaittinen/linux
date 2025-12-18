@@ -17,6 +17,7 @@
  */
 
 $DBG=false;
+//$DBG=true;
 
 if (isset($_POST['expansion']))
 	$exp = $_POST['expansion'];
@@ -146,7 +147,7 @@ function card_query_start()
 
 function card_query_where($tuh_inafactor, $exp, $exclude_ids = array())
 {
-	$base_where = "WHERE p.id = c.prizetype_id AND c.expansion_id = e.id AND c.type_id = ct.id";
+	$base_where = "WHERE p.id = c.prizetype_id AND c.expansion_id = e.id AND c.type_id = ct.id AND e.disabled != 1";
 	/*
 	 * TODO: Find a good way to prevent the cards which belong to same storage deck from being suffled in.
 	 * It'd be easy to just exclude all cards which belong to the "bottom deck" (see query below), but that would
@@ -166,7 +167,7 @@ function card_query_where($tuh_inafactor, $exp, $exclude_ids = array())
 	$expansion_where = SQL_add_expansion_where('c.expansion_id', $exp);
 	if ($expansion_where)
 		$where .= " AND ".$expansion_where;
-	
+
 	$where_arr[] = $where . ' AND c.prize < 4';
 	$where_arr[] = $where . ' AND c.prize = 4';
 	$where_arr[] = $where . ' AND c.prize > 4';
@@ -229,6 +230,8 @@ echo "<h1>Dominion - Arvo kortit</h1>";
 
 echo '<p>Heps Kukkuu. Olet vanhalla korttiarvontasivulla. Uusi on <a href="index.php">t&auml;&auml;ll&auml;</a><br />'."\n";
 
+
+//die("WTF2");
 $result = get_expansions($conn, false);
 
 /* Output the form table */

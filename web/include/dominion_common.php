@@ -22,12 +22,14 @@ function debug_print($str)
 	echo "$str.<br />";
 }
 
-function get_expansions($conn, $include_nocards = true, $plain = false)
+function get_expansions($conn, $include_nocards = false, $plain = false)
 {
 	if ($include_nocards)
 		$query = "SELECT DISTINCT e.id, e.name FROM expansion AS e JOIN parsed_cards as pc WHERE e.id = pc.exp_id";
 	else
-		$query = "SELECT DISTINCT e.id, e.name FROM expansion AS e JOIN cards as c WHERE c.expansion_id = e.id";
+		$query = "SELECT DISTINCT e.id, e.name FROM expansion AS e JOIN cards as c WHERE e.disabled != 1 AND c.expansion_id = e.id";
+
+	debug_print("Querying expanisons: $query");
 
 	$result = mysqli_query($conn, $query);
 	if (!$result)

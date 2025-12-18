@@ -52,6 +52,7 @@ else
 	else
 		$exp = 0;
 
+
 $tuh_inafactor = 0;
 if (isset($_POST['tuhinarange']) && is_numeric($_POST['tuhinarange'])) {
 	if ($_POST['tuhinarange'] <= 10 && $_POST['tuhinarange'] >= -10)
@@ -283,9 +284,9 @@ function do_prize_bucket_where($boundaries, $prize_column)
 }
 
 $boundary_prizes = get_prize_buckets($conn, $exp);
-$PRIZEBUCKETS = do_prize_bucket_where($boundary_prizes, 'prize');
+$PRIZEBUCKETS = do_prize_bucket_where($boundary_prizes, 'c.prize');
 
-$QUERY_BASE = 'SELECT id, tuhinakerroin, actionmoney, curse, attack, defence, type_id FROM cards WHERE ';  
+$QUERY_BASE = 'SELECT c.id AS id, c.tuhinakerroin AS tuhinakerroin, c.actionmoney AS actionmoney, c.curse AS curse, c.attack AS attack, c.defence AS defence, c.type_id AS type_id FROM cards AS c JOIN expansion as e WHERE e.id = c.expansion_id AND e.disabled != 1 AND ';
 
 $num_cards = array(3, 3, 4);
 $card_group_names = array('Halpaa ku saippua', 'Keskiluokan keskiostos', 'N&auml;&auml; M&auml;&auml; Tahdon!');
@@ -306,14 +307,14 @@ function exclude_presel_id($presel)
 {
 	$where = '';
 	foreach($presel AS $exclude_id)
-		$where .= " AND id != $exclude_id";
+		$where .= " AND c.id != $exclude_id";
 
 	return $where;
 }
 
 $i = 0;
 foreach($PRIZEBUCKETS as $PRIZE_LIMIT) {
-	$exp_where = SQL_add_expansion_where('expansion_id', $exp);
+	$exp_where = SQL_add_expansion_where('c.expansion_id', $exp);
 
 	$query = $QUERY_BASE.$PRIZE_LIMIT;
 	if ($exp_where)
