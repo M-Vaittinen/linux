@@ -175,6 +175,26 @@ function __contains_type($typearray, $type)
 
 }
 
+function get_hex($typearray)
+{
+	return __contains_type($typearray, "Doom");
+}
+
+function get_boon($typearray)
+{
+	return __contains_type($typearray, "Fate");
+}
+
+function get_night($typearray)
+{
+	return __contains_type($typearray, "Night");
+}
+
+function get_heirloom($typearray)
+{
+	return __contains_type($typearray, "Heirloom");
+}
+
 function get_attack($typearray)
 {
 	return __contains_type($typearray, "Attack");
@@ -257,10 +277,16 @@ function add_card_to_form($conn, $row, $c_index, &$output)
 	if ($type_id < 0)
 		die ("ID: $pcid, name $en_name bad type");
 	$cost = get_cost($row['cost']);
+	$coins = get_dummy($row['coins_coffer']);
 	$debt = guess_if_cost_is_debt($row['cost']);
 	$draws = get_dummy($row['draws']);
 	$buys = get_dummy($row['buys']);
 	$thrash = get_thrash($row['trash_ret']);
+
+	$heirloom = get_heirloom($typearray);
+	$hex = get_hex($typearray);
+	$boon = get_boon($typearray);
+	$night = get_night($typearray);
 
 	$attack = get_attack($typearray);
 	$defend = guess_defend($typearray);
@@ -293,6 +319,8 @@ function add_card_to_form($conn, $row, $c_index, &$output)
 
 	$output .= '<td><input class="mandatory" type="text" size="10" name="c' . $c_index .'_cost" value="'.$cost.'" required>
 			<input type="checkbox" name="c' . $c_index .'_debt" value="1"'.$checked.'></td>'."\n";
+	/*$output .= '<td><input class="mandatory" type="text" size="10" name="c' . $c_index .'_coins" value="'.$coins.'" required></td>'."\n"; */
+	$output .= '<td><input type="text" size="10" name="c' . $c_index .'_coins" value="'.$coins.'"></td>'."\n";
 	$output .= '<td><input type="text" size="10" name="c' . $c_index .'_draws" value="'.$draws.'"></td>'."\n";
 	$output .= '<td><input type="text" size="10" name="c' . $c_index .'_buys" value="'.$buys.'"></td>'."\n";
 
@@ -314,9 +342,22 @@ function add_card_to_form($conn, $row, $c_index, &$output)
 	$checked = ($curse) ? ' checked' : '';
 	$output .= '<td><input type="checkbox" name="c' . $c_index .'_curse" value="1"'.$checked.'></td>';
 
+	$checked = ($heirloom) ? ' checked' : '';
+	$output .= '<td><input type="checkbox" name="c' . $c_index .'_heirloom" value="1"'.$checked.'></td>';
+
+	$checked = ($hex) ? ' checked' : '';
+	$output .= '<td><input type="checkbox" name="c' . $c_index .'_hex" value="1"'.$checked.'></td>';
+
+	$checked = ($boon) ? ' checked' : '';
+	$output .= '<td><input type="checkbox" name="c' . $c_index .'_boon" value="1"'.$checked.'></td>';
+
+	$checked = ($night) ? ' checked' : '';
+	$output .= '<td><input type="checkbox" name="c' . $c_index .'_night" value="1"'.$checked.'></td>';
+
 	$checked = ($drop) ? ' checked' : '';
 	$output .= '<td><input type="checkbox" name="c' . $c_index .'_drop" value="1"'.$checked.'></td>';
 
+	$output .= '<td><input type="text" size="4" name="c' . $c_index .'_setup_extras_id" value=""></td>';
 	$output .= '<td><input type="text" size="4" name="c' . $c_index .'_tuhina" value=""></td>';
 	$output .= '</tr>';
 
@@ -439,13 +480,14 @@ function __valid_name($str, $fatal)
 			die_bad_input('No required card name given');
 		else
 			return false;
-
+/*
+ * I'd like to also accept names like "Devil's Workshop", where "'" is not alphanumeric.
 	if (!preg_match('/^[\p{L} ]+$/u', $str))
 		if ($fatal)
 			die_bad_input("Bad card name ($str)</br> Expected alphanumeric only");
 		else
 			return false;
-
+ */
 	if (strlen($str) < 2)
 		if ($fatal)
 			die_bad_input("Card name too short: '$str'");
@@ -471,7 +513,7 @@ function valid_name_or_die($str)
 	__valid_name($str, true);
 }
 
-function check_n_add_to_cards($conn, $i, $expansion)
+function check_n_add_to_cards($conn, $i, $expansion, $setup_extras_max_id)
 {
 	$known_types[1] = 'raha';
 	$known_types[2] = 'toiminto';
@@ -502,8 +544,10 @@ function check_n_add_to_cards($conn, $i, $expansion)
 	if (!get_post_unsigned_num_data_range($conn, $i, "cost", 100, $cost))
 		die_bad_input("Card$i: Unknown or unsupported cost '$cost'");
 
+	require_post_num_data_default_zero_range($conn, $i, "coins", 20, $coins);
 	require_post_num_data_default_zero_range($conn, $i, "draws", 20, $draws);
 	require_post_num_data_default_zero_range($conn, $i, "buys", 20, $buys);
+	require_post_num_data_default_zero_range($conn, $i, "setup_extras_id", $setup_extras_max_id, $setup_extras_id);
 	require_post_num_data_default_zero_range($conn, $i, "tuhina", 10, $tuhina);
 	require_post_num_data_default_zero_range($conn, $i, "debt", 1, $debt);
 	if ($debt == 1)
@@ -520,14 +564,32 @@ function check_n_add_to_cards($conn, $i, $expansion)
 	$setfields[] = "buys = $buys";
 	$setfields[] = "prizetype_id = $prizetype";
 	$setfields[] = "tuhinakerroin = $tuhina";
+	$setfields[] = "actionmoney = $coins";
 
-	$bool_vals = array("thrash", "attack", "defend", "endure", "gather", "curse", "drop");
-	$columns = array("destroy", "attack", "defence", "endure", "gather", "curse", "dropcards");
+	/* Hack. The HEX/BOON IDX defines should match the "hex" / "boon" index in arrays below. This is used to automatically set the
+	 * setup extras ID for hex and boon cards - to defined index. This works _only_ for as long as the boon/hex setup_extras_idx
+	 * is not altered in the database, and for as long as the arrays and the define below stay in sync.
+	 */
+	$HEX_IDX = 7; /* Keep in sync with $bool_vals / $columns */
+	$HEX_DATABASE_SETUP_ID = 2; /* Must match the database */
+	$BOON_IDX = 8; /* Keep in sync with $bool_vals / $columns */
+	$BOON_DATABASE_SETUP_ID = 1; /* Must match the database */
+	$bool_vals = array("thrash", "attack", "defend", "endure", "gather", "curse", "heirloom", "hex", "boon", "night", "drop");
+	$columns = array("destroy", "attack", "defence", "endure", "gather", "curse", "heirloom", "hex", "boon", "night", "dropcards");
 
 	foreach ($bool_vals as $index => $bv) {
+		$ret = 0;
 		if (get_post_unsigned_num_data_range($conn, $i, $bv, 1, $ret))
 			$setfields[] = $columns[$index]." = $ret";
+		/* Set Hex/Boon setup extras if no specific extra was given */
+		if (!$setup_extras_id) {
+		       if ($index == $HEX_IDX && $ret)
+			       $setup_extras_id = $HEX_DATABASE_SETUP_ID;
+		       else if ($index == $BOON_IDX && $ret)
+			       $setup_extras_id = $BOON_DATABASE_SETUP_ID;
+		}
 	}
+	$setfields[] = "setup_extras_id = $setup_extras_id";
 	$query = "INSERT INTO cards SET";
 	foreach ($setfields as $idx => $set) {
 //		echo "add element[$idx] $set";
@@ -542,7 +604,9 @@ function check_n_add_to_cards($conn, $i, $expansion)
 	mysqli_begin_transaction($conn);
 
 	try {
+		debug_print($query);
 		mysqli_query($conn, $query);
+		debug_print($query2);
 		mysqli_query($conn, $query2);
 		mysqli_commit($conn);
 		//echo "card '$en_name' Added </br>\n";
@@ -572,12 +636,14 @@ function print_recv($conn, $i)
 	}
 	if (get_post_unsigned_num_data_range($conn, $i, "cost", 100, $ret))
 		echo "cost$i: $ret </br>";
+	if (get_post_unsigned_num_data_range($conn, $i, "coins", 100, $ret))
+		echo "coins$i: $ret </br>";
 	if (get_post_unsigned_num_data_range($conn, $i, "draws", 100, $ret))
 		echo "draws$i: $ret </br>";
 	if (get_post_unsigned_num_data_range($conn, $i, "buys", 100, $ret))
 		echo "buys$i: $ret </br>";
 
-	$bool_vals = array("debt", "thrash", "attack", "defend", "endure", "gather", "curse", "drop");
+	$bool_vals = array("debt", "thrash", "attack", "defend", "endure", "gather", "curse", "heirloom", "hex", "boon", "night", "drop");
 	foreach ($bool_vals as $bv) {
 		if (get_post_unsigned_num_data_range($conn, $i, $bv, 1, $ret))
 			echo "$bv$i: $ret </br>";
@@ -603,6 +669,16 @@ function valid_expansion_id_or_die($conn, $id)
 		die('Bad expansion ID ');
 }
 
+function create_setup_extras_table($setup_extras_res)
+{
+	$output = '<table><tr><th>id</th><th>text</th></tr>'."\n";
+	while ($row = mysqli_fetch_assoc($setup_extras_res))
+		$output .= '<tr><td>'.$row['id'].'</td><td>'.$row['text'].'</td></tr>';
+	$output .= '</table>';
+
+	return $output;
+}
+
 /*
  * Script starts
  */
@@ -625,11 +701,21 @@ if (!isset($expansion)) {
 	valid_expansion_id_or_die($conn, $expansion);
 }
 
+$setup_extras_query = "SELECT id, text FROM setup_extras ORDER BY id";
+$setup_extras_res = mysqli_query($conn, $setup_extras_query);
+if (!$setup_extras_res)
+	die("Ei setup_extras_res".mysqli_error($conn));
+
+mysqli_data_seek($setup_extras_res, mysqli_num_rows($setup_extras_res) - 1);
+$row = mysqli_fetch_assoc($setup_extras_res);
+$setup_extras_max_id = $row['id'];
+mysqli_data_seek($setup_extras_res, 0);
+
 if ($data_sent) {
 	if (!isset($expansion))
 		die('Missing Expansion');
 	for ($i = 0; $i < 5; $i++)
-		check_n_add_to_cards($conn, $i, $expansion);
+		check_n_add_to_cards($conn, $i, $expansion, $setup_extras_max_id);
 }
 
 $tuhina_query = "SELECT name, en_name, tuhinakerroin FROM cards ORDER BY tuhinakerroin DESC LIMIT 5";
@@ -642,18 +728,22 @@ $tuhina_lo_res = mysqli_query($conn, $tuhina_query);
 if (!$tuhina_lo_res)
 	die("Ei lo tuhise ".mysqli_error($conn));
 
-$bool_opts = array("Thrashes", "Attacks", "Defends", "Endures", "Gathers", "Curses", "Drops (from other playeres hands)");
+$bool_opts = array("Thrashes", "Attacks", "Defends", "Endures", "Gathers", "Curses", "Heirloom", "Hex", "Boon", "Night" ,"Drops (from other playeres hands)");
+$output = '';
 
-$output = '<form action="" method="post">';
+$output .= create_setup_extras_table($setup_extras_res);
+
+$output .= '<form action="" method="post">';
 $output .= '<input type="hidden" name="expansion" value="'.$expansion.'">';
 $output .= '<input type="hidden" name="data_sent" value="1">';
 $output .= "Please check all the fields and fill missing information";
 $output .= "<p> Set the 'Draws' and 'Buys' to a single value. ";
 $output .= '<table class="cardlist"><tr>';
-$output .= '<th>never add this</th><th>En name</th><th>Fi name</th><th>Type</th><th>Cost [debt]</th><th>Draws</th><th>Buys</th>';
+$output .= '<th>never add this</th><th>En name</th><th>Fi name</th><th>Type</th><th>Cost [debt]</th><th>Coins</th><th>Draws</th><th>Buys</th>';
+//$output .= '<th>never add this</th><th>En name</th><th>Fi name</th><th>Type</th><th>Cost [debt]</th><th>Draws</th><th>Buys</th>';
 foreach ($bool_opts as $opt)
 	$output .= '<th>'.$opt.'</th>';
-$output .= '<th>tuhinakerroin 0-10</th>';
+$output .= '<th>setup extras ID</th><th>tuhinakerroin 0-10</th>';
 $output .= '</tr>';
 
 $res = get_not_added_cards($conn, $expansion);
