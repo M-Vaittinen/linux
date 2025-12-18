@@ -63,11 +63,11 @@ class dom_card_set {
 			if (!$mobile) {
 				$out .= '<h3>' . $title . '</h3>'."\n";
 				$out .= '<table class="cardlist"><tr>'."\n";
-				$out .= '<th>[pid&auml;] Kortti</th><th>Korttityyppi</th><th>Hinta</th><th>Peliosa</th></tr>'."\n";
+				$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th><th>Korttityyppi</th><th>Hinta</th><th>Peliosa</th></tr>'."\n";
 			} else {
 				$out .= "<h3> . $title . </h3>\n";
 				$out .= '<table class="cardlist"><tr>'."\n";
-				$out .= '<th>[pid&auml;] Kortti</th> <th>Peliosa</th></tr>'."\n";
+				$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th> <th>Peliosa</th></tr>'."\n";
 			}
 			$tuhinasum = 0;
 			/* This is a horrible hack, trusting sets have 3, 3, 4 cards */
@@ -94,9 +94,9 @@ class dom_card_set {
 					$name = $name . " (" . $en_name . ")";
 
 				if (!$mobile)
-					$out .= '<tr><td>' . $this->add_change_input($c->id, $i, $c->prize, $checked) . $name . '</td><td>' . $cardtype . '</td><td>' . $prize . ' (' . $prizetype . ')</td><td>' . $expansion . '</td></tr>'."\n";
+					$out .= '<tr><td class="checkbox">' . $this->add_change_input($c->id, $i, $c->prize, $checked).'</td><td>' . $name . '</td><td>' . $cardtype . '</td><td>' . $prize . ' (' . $prizetype . ')</td><td>' . $expansion . '</td></tr>'."\n";
 				else
-					$out .= '<tr><td>' . $this->add_change_input($c->id, $i, $c->prize, $checked) . $name . '</td><td>' . $expansion . '</td></tr>'."\n";
+					$out .= '<tr><td>' . $this->add_change_input($c->id, $i, $c->prize, $checked) . '</td><td>'. $name . '</td><td>' . $expansion . '</td></tr>'."\n";
 			}
 			$out .= "</table>"."\n";
 			$out .= "Tuhina " . $tuhinasum."\n";
