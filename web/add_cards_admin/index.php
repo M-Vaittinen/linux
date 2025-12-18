@@ -17,27 +17,6 @@ do_head("Top Secret Admin Page");
 
 echo '<h1>Add Card</h1>';
 
-/*
-$query = "SELECT DISTINCT e.id, e.name FROM expansion AS e JOIN cards as c WHERE e.id = c.expansion_id";
-$result = mysqli_query($conn, $query);
-if (!$result)
-	die("no expansions");
-
-if (mysqli_num_rows($result) <= 0)
-	die("still no expansions");
- */
-/*	$result = get_expansions($conn); */
-/*
-function get_type_id($type)
-{
-	switch ($type) {
-	default:
-		echo "unknown type ".$type;
-	}
-	return -1;
-}
- */
-
 function view_last_added_cards($conn, &$output)
 {
 	$sql = "SELECT c.*, e.name AS expansion FROM cards AS c JOIN expansion as e ON e.id = c.expansion_id ORDER BY c.id DESC LIMIT 10";
@@ -657,7 +636,7 @@ function valid_expansion_id_or_die($conn, $id)
 {
 	$valid = false;
 
-	$result = get_expansions($conn);
+	$result = get_expansions($conn, true);
 	while ($row = mysqli_fetch_assoc($result)) {
 		if ($row['id'] == $id) {
 			$valid = true;
@@ -685,7 +664,7 @@ function create_setup_extras_table($setup_extras_res)
 
 if (!isset($expansion)) {
 
-	$result = get_expansions($conn);
+	$result = get_expansions($conn, true);
 	$output = 'Select expansion to add cards for:</br>'."\n";
 	$output .= '<form action="" method="post">'."\n";
 	$output .= '<select name="expansion" id="expansion">'."\n";
