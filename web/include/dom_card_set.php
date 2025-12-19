@@ -63,7 +63,7 @@ class dom_card_set {
 				$out .= '<table class="cardlist"><tr>'."\n";
 				$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th><th>Korttityyppi</th><th>Hinta</th><th>Peliosa</th></tr>'."\n";
 			} else {
-				$out .= "<h3> . $title . </h3>\n";
+				$out .= "<h3> $title </h3>\n";
 				$out .= '<table class="cardlist"><tr>'."\n";
 				$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th> <th>Peliosa</th></tr>'."\n";
 			}
