@@ -61,7 +61,7 @@ class dom_card_set {
 			if (!$mobile) {
 				$out .= '<h3>' . $title . '</h3>'."\n";
 				$out .= '<table class="cardlist"><tr>'."\n";
-				$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th><th>Korttityyppi</th><th>Hinta</th><th>Peliosa</th></tr>'."\n";
+				$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th><th class="squeeze">Specials</th><th>Korttityyppi</th><th>Hinta</th><th>Peliosa</th></tr>'."\n";
 			} else {
 				$out .= "<h3> $title </h3>\n";
 				$out .= '<table class="cardlist"><tr>'."\n";
@@ -88,13 +88,34 @@ class dom_card_set {
 				$expansion = htmlspecialchars($c->expansion_name);
 				$cardtype = htmlspecialchars($c->type_name);
 
+				$setup_tip = '';
+
+				if ($c->curse) {
+					$setup_tip .= '<div class="image-container">'."\n";
+					$setup_tip .= '<img src="img/curse.png" alt="Kiroukset" tabindex="0">'."\n";
+					$setup_tip .= '<div class="hover-text">Kirous</div>'."\n";
+					$setup_tip .= '</div>'."\n";
+				}
+				if ($c->attack) {
+					$setup_tip .= '<div class="image-container">'."\n";
+					$setup_tip .= '<img src="img/speargoblin.png" alt="Valmistelut" tabindex="0">'."\n";
+					$setup_tip .= '<div class="hover-text">Hy&ouml;kk&auml;ys</div>'."\n";
+					$setup_tip .= '</div>'."\n";
+				}
+				if ($c->setup_text) {
+					$setup_tip .= '<div class="image-container">'."\n";
+					$setup_tip .= '<img src="img/peasant.png" alt="Valmistelut" tabindex="0">'."\n";
+					$setup_tip .= '<div class="hover-text">Extra valmisteluja: '.$c->setup_text.'</div>'."\n";
+					$setup_tip .= '</div>'."\n";
+				}
+
 				if ($name != "" && $en_name != "" && $name != $en_name)
 					$name = $name . " (" . $en_name . ")";
 
 				if (!$mobile)
-					$out .= '<tr><td class="checkbox">' . $this->add_change_input($c->id, $i, $c->prize, $checked).'</td><td>' . $name . '</td><td>' . $cardtype . '</td><td>' . $prize . ' (' . $prizetype . ')</td><td>' . $expansion . '</td></tr>'."\n";
+					$out .= '<tr><td class="checkbox">' . $this->add_change_input($c->id, $i, $c->prize, $checked).'</td><td>' . $name . '</td><td>'. (($setup_tip != '') ? $setup_tip : '--') . '</td><td>' . $cardtype . '</td><td>' . $prize . ' (' . $prizetype . ')</td><td>' . $expansion . '</td></tr>'."\n";
 				else
-					$out .= '<tr><td>' . $this->add_change_input($c->id, $i, $c->prize, $checked) . '</td><td>'. $name . '</td><td>' . $expansion . '</td></tr>'."\n";
+					$out .= '<tr><td>' . $this->add_change_input($c->id, $i, $c->prize, $checked) . '</td><td>'. $name . $setup_tip . '</td><td>' . $expansion . '</td></tr>'."\n";
 			}
 			$out .= "</table>"."\n";
 			$out .= "Tuhina " . $tuhinasum."\n";

@@ -8,6 +8,39 @@ echo '
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
 
+
+/* Setup help text to be shown when hovered on image */
+
+.image-container {
+    margin-left: 5px;
+    position: relative;
+    display: inline-block;
+}
+
+.hover-text {
+    display: none;
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 5px;
+    border-radius: 5px;
+}
+
+.image-container:hover .hover-text,
+.image-container:focus-within .hover-text {
+    display: block;
+}
+
+img {
+    width: 50px; /* Set image size */
+    height: auto;
+    cursor: pointer;
+}
+
+
 /* The table stuff for admin forms to work in "one form / row" way, which shouldn\'t be done using real tables */
 
 DIV.table 
@@ -167,6 +200,13 @@ table.cardlist {
   background-color: #d2691e;
   color: white;
   border-collapse: collapse;
+}
+
+.cardlist th.squeeze {
+	width:200px;
+}
+.cardlist td.squeeze {
+	width:200px;
 }
 
 .cardlist th.checkbox {

@@ -64,11 +64,13 @@ class dom_card
 	public $expansion_name	= null;
 	public $below_name	= null;
 	public $above_name	= null;
+	public $setup_text	= null;
 
 	public $weight		= 0;  // For weighted random selection
 
 	private function __populate($row, $tableprefix)
 	{
+		$this->setup_text = isset($row[$tableprefix.'setup_text']) ? $row[$tableprefix.'setup_text'] : null;
 		$this->id = isset($row[$tableprefix.'id']) ? $row[$tableprefix.'id'] : null;
 		$this->dual_top_of_id = isset($row[$tableprefix.'dual_top_of_id']) ? $row[$tableprefix.'dual_top_of_id'] : null;
 		$this->dual_below_id = isset($row[$tableprefix.'dual_below_id']) ? $row[$tableprefix.'dual_below_id'] : null;
