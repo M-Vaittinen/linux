@@ -38,14 +38,12 @@ class dom_card_set {
 	{
 		debug_print("$this->all_ids");
 
-		$query = "SELECT c.*, e.name AS expansion_name, pt.name AS prizetype_name, ct.name AS type_name FROM cards AS c ";
-		$query .= "JOIN expansion AS e ";
-		$query .= "JOIN cardtype AS ct ";
-		$query .= "JOIN prizetype AS pt ";
-		$query .= "WHERE e.id = c.expansion_id AND ";
-		$query .= "ct.id = c.type_id AND ";
-		$query .= "pt.id = c.prizetype_id AND ";
-	        $query .= "c.id IN ($this->all_ids) ";
+		$query = "SELECT c.*, e.name AS expansion_name, pt.name AS prizetype_name, ct.name AS type_name, setup.text AS setup_text FROM cards AS c ";
+		$query .= "LEFT JOIN expansion AS e ON c.expansion_id = e.id ";
+		$query .= "LEFT JOIN cardtype AS ct ON c.type_id = ct.id ";
+		$query .= "LEFT JOIN prizetype AS pt ON c.prizetype_id = pt.id ";
+		$query .= "LEFT JOIN setup_extras AS setup ON c.setup_extras_id = setup.id ";
+		$query .= "WHERE c.id IN ($this->all_ids) ";
 		$query .= "ORDER BY c.prize";
 		$res = query_cards($this->conn, $query);
 		while ($row = mysqli_fetch_assoc($res))

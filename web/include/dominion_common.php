@@ -24,6 +24,15 @@ function debug_print($str)
 
 function get_expansions($conn, $include_nocards = false, $plain = false)
 {
+	/*
+	 * This could probably be improved. For the 'admin' stuff (nocards), we should only get the expansions
+	 * which have (addable) cards in 'parsed_cards' table. This is not really an issue though, as there is
+	 * a limited number of expansions.
+	 *
+	 * For the user-selectible expansion set (Eg, show which expansions user can use to fetch cards from)
+	 * must display only those expansions which have cards added to randomizer - and which aren't disabled.
+	 * This is working Ok with the current query, but perhaps we could do more efficient (RIGHT?) JOIN.
+	 */
 	if ($include_nocards)
 		$query = "SELECT DISTINCT e.id, e.name FROM expansion AS e JOIN parsed_cards as pc WHERE e.id = pc.exp_id";
 	else
