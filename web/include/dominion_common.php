@@ -94,14 +94,24 @@ function output_input_form($conn, $mobile, $exp)
 {
 	$result = get_expansions($conn, false, true);
 
+	$mobile = 1;
 	/* Output the form table */
-	if (!$mobile) {
-		$output = '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Tuhina\'o-meter</th> <th>Tupina\'o-meter</th><th>Kapita\'o-meter</th></tr><tr><td>';
-		} else {
-		$output = '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Painotukset</th></tr><tr><td>';
-		}
-	$output .= '<form action="" method="post" id="theform">';
 
+	$output = '<form action="" method="post" id="theform">';
+	if (!$mobile) {
+	//	$output = '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Tuhina\'o-meter</th> <th>Tupina\'o-meter</th><th>Kapita\'o-meter</th></tr><tr><td>';
+		//$output .= '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Tuhina\'o-meter</th> <th>Tupina\'o-meter</th><th>Kapita\'o-meter</th></tr>';
+		$output .= '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Painotukset</th></tr>';
+		} else {
+		// $output = '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Painotukset</th></tr><tr><td>';
+		$output .= '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Painotukset</th></tr>';
+		}
+
+
+	$output .= '<tr><td>';
+
+	$output .= '<table class="structure">'; //expansion table
+	// $output .= '<form action="" method="post" id="theform">';
 	/* Print expansion checkboxes */
 	$tmp_exp_idx = 0;
 	while ($row = mysqli_fetch_assoc($result)) {
@@ -115,14 +125,20 @@ function output_input_form($conn, $mobile, $exp)
 		if (!is_numeric($row['id']))
 			die("bad data in database - expansion id");
 	
-		$output .= '<input type="checkbox" id="' . htmlspecialchars($row['name']) . '" name="expansion[]" value="' . $row['id'] . '"'."$checked>";
-		$output .= '<label for="' . htmlspecialchars($row['name']) . '">' . htmlspecialchars($row['name']) . '</label><br>';
-	}
-	$output .= '</td>';
+		$output .= '<tr><td>';
 
+		$output .= '<input class="checkboxes" type="checkbox" id="' . htmlspecialchars($row['name']) . '" name="expansion[]" value="' . $row['id'] . '"'."$checked>";
+		$output .= '<label class="checkboxes" for="' . htmlspecialchars($row['name']) . '">' . htmlspecialchars($row['name']) . '</label></td></tr>';
+	}
+	$output .= '</table>'; // expansion table
+
+	$output .= '</td> <td>'; // Overall structure table
+
+	$output .= '<table class="structure">'; //ometer table
+	$output .= '<tr><td>';
 
 	/* ...Tuhina cell: */
-	$output .= '<td>';
+	//$output .= '<td>';
 	if ($mobile)
 		$output .= '<b>Tuhina\'o-meter</b> <br />';
 
@@ -142,7 +158,8 @@ function output_input_form($conn, $mobile, $exp)
 	
 	if ($mobile) {
 		/* On a mobile we end the row here */
-		$output .= '</tr><tr><td></td>';
+		//$output .= '</tr><tr><td></td>';
+		$output .= '</tr><tr>';
 	}
 
 	/* Tupina cell: */
@@ -168,7 +185,8 @@ function output_input_form($conn, $mobile, $exp)
 
 	if ($mobile) {
 		/* On a mobile we end the row here */
-		$output .= '</tr><tr><td></td>';
+		//$output .= '</tr><tr><td></td>';
+		$output .= '</tr><tr>';
 	}
 
 	/* ...Kapita cell: */
@@ -192,6 +210,9 @@ function output_input_form($conn, $mobile, $exp)
 
 	/* End of the form table and form */
 	$output .= '</tr></table>';
+
+	$output .= '</td></tr></table>';
+
 	$output .= '<input type="submit" value="Submit">';
 	$output .= '</form>';
 

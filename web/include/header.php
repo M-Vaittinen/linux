@@ -184,6 +184,12 @@ table.structure {
   text-align: left;
   vertical-align: top;
 }
+
+.checkboxes {
+	width:200px;
+	word-weap: break-word;
+}
+
 table.cardlist {
   width: 100%;
   border: 1px solid black;
