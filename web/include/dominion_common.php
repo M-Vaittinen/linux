@@ -97,20 +97,20 @@ function output_input_form($conn, $mobile, $exp)
 	$mobile = 1;
 	/* Output the form table */
 
-	$output = '<form action="" method="post" id="theform">';
+	$output = '<form action="" method="post" id="theform">'."\n";
 	if (!$mobile) {
 	//	$output = '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Tuhina\'o-meter</th> <th>Tupina\'o-meter</th><th>Kapita\'o-meter</th></tr><tr><td>';
 		//$output .= '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Tuhina\'o-meter</th> <th>Tupina\'o-meter</th><th>Kapita\'o-meter</th></tr>';
-		$output .= '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Painotukset</th></tr>';
+		$output .= '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Painotukset</th></tr>'."\n";
 		} else {
 		// $output = '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Painotukset</th></tr><tr><td>';
-		$output .= '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Painotukset</th></tr>';
+		$output .= '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Painotukset</th></tr>'."\n";
 		}
 
 
-	$output .= '<tr><td>';
+	$output .= '<tr><td>'."\n";
 
-	$output .= '<table class="structure">'; //expansion table
+	$output .= '<table class="structure">'."\n"; //expansion table
 	// $output .= '<form action="" method="post" id="theform">';
 	/* Print expansion checkboxes */
 	$tmp_exp_idx = 0;
@@ -125,47 +125,50 @@ function output_input_form($conn, $mobile, $exp)
 		if (!is_numeric($row['id']))
 			die("bad data in database - expansion id");
 	
-		$output .= '<tr><td>';
+		$output .= '<tr><td>'."\n";
+		$output .= '<div class="checkbox-container">'."\n";
+		$output .= '<input class="checkboxes" type="checkbox" id="' . htmlspecialchars($row['name']) . '" name="expansion[]" value="' . $row['id'] . '"'."$checked>"."\n";
+		$output .= '<label class="checkboxes" for="' . htmlspecialchars($row['name']) . '">' . htmlspecialchars($row['name']) . '</label>'."\n";
 
-		$output .= '<input class="checkboxes" type="checkbox" id="' . htmlspecialchars($row['name']) . '" name="expansion[]" value="' . $row['id'] . '"'."$checked>";
-		$output .= '<label class="checkboxes" for="' . htmlspecialchars($row['name']) . '">' . htmlspecialchars($row['name']) . '</label></td></tr>';
+		$output .= '</div>'."\n";
+		$output .= '</td></tr>'."\n";
 	}
-	$output .= '</table>'; // expansion table
+	$output .= '</table>'."\n"; // expansion table
 
-	$output .= '</td> <td>'; // Overall structure table
+	$output .= '</td> <td>'."\n"; // Overall structure table
 
-	$output .= '<table class="structure">'; //ometer table
-	$output .= '<tr><td>';
+	$output .= '<table class="structure">'."\n"; //ometer table
+	$output .= '<tr><td>'."\n";
 
 	/* ...Tuhina cell: */
 	//$output .= '<td>';
 	if ($mobile)
-		$output .= '<b>Tuhina\'o-meter</b> <br />';
+		$output .= '<b>Tuhina\'o-meter</b> <br />'."\n";
 
-	$output .= '<div class="slidecontainer">
-  <span class="label">-10</span>
-  <div class="slider-wrapper">
-    <input type="range" min="-10" max="10" value="0" class="slider" name="tuhinarange">
-    <div class="value-bubble">0</div>
-  </div>
-  <span class="label">+10</span>
-</div> ';
+	$output .= '<div class="slidecontainer">'."\n".'
+  <span class="label">-10</span>'."\n".'
+  <div class="slider-wrapper">'."\n".'
+    <input type="range" min="-10" max="10" value="0" class="slider" name="tuhinarange">'."\n".'
+    <div class="value-bubble">0</div>'."\n".'
+  </div>'."\n".'
+  <span class="label">+10</span>'."\n".'
+</div> '."\n";
 
-	$output .= '<div class="help-tip">
+	$output .= '<div class="help-tip">'."\n".'
 	    <p>Tuhina\'o-meter&copy; :ll&auml; voit muuttaa korttiarvontaa v&auml;hent&auml;m&auml;&auml;n tai lis&auml;&auml;m&auml;&auml;n toimintoketjuja lis&auml;&auml;vi&auml; kortteja.</p>
-	</div>';
-	$output .= '</td>';
+	</div>'."\n";
+	$output .= '</td>'."\n";
 	
 	if ($mobile) {
 		/* On a mobile we end the row here */
 		//$output .= '</tr><tr><td></td>';
-		$output .= '</tr><tr>';
+		$output .= '</tr><tr>'."\n";
 	}
 
 	/* Tupina cell: */
-	$output .= '<td>';
+	$output .= '<td>'."\n";
 	if ($mobile)
-		$output .= '<b>Tupina\'o-meter</b><br />';
+		$output .= '<b>Tupina\'o-meter</b><br />'."\n";
 	$output .= '<div class="slidecontainer">
   <span class="label">-10</span>
   <div class="slider-wrapper">
@@ -173,26 +176,26 @@ function output_input_form($conn, $mobile, $exp)
     <div class="value-bubble">0</div>
   </div>
   <span class="label">+10</span>
-</div>';
+</div>'."\n";
 
 
-	$output .= '<input type="checkbox" id="add_nihilism" name="add_nihilism" value="1">';
-	$output .= '<label for="add_nihilism">...ripauksella nihilismi&auml;</label><br>';
+	$output .= '<input type="checkbox" id="add_nihilism" name="add_nihilism" value="1">'."\n";
+	$output .= '<label for="add_nihilism">...ripauksella nihilismi&auml;</label><br>'."\n";
 	$output .= '<div class="help-tip">
 	    <p>Tupina\'o-meter&copy; :ll&auml; v&auml;henn&auml;t tai lis&auml;&auml;t peliin tupinaa ja jupinaa aiheuttavia elementtej&auml;.<br /><br />Ja jos todella haluat koetella k&auml;rsiv&auml;llisyytesi rajoja niin voit h&ouml;yst&auml;&auml; peli&auml; ripauksella nihilismi&auml; ja pienent&auml;&auml; rahaa ja vastavetoja tuovien toimintakorttien mahdollisuutta.</p>
-	</div>';
-	$output .= '</td>';
+	</div>'."\n";
+	$output .= '</td>'."\n";
 
 	if ($mobile) {
 		/* On a mobile we end the row here */
 		//$output .= '</tr><tr><td></td>';
-		$output .= '</tr><tr>';
+		$output .= '</tr><tr>'."\n";
 	}
 
 	/* ...Kapita cell: */
-	$output .= '<td>';
+	$output .= '<td>'."\n";
 	if ($mobile)
-		$output .= '<b>Kapita\'o-meter</b><br />';
+		$output .= '<b>Kapita\'o-meter</b><br />'."\n";
 
 	$output .= '<div class="slidecontainer">
   <span class="label">-10</span>
@@ -201,20 +204,20 @@ function output_input_form($conn, $mobile, $exp)
     <div class="value-bubble">0</div>
   </div>
   <span class="label">+10</span>
-</div>';
+</div>'."\n";
 
 	$output .= '<div class="help-tip">
 	    <p>Kapita\'o-meter&copy; :ll&auml; voit muuttaa korttiarvontaa priorisoimaan raha- ja rahaa lis&auml;&auml;vi&auml; toimintakortteja.</p>
-	</div>';
-	$output .= '</td>';
+	</div>'."\n";
+	$output .= '</td>'."\n";
 
 	/* End of the form table and form */
-	$output .= '</tr></table>';
+	$output .= '</tr></table>'."\n";
 
-	$output .= '</td></tr></table>';
+	$output .= '</td></tr></table>'."\n";
 
-	$output .= '<input type="submit" value="Submit">';
-	$output .= '</form>';
+	$output .= '<input type="submit" value="Arvo kortit">'."\n";
+	$output .= '</form>'."\n";
 
 	return $output;
 }

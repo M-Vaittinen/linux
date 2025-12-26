@@ -185,9 +185,14 @@ table.structure {
   vertical-align: top;
 }
 
+.checkbox-container {
+    display: flex;
+    align-items: center; /* Align vertically center */
+}
+
 .checkboxes {
-	width:200px;
-	word-weap: break-word;
+	/* word-wrap: break-word; */
+    margin-right: 10px; /* Space between checkbox and label */
 }
 
 table.cardlist {
