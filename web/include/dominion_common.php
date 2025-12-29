@@ -36,7 +36,13 @@ function get_expansions($conn, $include_nocards = false, $plain = false)
 	if ($include_nocards)
 		$query = "SELECT DISTINCT e.id, e.name FROM expansion AS e JOIN parsed_cards as pc WHERE e.id = pc.exp_id";
 	else
-		$query = "SELECT DISTINCT e.id, e.name, events.expansion_id AS expansion_events, landmarks.expansion_id AS expansion_landmarks FROM expansion AS e JOIN cards as c LEFT JOIN events AS events ON events.expansion_id = e.id LEFT JOIN landmarks as landmarks ON landmarks.expansion_id = e.id WHERE e.disabled != 1 AND c.expansion_id = e.id";
+		$query = "SELECT DISTINCT e.id, e.ordernumber, e.name, events.expansion_id AS expansion_events, landmarks.expansion_id AS expansion_landmarks ";
+		$query .= "FROM expansion AS e ";
+		$query .= "JOIN cards as c ";
+		$query .= "LEFT JOIN events AS events ON events.expansion_id = e.id ";
+		$query .= "LEFT JOIN landmarks as landmarks ON landmarks.expansion_id = e.id ";
+		$query .= "WHERE e.disabled != 1 AND c.expansion_id = e.id ";
+		$query .= "ORDER BY e.ordernumber";
 
 	debug_print("Querying expanisons: $query");
 
