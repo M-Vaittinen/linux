@@ -154,11 +154,11 @@ $output .= '<h3>Käytettävät lisäosat</h3>';
 			if ($event_exp) {
 				foreach($event_exp AS $e_exp) {
 					if ($e_exp == $row['id']) {
-						$evchecked = 'checked';
+						$evchecked = ' checked';
 					}
 				}
 			}
-			$output .= '<input type="checkbox" '.$evchecked.' id="exp_'. $related_id .'" name="event_expansions[]" value="' . $row['id'] . '" class="'.$related_id.' hidden">';
+			$output .= '<input type="checkbox" id="exp_'. $related_id .'" name="event_expansions[]" value="' . $row['id'] . '" class="'.$related_id.' hidden"'."$evchecked>\n";
 			$output .= '<label for="exp_' . $related_id . '" class="'.$related_id.' hidden">Tapahtumat</label>'."\n";
 		}
 		if ($row['expansion_landmarks'] != NULL) {
@@ -166,13 +166,13 @@ $output .= '<h3>Käytettävät lisäosat</h3>';
 			if ($land_exp){
 				foreach($land_exp AS $l_exp) {
 					if ($l_exp == $row['id']) {
-						$landchecked = 'checked';
+						$landchecked = ' checked';
 						break;
 					}
 				}
 			}
 
-			$output .= '<input type="checkbox" id="land_'. $related_id .'" name="landmark_expansions[]" value="' . $row['id'] . '" '.$landchecked.' class="'.$related_id.' hidden">';
+			$output .= '<input type="checkbox" id="land_'. $related_id .'" name="landmark_expansions[]" value="' . $row['id'] . '" class="'.$related_id.' hidden"'."$landchecked>";
 			$output .= '<label for="land_' . $related_id . '" class="'.$related_id.' hidden">Landmarks</label>'."\n";
 		}
 		if ($row['expansion_events'] != NULL || $row['expansion_landmarks'] != NULL) {
