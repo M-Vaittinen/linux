@@ -14,44 +14,63 @@
  * Kapita'o-meter => Rahaa!
  *
  */
-
+define("LAND_ID_OFFSET", 1000000);
+define("EVENT_ID_OFFSET", 2000000);
 
 //$DBG=true;
 $DBG=false;
 $TESTING=false;
 
 $preselected = null;
+$keep_land_ids = null;
+$keep_event_ids = null;
 if (isset($_POST['keepid'])) {
 	foreach ($_POST['keepid'] AS $keepid) {
 		if (!is_numeric($keepid))
 			die('Non numeric KID');
-		if (!isset($_POST['keepprize'.$keepid]))
-			die('Prizeless KID');
-		$kidprize = $_POST['keepprize'.$keepid];
-		if (!is_numeric($kidprize))
-			die('KID is not a number');
-		if ($kidprize < 4) {
-			$preselected[0][] = $keepid;
-			$preselected_prize[0][] = $kidprize;
-		} else if ($kidprize == 4) {
-			$preselected[1][] = $keepid;
-			$preselected_prize[1][] = $kidprize;
-		} else {
-			$preselected[2][] = $keepid;
-			$preselected_prize[2][] = $kidprize;
+
+		if ($keepid < LAND_ID_OFFSET) { /* Regular Kingdom card */
+			if (!isset($_POST['keepprize'.$keepid]))
+				die('Prizeless KID');
+			$kidprize = $_POST['keepprize'.$keepid];
+			if (!is_numeric($kidprize))
+				die('KID is not a number');
+			if ($kidprize < 4) {
+				$preselected[0][] = $keepid;
+				$preselected_prize[0][] = $kidprize;
+			} else if ($kidprize == 4) {
+				$preselected[1][] = $keepid;
+				$preselected_prize[1][] = $kidprize;
+			} else {
+				$preselected[2][] = $keepid;
+				$preselected_prize[2][] = $kidprize;
+			}
+		} else if ($keepid < EVENT_ID_OFFSET) { /* Landmark card */
+			$keep_land_ids[] = $keepid - LAND_ID_OFFSET;
+		} else { /* Event card */
+			$keep_event_ids[] = $keepid - EVENT_ID_OFFSET;
 		}
 	}
 }
 
-
-if (isset($_POST['expansion']))
-	$exp = $_POST['expansion'];
+if (isset($_POST['event_expansions']))
+	$event_exp = $_POST['event_expansions'];
 else
+	$event_exp = 0;
+
+if (isset($_POST['landmark_expansions']))
+	$land_exp = $_POST['landmark_expansions'];
+else
+	$land_exp = 0;
+
+if (isset($_POST['expansion'])) {
+	$exp = $_POST['expansion'];
+} else {
 	if ($TESTING)
 		$exp = array(3,4,5,6, 15);
 	else
 		$exp = 0;
-
+}
 
 $tuh_inafactor = 0;
 if (isset($_POST['tuhinarange']) && is_numeric($_POST['tuhinarange'])) {
@@ -90,7 +109,7 @@ $mobile = isMobileDevice();
 do_head("Dominion - korttiarvonta v2");
 echo '<h1>Dominion - Arvo kortit v2 (<a href="index2.php">Yhyy, Wanha oli parempi</a>)</h1>';
 
-echo output_input_form($conn, $mobile, $exp);
+echo output_input_form($conn, $mobile, $exp, $land_exp, $event_exp);
 
 function random_card_from_array(&$card, $min_weight)
 {
@@ -312,44 +331,214 @@ function exclude_presel_id($presel)
 	return $where;
 }
 
-$i = 0;
-foreach($PRIZEBUCKETS as $PRIZE_LIMIT) {
-	$exp_where = SQL_add_expansion_where('c.expansion_id', $exp);
-
-	$query = $QUERY_BASE.$PRIZE_LIMIT;
-	if ($exp_where)
-		$query .= " AND ".$exp_where;
-
-	if (isset($preselected[$i]))
-		$num_presel=count($preselected[$i]);
-	else
-		$num_presel = 0;
-	if ($num_presel) {
-		$query .= exclude_presel_id($preselected[$i]);
-	}
-
-	$result = query_cards($conn, $query);
-	$foo = 0;
-	while ($row = mysqli_fetch_assoc($result)) {
-		$foo++;
-		$card[] = dom_card::from_partial_row($row);
-	}
-	debug_print("$foo cards fetched for $card_group_names[$i] - selecting from those:");
-
-	$selected = randomize_cards($card, $tuh_inafactor, $tup_inafactor, $nihilism, $kap_itafactor, $num_cards[$i] - $num_presel);
-	if ($num_presel)
-		add_existing($selected, $preselected[$i]);
-
-	$card_set->add_set($selected, $card_group_names[$i]);
-	$card = array();
-
-	$i++;
-
-	debug_print("bucket $i: $PRIZE_LIMIT");
+function add_landmark_kinput($land_id, $offset, $checked) {
+	$land_id += $offset;
+	$out = '<input form="theform" type="checkbox" name="keepid[]" value="'.$land_id.'"'.$checked.'>'."\n";
+	return $out;
 }
 
-$card_set->get_cards();
-$card_set->show_sets($preselected, $mobile);
+function show_eventland($conn, $event_exp_ids, $land_exp_ids, $keep_land_ids, $keep_event_ids, $mobile = true)
+{
+	$out = "";
+
+	if (!($event_exp_ids || $land_exp_ids || $keep_land_ids || $keep_event_ids))
+		return;
+
+	if ($event_exp_ids || $keep_event_ids) {
+		$query_base = "SELECT events.id, events.name, events.prize, events.debt, events.curses, setup.text, expansion.name AS exp_name ";
+		$query_base .= "FROM events AS events ";
+		$query_base .= "LEFT JOIN setup_extras AS setup ON events.setup_id = setup.id ";
+		$query_base .= "LEFT JOIN expansion AS expansion ON events.expansion_id = expansion.id ";
+		$query_base .= "WHERE ";
+
+		$query_keep = "";
+
+		$num_keep_evs = 0;
+		if ($keep_event_ids) {
+			$num_keep_evs = count($keep_event_ids);
+			$query_keep = $query_base; 
+			$query_keep .= "events.id = $keep_event_ids[0]";
+
+		}
+		/*
+		 * There is a special case where user has selected to keep an event,
+		 * but disabled the 'events' from expansion for the new query. In this
+		 * case the RightThingToDo(tm) is to keep the selected event but to not
+		 * randomize new card. So, let's forget all the expansion_id stuff when
+		 * !$event_exp_ids.
+		 */
+
+		if ($num_keep_evs == 2 || !$event_exp_ids) {
+			if ($num_keep_evs == 2)
+				$query = $query_keep . " OR events.id = $keep_event_ids[1]";
+			else
+				$query = $query_keep;
+			$query .= " LIMIT 2";
+		} else {
+			$query = $query_base;
+
+			$where = "";
+			foreach($event_exp_ids as $expid) {
+				if ($where == "")
+					$where .= "(expansion.id = $expid";
+				else
+					$where .= " OR expansion.id = $expid";
+			}
+			$where .= ')';
+			$query .= $where;
+			$query .= " ORDER BY RAND() LIMIT ".(2 - $num_keep_evs);
+
+			if ($num_keep_evs) {
+				$query = "(($query) UNION " . $query_keep . ") LIMIT 2";
+			}
+		}
+
+		$result = mysqli_query($conn, $query);
+		if (!$result)
+			die("no expansions".mysql_error($conn));
+
+		if (!$mobile) {
+			$out .= '<h3>Tapahtumat</h3>'."\n";
+			$out .= '<table class="cardlist"><tr>'."\n";
+			$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th><th class="squeeze">Specials</th><th>Hinta</th><th>Peliosa</th></tr>'."\n";
+		} else {
+			$out .= "<h3> $title </h3>\n";
+			$out .= '<table class="cardlist"><tr>'."\n";
+			$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th><th>Specials</th> <th>Peliosa</th></tr>'."\n";
+		}
+
+		while ($row = mysqli_fetch_assoc($result)) {
+			$checked = "";
+			$setup_tip = "";
+			if ($keep_event_ids) {
+				foreach($keep_event_ids AS $kid) {
+					if ($kid == $row['id']) {
+						$checked = "checked";
+						break;
+					}
+				}
+			}
+
+			if ($row['text']) {
+					$setup_tip .= '<div class="image-container">'."\n";
+					$setup_tip .= '<img src="img/peasant.png" alt="Valmistelut" tabindex="0">'."\n";
+					$setup_tip .= '<div class="hover-text">Extra valmisteluja: '.$row['text'].'</div>'."\n";
+					$setup_tip .= '</div>'."\n";
+			}
+			if (!$mobile) {
+				$prizetype = ($row['debt']) ? '(Velka)' : '(Raha)';
+				$out .= '<tr><td class="checkbox">'.add_landmark_kinput($row['id'], EVENT_ID_OFFSET, $checked).'</td><td>'.$row['name'].'</td><td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td><td>'.$row['prize'].' '.$prizetype. '</td><td>'.$row['exp_name'].'</td></tr>'."\n";
+			} else {
+				$out .= '<tr><td class="checkbox">'.add_landmark_kinput($row['id'], EVENT_ID_OFFSET, $checked).'</td><td>'.$row['name'].'</td><td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td><td>'.$row['exp_name'].'</td></tr>'."\n";
+			}
+		} // while () MySQL results ends
+		$out .= '</table>';
+	} // if $event_exp_ids ends
+
+	if ($land_exp_ids || $keep_land_ids) {
+		$query = 'SELECT landmark.id, landmark.name, landmark.description, setup.text, expansion.name AS exp_name FROM landmarks AS landmark ';
+		$query .= 'LEFT JOIN setup_extras AS setup ON landmark.setup_id = setup.id ';
+		$query .= 'LEFT JOIN expansion AS expansion ON landmark.expansion_id = expansion.id ';
+		$query .= 'WHERE ';
+
+		if (!$keep_land_ids) {
+			$where = "";
+			foreach($land_exp_ids as $expid) {
+				if ($where == "")
+					$query .= "expansion.id = $expid";
+				else
+					$query .= " OR expansion.id = $expid";
+			}
+			$query .= ' ORDER BY RAND()';
+		} else {
+			$query .= 'landmark.id = '.$keep_land_ids[0];
+		}
+		$query .= ' LIMIT 1';
+
+		$result = mysqli_query($conn, $query);
+		if (!$result)
+			die("no expansions".mysql_error($conn));
+
+		if (!$mobile) {
+			$out .= '<h3>Maamerkit</h3>'."\n";
+			$out .= '<table class="cardlist"><tr>'."\n";
+			$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th><th>Selitys</th><th class="squeeze">Specials</th><th>Peliosa</th></tr>'."\n";
+		} else {
+			$out .= "<h3> $title </h3>\n";
+			$out .= '<table class="cardlist"><tr>'."\n";
+			$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th><th>Specials</th><th>Peliosa</th></tr>'."\n";
+		}
+
+		while ($row = mysqli_fetch_assoc($result)) {
+			$setup_tip = "";
+			$checked = "";
+			if ($keep_land_ids)
+				if ($keep_land_ids[0] == $row['id'])
+					$checked = "checked";
+			if ($row['text']) {
+					$setup_tip .= '<div class="image-container">'."\n";
+					$setup_tip .= '<img src="img/peasant.png" alt="Valmistelut" tabindex="0">'."\n";
+					$setup_tip .= '<div class="hover-text">Extra valmisteluja: '.$row['text'].'</div>'."\n";
+					$setup_tip .= '</div>'."\n";
+			}
+			if (!$mobile) {
+				$out .= '<tr><td class="checkbox">'.add_landmark_kinput($row['id'], LAND_ID_OFFSET, $checked).'</td><td>'.$row['name'].'</td><td>'.$row['description'].'</td><td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td><td>'.$row['exp_name'].'</td></tr>'."\n";
+			} else {
+				$out .= '<tr><d class="checkbox">'.add_landmark_kinput($row['id'], LAND_ID_OFFSET, $checked).'</td><td>'.$row['name'].'</td><td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td><td>'.$row['exp_name'].'</td></tr>'."\n";
+			}
+		} // while MySQL results ends
+		$out .= '</table>';
+	} // if ($land_exp_ids) ends
+
+	echo $out;
+}
+
+//if ($exp) {
+	$i = 0;
+	foreach($PRIZEBUCKETS as $PRIZE_LIMIT) {
+		$exp_where = SQL_add_expansion_where('c.expansion_id', $exp);
+
+		$query = $QUERY_BASE.$PRIZE_LIMIT;
+		if ($exp_where)
+			$query .= " AND ".$exp_where;
+
+		if (isset($preselected[$i]))
+			$num_presel=count($preselected[$i]);
+		else
+			$num_presel = 0;
+		if ($num_presel) {
+			$query .= exclude_presel_id($preselected[$i]);
+		}
+
+		$result = query_cards($conn, $query);
+		$foo = 0;
+		while ($row = mysqli_fetch_assoc($result)) {
+			$foo++;
+			$card[] = dom_card::from_partial_row($row);
+		}
+		debug_print("$foo cards fetched for $card_group_names[$i] - selecting from those:");
+
+		$selected = randomize_cards($card, $tuh_inafactor, $tup_inafactor, $nihilism, $kap_itafactor, $num_cards[$i] - $num_presel);
+		if ($num_presel)
+			add_existing($selected, $preselected[$i]);
+
+		$card_set->add_set($selected, $card_group_names[$i]);
+		$card = array();
+
+		$i++;
+
+		debug_print("bucket $i: $PRIZE_LIMIT");
+	}
+
+	$card_set->get_cards();
+	$card_set->show_sets($preselected, $mobile);
+
+	if ($land_exp || $event_exp || $keep_land_ids || $keep_event_ids) {
+		show_eventland($conn, $event_exp, $land_exp, $keep_land_ids, $keep_event_ids, $mobile);
+	}
+//}
+
+//echo output_input_form($conn, $mobile, $exp);
 
 /* Close connection, print (c) and send </body> </html> */
 echo '<p><h1><a href="aloittaja.php" target="_blank">Arvo my&ouml;s aloittaja?</a></h1>';

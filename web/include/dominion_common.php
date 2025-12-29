@@ -36,13 +36,13 @@ function get_expansions($conn, $include_nocards = false, $plain = false)
 	if ($include_nocards)
 		$query = "SELECT DISTINCT e.id, e.name FROM expansion AS e JOIN parsed_cards as pc WHERE e.id = pc.exp_id";
 	else
-		$query = "SELECT DISTINCT e.id, e.name FROM expansion AS e JOIN cards as c WHERE e.disabled != 1 AND c.expansion_id = e.id";
+		$query = "SELECT DISTINCT e.id, e.name, events.expansion_id AS expansion_events, landmarks.expansion_id AS expansion_landmarks FROM expansion AS e JOIN cards as c LEFT JOIN events AS events ON events.expansion_id = e.id LEFT JOIN landmarks as landmarks ON landmarks.expansion_id = e.id WHERE e.disabled != 1 AND c.expansion_id = e.id";
 
 	debug_print("Querying expanisons: $query");
 
 	$result = mysqli_query($conn, $query);
 	if (!$result)
-		die("no expansions");
+		die("no expansions".mysql_error($conn));
 
 	if (mysqli_num_rows($result) <= 0)
 		die("still no expansions");
@@ -90,14 +90,16 @@ function SQL_add_expansion_where($expansion_key, $expansion_id_array)
 	return $expansion_where;
 }
 
-function output_input_form($conn, $mobile, $exp)
+function output_input_form($conn, $mobile, $exp, $land_exp, $event_exp)
 {
+	$onloads = null;
 	$result = get_expansions($conn, false, true);
 
 	$mobile = 1;
 	/* Output the form table */
 
 	$output = '<form action="" method="post" id="theform">'."\n";
+	/*
 	if (!$mobile) {
 	//	$output = '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Tuhina\'o-meter</th> <th>Tupina\'o-meter</th><th>Kapita\'o-meter</th></tr><tr><td>';
 		//$output .= '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Tuhina\'o-meter</th> <th>Tupina\'o-meter</th><th>Kapita\'o-meter</th></tr>';
@@ -107,16 +109,28 @@ function output_input_form($conn, $mobile, $exp)
 		$output .= '<table class="structure"><tr><th>Käytettävät lisäosat</th><th>Painotukset</th></tr>'."\n";
 		}
 
-
 	$output .= '<tr><td>'."\n";
-
+	 */
+$output .= '<h3>Käytettävät lisäosat</h3>';
 	$output .= '<table class="structure">'."\n"; //expansion table
 	// $output .= '<form action="" method="post" id="theform">';
 	/* Print expansion checkboxes */
 	$tmp_exp_idx = 0;
+
+	$onload_ids = null;
 	while ($row = mysqli_fetch_assoc($result)) {
-		if (isset($exp) && $exp && $row['id'] == $exp[$tmp_exp_idx]) {
-			$checked = " checked";
+		$hidden_onclick = '';
+		$hidden_onclick_landmark = '';
+
+		if ($row['expansion_events'] != NULL || $row['expansion_landmarks'] != NULL) {
+			$related_id = htmlspecialchars('exp_'.$row['id']).'Related';
+			$hidden_onclick = 'onclick="toggleCheckboxes(this, \''.$related_id.'\')"';
+//			$hidden_onclick = 'onclick="toggleCheckboxes(document.getElementById(\''.htmlspecialchars($row['name']).'\'), \''.$related_id.'\')"';
+			$onload_ids[] = $related_id;
+		}
+
+		if (isset($exp) && $exp && isset($exp[$tmp_exp_idx]) && $row['id'] == $exp[$tmp_exp_idx]) {
+			$checked = 'checked';
 			$tmp_exp_idx ++;
 		} else {
 			$checked = "";
@@ -127,16 +141,63 @@ function output_input_form($conn, $mobile, $exp)
 	
 		$output .= '<tr><td>'."\n";
 		$output .= '<div class="checkbox-container">'."\n";
-		$output .= '<input class="checkboxes" type="checkbox" id="' . htmlspecialchars($row['name']) . '" name="expansion[]" value="' . $row['id'] . '"'."$checked>"."\n";
-		$output .= '<label class="checkboxes" for="' . htmlspecialchars($row['name']) . '">' . htmlspecialchars($row['name']) . '</label>'."\n";
+		$output .= '<input class="checkboxes" type="checkbox" ';
+		$output .= 'id="' . htmlspecialchars($row['name']) . '" ';
+		$output .= 'name="expansion[]" ';
+		$output .= $hidden_onclick .' ';
+		$output .= 'value="' . $row['id'] . '" ';
+		$output .= $checked.">\n";
 
+		$output .= '<label class="checkboxes" for="' . htmlspecialchars($row['name']) . '">' . htmlspecialchars($row['name']) . '</label>'."\n";
+		if ($row['expansion_events'] != NULL) {
+			$evchecked = "";
+			if ($event_exp) {
+				foreach($event_exp AS $e_exp) {
+					if ($e_exp == $row['id']) {
+						$evchecked = 'checked';
+					}
+				}
+			}
+			$output .= '<input type="checkbox" '.$evchecked.' id="exp_'. $related_id .'" name="event_expansions[]" value="' . $row['id'] . '" class="'.$related_id.' hidden">';
+			$output .= '<label for="exp_' . $related_id . '" class="'.$related_id.' hidden">Tapahtumat</label>'."\n";
+		}
+		if ($row['expansion_landmarks'] != NULL) {
+			$landchecked = "";
+			if ($land_exp){
+				foreach($land_exp AS $l_exp) {
+					if ($l_exp == $row['id']) {
+						$landchecked = 'checked';
+						break;
+					}
+				}
+			}
+
+			$output .= '<input type="checkbox" id="land_'. $related_id .'" name="landmark_expansions[]" value="' . $row['id'] . '" '.$landchecked.' class="'.$related_id.' hidden">';
+			$output .= '<label for="land_' . $related_id . '" class="'.$related_id.' hidden">Landmarks</label>'."\n";
+		}
+		if ($row['expansion_events'] != NULL || $row['expansion_landmarks'] != NULL) {
+			$onloads[] = 'toggleCheckboxes(document.getElementById(\''. htmlspecialchars($row['name']) . '\'), \''.$related_id.'\');'."\n";
+/*			$output .= '<script>';
+			$output .= 'window.onload = function() {'."\n";
+			$output .= 'toggleCheckboxes(document.getElementById(\''. htmlspecialchars($row['name']) . '\'), \''.$related_id.'\');'."\n";
+			$output .= '}</script>'."\n"; */
+		}
 		$output .= '</div>'."\n";
 		$output .= '</td></tr>'."\n";
 	}
 	$output .= '</table>'."\n"; // expansion table
 
-	$output .= '</td> <td>'."\n"; // Overall structure table
+	if ($onloads) {
+		$output .= '<script>';
+		$output .= 'window.onload = function() {'."\n";
+		foreach($onloads AS $onload)
+			$output .= $onload;
+		$output .= '}</script>'."\n";
+	}
 
+	$output .= '<h3>Painotukset</h3>';
+/*	$output .= '</td> <td>'."\n"; // Overall structure table
+ */
 	$output .= '<table class="structure">'."\n"; //ometer table
 	$output .= '<tr><td>'."\n";
 
@@ -214,11 +275,20 @@ function output_input_form($conn, $mobile, $exp)
 	/* End of the form table and form */
 	$output .= '</tr></table>'."\n";
 
-	$output .= '</td></tr></table>'."\n";
+	/*	$output .= '</td></tr></table>'."\n"; */
 
 	$output .= '<input type="submit" value="Arvo kortit">'."\n";
 	$output .= '</form>'."\n";
-
+/*
+	if ($onload_ids) {
+		$output .= '<script>';
+		$output .= 'window.onload = function() {'."\n";
+		foreach($onload_ids AS $oid) {
+			$output .= 'toggleCheckboxes(document.getElementById(\'foo\'), \''.$oid.'\');'."\n";
+		}
+		$output .= '};</script>';
+	}
+ */
 	return $output;
 }
 

@@ -363,9 +363,27 @@ table.aarvonta {
     100% { opacity:100%; }
 }
 
+/* For hidden checkboxes */
+.hidden {
+	display: none;
+}
+
 </style>
 
 <script>
+
+/* Toggle checkbox visibility to display expansion specific options (for selected expansions) */
+function toggleCheckboxe(checkbox, relatedId) {
+	var relatedCheckbox = document.getElementById(relatedId);
+	relatedCheckbox.classList.toggle(\'hidden\', !checkbox.checked);
+}
+
+function toggleCheckboxes(checkbox, relatedClass) {
+	var relatedCheckboxes = document.getElementsByClassName(relatedClass);
+	for (var i = 0; i < relatedCheckboxes.length; i++) {
+		relatedCheckboxes[i].classList.toggle(\'hidden\', !checkbox.checked);
+	}
+}
 
 function updateSlider(slider) {
   const min = Number(slider.min);
