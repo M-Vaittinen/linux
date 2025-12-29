@@ -90,7 +90,7 @@ function SQL_add_expansion_where($expansion_key, $expansion_id_array)
 	return $expansion_where;
 }
 
-function output_input_form($conn, $mobile, $exp, $land_exp, $event_exp)
+function output_input_form($conn, $mobile, $exp, $land_exp, $event_exp, $tuh_inafactor, $tup_inafactor, $kap_itafactor)
 {
 	$onloads = null;
 	$result = get_expansions($conn, false, true);
@@ -173,7 +173,7 @@ $output .= '<h3>Käytettävät lisäosat</h3>';
 			}
 
 			$output .= '<input type="checkbox" id="land_'. $related_id .'" name="landmark_expansions[]" value="' . $row['id'] . '" class="'.$related_id.' hidden"'."$landchecked>";
-			$output .= '<label for="land_' . $related_id . '" class="'.$related_id.' hidden">Landmarks</label>'."\n";
+			$output .= '<label for="land_' . $related_id . '" class="'.$related_id.' hidden">Maamerkit</label>'."\n";
 		}
 		if ($row['expansion_events'] != NULL || $row['expansion_landmarks'] != NULL) {
 			$onloads[] = 'toggleCheckboxes(document.getElementById(\''. htmlspecialchars($row['name']) . '\'), \''.$related_id.'\');'."\n";
@@ -209,7 +209,7 @@ $output .= '<h3>Käytettävät lisäosat</h3>';
 	$output .= '<div class="slidecontainer">'."\n".'
   <span class="label">-10</span>'."\n".'
   <div class="slider-wrapper">'."\n".'
-    <input type="range" min="-10" max="10" value="0" class="slider" name="tuhinarange">'."\n".'
+    <input type="range" min="-10" max="10" value="'.$tuh_inafactor.'" class="slider" name="tuhinarange">'."\n".'
     <div class="value-bubble">0</div>'."\n".'
   </div>'."\n".'
   <span class="label">+10</span>'."\n".'
@@ -233,7 +233,7 @@ $output .= '<h3>Käytettävät lisäosat</h3>';
 	$output .= '<div class="slidecontainer">
   <span class="label">-10</span>
   <div class="slider-wrapper">
-    <input type="range" min="-10" max="10" value="0" class="slider" name="tupinarange">
+    <input type="range" min="-10" max="10" value="'.$tup_inafactor.'" class="slider" name="tupinarange">
     <div class="value-bubble">0</div>
   </div>
   <span class="label">+10</span>
@@ -261,7 +261,7 @@ $output .= '<h3>Käytettävät lisäosat</h3>';
 	$output .= '<div class="slidecontainer">
   <span class="label">-10</span>
   <div class="slider-wrapper">
-    <input type="range" min="-10" max="10" value="0" class="slider" name="kapitarange">
+    <input type="range" min="-10" max="10" value="'.$kap_itafactor.'" class="slider" name="kapitarange">
     <div class="value-bubble">0</div>
   </div>
   <span class="label">+10</span>
