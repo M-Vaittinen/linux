@@ -7,6 +7,22 @@
  *
  * Written just for fun. No Warranty. Use at your own risk!
  *
+ * TODO: This class should be rewritten so that:
+ * - A single object instantiated from this class, would represent a single set of cards.
+ * - Eg, own object for cards cheaper than 4. Own object for cards costing 4,
+ *   and own object for cards costing more than 4.
+ * - This would simplify the logic and get rid of the 'set' arrays.
+ * - If we still want to do only one query to the database for retrieving the selected
+ *   cards, then we need to pull the query logic out of the class, and add a function which
+ *   gets the query results as an argument, matches the IDs from results to IDs in the set,
+ *   and updates the card information based on the result data. Other option would be to do
+ *   a query / set, and keep the SQL in the class. It's sure cleaner but maybe less efficient.
+ *   Hence I might prefer having the SQL outside this class.
+ * - Furthermore, we should do the TODO: in cards.php -file. That should help quite a bit
+ *   to further simplify this class. I think the cards should be having their own 'show()'
+ *   function which outputs the table cell with card data. This class should just call the
+ *   card's show().
+ *
  * Copyright 2025, Matti Vaittinen mazziesaccount@gmail.com>
  */
 

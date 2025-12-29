@@ -7,6 +7,13 @@
  *
  * Written just for fun. No Warranty. Use at your own risk!
  *
+ * TODO: This class should be changed to suit also event / landmark cards.
+ * - This way the event / landmark card sets could also be handled by the dom_card_set.php.
+ *   and support for those should be added in this. We might want to have the card.php as an
+ *   common 'base card class', which gets inherited by 'kingdom_cards' and 'event_cards' /
+ *   'landmark_cards'.
+ * - We should add show() functions to these card classes, to generate the HTML table-cells.
+ *
  * Copyright 2025, Matti Vaittinen mazziesaccount@gmail.com>
  */
 
