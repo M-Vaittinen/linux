@@ -56,36 +56,6 @@ SPAN.td
     display:table-cell;
 }
 
-/*
-.slider {
-  -webkit-appearance: none;
-  width: 300px;
-  height: 6px;
-  border-radius: 3px;
-  background: blue;
-  outline: none;
-}
-
-.slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #333;
-  cursor: pointer;
-}
-
-.slider::-moz-range-thumb {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #333;
-  cursor: pointer;
-}
-
-*/
-
 .slidecontainer {
   display: flex;
   align-items: center;
@@ -148,10 +118,6 @@ SPAN.td
   pointer-events: none;
 }
 
-
-
-
-
 body {
   background-color: linen;
 }
@@ -201,7 +167,6 @@ table.cardlist {
   border-radius: 10px;
   border-collapse: collapse;
 }
-
 .cardlist th {
   border: 1px solid black;
   padding-top: 12px;
@@ -212,31 +177,18 @@ table.cardlist {
   color: white;
   border-collapse: collapse;
 }
-
 .cardlist th.squeeze {
 	width:200px;
 }
 .cardlist td.squeeze {
 	width:200px;
 }
-
 .cardlist th.checkbox {
-/*	max-width:10px
-	text-align: left;
-*/
 	width:50px;
 }
 .cardlist td.checkbox {
 	width:50px;
-/*
-	max-width:10px
-	text-align: left;
-*/
-//  overflow: hidden;
- // text-overflow: ellipsis;
- // white-space: nowrap;
 }
-
 .cardlist td {
   border: 1px solid black;
   border-collapse: collapse;
@@ -261,7 +213,6 @@ table.aarvonta {
   color: white;
   border-collapse: collapse;
 }
-
 .aarvonta td {
   border: none;
   border-collapse: collapse;
@@ -279,9 +230,6 @@ table.aarvonta {
 }
 
 .help-tip{
-/*    position: absolute;
-    top: 18px;
-    right: 18px; */
     text-align: center;
     background-color: #BCDBEA;
     border-radius: 50%;
@@ -304,7 +252,6 @@ table.aarvonta {
 
     -webkit-animation: fadeIn 0.3s ease-in-out;
     animation: fadeIn 0.3s ease-in-out;
-
 }
 
 .help-tip p{    /* The tooltip */
@@ -317,8 +264,6 @@ table.aarvonta {
     box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.2);
     z-index: 0;
     position:relative;
-/*    position: absolute;
-    right: -4px; */
     color: #FFF;
     font-size: 13px;
     line-height: 1.4;
@@ -373,15 +318,11 @@ table.aarvonta {
 <script>
 
 /* Toggle checkbox visibility to display expansion specific options (for selected expansions) */
-function toggleCheckboxe(checkbox, relatedId) {
-	var relatedCheckbox = document.getElementById(relatedId);
-	relatedCheckbox.classList.toggle(\'hidden\', !checkbox.checked);
-}
-
 function toggleCheckboxes(checkbox, relatedClass) {
 	var relatedCheckboxes = document.getElementsByClassName(relatedClass);
 	for (var i = 0; i < relatedCheckboxes.length; i++) {
 		relatedCheckboxes[i].classList.toggle(\'hidden\', !checkbox.checked);
+		/* Clean the "child" checkboxes when parent is cleared */
 		if (!checkbox.checked)
 			relatedCheckboxes[i].checked = false;
 	}
@@ -428,90 +369,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 });
 
-
-/*
-function updateSlider(slider) {
-  const min = parseInt(slider.min, 10);
-  const max = parseInt(slider.max, 10);
-  const value = parseInt(slider.value, 10);
-
-  const valueSpan = document.getElementById("sliderValue");
-  valueSpan.textContent = value;
-
-  // Normalize value to percentage (0–100)
-  const percent = ((value - min) / (max - min)) * 100;
-  const center = ((0 - min) / (max - min)) * 100;
-
-  let gradient;
-
-  if (value < 0) {
-    gradient = `
-      linear-gradient(
-        to right,
-        red 0%,
-        red ${percent}%,
-        #ccc ${percent}%,
-        #ccc 100%
-      )
-    `;
-  } else if (value > 0) {
-    gradient = `
-      linear-gradient(
-        to right,
-        #ccc 0%,
-        #ccc ${center}%,
-        green ${center}%,
-        green ${percent}%,
-        #ccc ${percent}%,
-        #ccc 100%
-      )
-    `;
-  } else {
-    gradient = `
-      linear-gradient(
-        to right,
-        #ccc 0%,
-        #ccc ${center - 1}%,
-        blue ${center}%,
-        #ccc ${center + 1}%,
-        #ccc 100%
-      )
-    `;
-  }
-
-  slider.style.background = gradient;
-}
-
-document.addEventListener("DOMContentLoaded", function () {
-  const slider = document.getElementById("tuhinarange");
-  updateSlider(slider);
-});
-
-*/
-
-/*
-function updateSliderColor(slider) {
-  const value = parseInt(slider.value, 10);
-
-  let color;
-  if (value < 0) {
-    color = "red";
-  } else if (value === 0) {
-    color = "blue";
-  } else {
-    color = "green";
-  }
-
-  slider.style.background = color;
-}
-
-document.addEventListener("DOMContentLoaded", function () {
-  const slider = document.getElementById("tuhinarange");
-  updateSliderColor(slider);
-});
-*/
 </script>
-
 
 <title>' . $title . '</title>
 </head>
