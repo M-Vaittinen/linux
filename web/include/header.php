@@ -382,6 +382,8 @@ function toggleCheckboxes(checkbox, relatedClass) {
 	var relatedCheckboxes = document.getElementsByClassName(relatedClass);
 	for (var i = 0; i < relatedCheckboxes.length; i++) {
 		relatedCheckboxes[i].classList.toggle(\'hidden\', !checkbox.checked);
+		if (!checkbox.checked)
+			relatedCheckboxes[i].checked = false;
 	}
 }
 
