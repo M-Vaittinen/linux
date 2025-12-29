@@ -109,7 +109,7 @@ $mobile = isMobileDevice();
 do_head("Dominion - korttiarvonta v2");
 echo '<h1>Dominion - Arvo kortit v2 (<a href="index2.php">Yhyy, Wanha oli parempi</a>)</h1>';
 
-echo output_input_form($conn, $mobile, $exp, $land_exp, $event_exp);
+echo output_input_form($conn, $mobile, $exp, $land_exp, $event_exp, $tuh_inafactor, $tup_inafactor, $kap_itafactor);
 
 function random_card_from_array(&$card, $min_weight)
 {
@@ -358,7 +358,6 @@ function show_eventland($conn, $event_exp_ids, $land_exp_ids, $keep_land_ids, $k
 			$num_keep_evs = count($keep_event_ids);
 			$query_keep = $query_base; 
 			$query_keep .= "events.id = $keep_event_ids[0]";
-
 		}
 		/*
 		 * There is a special case where user has selected to keep an event,
@@ -419,17 +418,21 @@ function show_eventland($conn, $event_exp_ids, $land_exp_ids, $keep_land_ids, $k
 				}
 			}
 
+			$cardname = htmlspecialchars($row['name']);
+			$expansionname = htmlspecialchars($row['exp_name']);
+
 			if ($row['text']) {
-					$setup_tip .= '<div class="image-container">'."\n";
-					$setup_tip .= '<img src="img/peasant.png" alt="Valmistelut" tabindex="0">'."\n";
-					$setup_tip .= '<div class="hover-text">Extra valmisteluja: '.$row['text'].'</div>'."\n";
-					$setup_tip .= '</div>'."\n";
+				$setup_tip_text = htmlspecialchars($row['text']);
+				$setup_tip .= '<div class="image-container">'."\n";
+				$setup_tip .= '<img src="img/peasant.png" alt="Valmistelut" tabindex="0">'."\n";
+				$setup_tip .= '<div class="hover-text">Extra valmisteluja: '.$setup_tip_text.'</div>'."\n";
+				$setup_tip .= '</div>'."\n";
 			}
 			if (!$mobile) {
 				$prizetype = ($row['debt']) ? '(Velka)' : '(Raha)';
-				$out .= '<tr><td class="checkbox">'.add_landmark_kinput($row['id'], EVENT_ID_OFFSET, $checked).'</td><td>'.$row['name'].'</td><td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td><td>'.$row['prize'].' '.$prizetype. '</td><td>'.$row['exp_name'].'</td></tr>'."\n";
+				$out .= '<tr><td class="checkbox">'.add_landmark_kinput($row['id'], EVENT_ID_OFFSET, $checked).'</td><td>'.$cardname.'</td><td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td><td>'.$row['prize'].' '.$prizetype. '</td><td>'.$expansionname.'</td></tr>'."\n";
 			} else {
-				$out .= '<tr><td class="checkbox">'.add_landmark_kinput($row['id'], EVENT_ID_OFFSET, $checked).'</td><td>'.$row['name'].'</td><td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td><td>'.$row['exp_name'].'</td></tr>'."\n";
+				$out .= '<tr><td class="checkbox">'.add_landmark_kinput($row['id'], EVENT_ID_OFFSET, $checked).'</td><td>'.$cardname.'</td><td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td><td>'.$expansionname.'</td></tr>'."\n";
 			}
 		} // while () MySQL results ends
 		$out .= '</table>';
@@ -472,19 +475,36 @@ function show_eventland($conn, $event_exp_ids, $land_exp_ids, $keep_land_ids, $k
 		while ($row = mysqli_fetch_assoc($result)) {
 			$setup_tip = "";
 			$checked = "";
+
+			$cardname = htmlspecialchars($row['name']);
+			$expansionname = htmlspecialchars($row['exp_name']);
+			$description = htmlspecialchars($row['description']);
+
 			if ($keep_land_ids)
 				if ($keep_land_ids[0] == $row['id'])
 					$checked = "checked";
 			if ($row['text']) {
-					$setup_tip .= '<div class="image-container">'."\n";
-					$setup_tip .= '<img src="img/peasant.png" alt="Valmistelut" tabindex="0">'."\n";
-					$setup_tip .= '<div class="hover-text">Extra valmisteluja: '.$row['text'].'</div>'."\n";
-					$setup_tip .= '</div>'."\n";
+				$setup_tip_text = htmlspecialchars($row['text']);
+				$setup_tip .= '<div class="image-container">'."\n";
+				$setup_tip .= '<img src="img/peasant.png" alt="Valmistelut" tabindex="0">'."\n";
+				$setup_tip .= '<div class="hover-text">Extra valmisteluja: '.$setup_tip_text.'</div>'."\n";
+				$setup_tip .= '</div>'."\n";
 			}
 			if (!$mobile) {
-				$out .= '<tr><td class="checkbox">'.add_landmark_kinput($row['id'], LAND_ID_OFFSET, $checked).'</td><td>'.$row['name'].'</td><td>'.$row['description'].'</td><td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td><td>'.$row['exp_name'].'</td></tr>'."\n";
+				$out .= '<tr>'."\n";
+				$out .= '<td class="checkbox">'.add_landmark_kinput($row['id'], LAND_ID_OFFSET, $checked).'</td>'."\n";
+				$out .= '<td>'.$cardname.'</td>'."\n";
+				$out .= '<td>'.$description.'</td>'."\n";
+				$out .= '<td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td>'."\n";
+				$out .= '<td>'.$expansionname.'</td>'."\n";
+				$out .= '</tr>'."\n";
 			} else {
-				$out .= '<tr><d class="checkbox">'.add_landmark_kinput($row['id'], LAND_ID_OFFSET, $checked).'</td><td>'.$row['name'].'</td><td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td><td>'.$row['exp_name'].'</td></tr>'."\n";
+				$out .= '<tr>'."\n";
+				$out .= '<td class="checkbox">'.add_landmark_kinput($row['id'], LAND_ID_OFFSET, $checked).'</td>'."\n";
+				$out .= '<td>'.$cardname.'</td>'."\n";
+				$out .= '<td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td>'."\n";
+				$out .= '<td>'.$expansionname.'</td>'."\n";
+				$out .= '</tr>'."\n";
 			}
 		} // while MySQL results ends
 		$out .= '</table>';
