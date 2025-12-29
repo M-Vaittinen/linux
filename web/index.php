@@ -402,7 +402,7 @@ function show_eventland($conn, $event_exp_ids, $land_exp_ids, $keep_land_ids, $k
 			$out .= '<table class="cardlist"><tr>'."\n";
 			$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th><th class="squeeze">Specials</th><th>Hinta</th><th>Peliosa</th></tr>'."\n";
 		} else {
-			$out .= "<h3> $title </h3>\n";
+			$out .= '<h3>Tapahtumat</h3>'."\n";
 			$out .= '<table class="cardlist"><tr>'."\n";
 			$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th><th>Specials</th> <th>Peliosa</th></tr>'."\n";
 		}
@@ -475,7 +475,7 @@ function show_eventland($conn, $event_exp_ids, $land_exp_ids, $keep_land_ids, $k
 			$out .= '<table class="cardlist"><tr>'."\n";
 			$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th><th>Selitys</th><th class="squeeze">Specials</th><th>Peliosa</th></tr>'."\n";
 		} else {
-			$out .= "<h3> $title </h3>\n";
+			$out .= '<h3>Maamerkit</h3>'."\n";
 			$out .= '<table class="cardlist"><tr>'."\n";
 			$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th><th>Specials</th><th>Peliosa</th></tr>'."\n";
 		}
