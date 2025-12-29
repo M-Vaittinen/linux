@@ -99,12 +99,18 @@ class dom_card_set {
 				$name = htmlspecialchars($c->name);
 				$en_name = htmlspecialchars($c->en_name);
 				$prize = htmlspecialchars($c->prize);
-				$prizetype = htmlspecialchars($c->prizetype_name);
+//				$prizetype = htmlspecialchars($c->prizetype_name);
 				$expansion = htmlspecialchars($c->expansion_name);
 				$cardtype = htmlspecialchars($c->type_name);
 
 				$setup_tip = '';
 
+				if ($c->prizetype_id == PRIZETYPE_ID_DEBT) {
+					$setup_tip .= '<div class="image-container">'."\n";
+					$setup_tip .= '<img src="img/debt.png" alt="Myyd&auml;&auml;n Rahoituksella" tabindex="0">'."\n";
+					$setup_tip .= '<div class="hover-text">Myyd&auml;&auml;n Rahoituksella</div>'."\n";
+					$setup_tip .= '</div>'."\n";
+				}
 				if ($c->curse) {
 					$setup_tip .= '<div class="image-container">'."\n";
 					$setup_tip .= '<img src="img/curse.png" alt="Kiroukset" tabindex="0">'."\n";
@@ -128,7 +134,8 @@ class dom_card_set {
 					$name = $name . " (" . $en_name . ")";
 
 				if (!$mobile)
-					$out .= '<tr><td class="checkbox">' . $this->add_change_input($c->id, $i, $c->prize, $checked).'</td><td>' . $name . '</td><td>'. (($setup_tip != '') ? $setup_tip : '--') . '</td><td>' . $cardtype . '</td><td>' . $prize . ' (' . $prizetype . ')</td><td>' . $expansion . '</td></tr>'."\n";
+					$out .= '<tr><td class="checkbox">' . $this->add_change_input($c->id, $i, $c->prize, $checked).'</td><td>' . $name . '</td><td>'. (($setup_tip != '') ? $setup_tip : '--') . '</td><td>' . $cardtype . '</td><td>' . $prize . '</td><td>' . $expansion . '</td></tr>'."\n";
+					//$out .= '<tr><td class="checkbox">' . $this->add_change_input($c->id, $i, $c->prize, $checked).'</td><td>' . $name . '</td><td>'. (($setup_tip != '') ? $setup_tip : '--') . '</td><td>' . $cardtype . '</td><td>' . $prize . ' (' . $prizetype . ')</td><td>' . $expansion . '</td></tr>'."\n";
 				else
 					$out .= '<tr><td>' . $this->add_change_input($c->id, $i, $c->prize, $checked) . '</td><td>'. $name . $setup_tip . '</td><td>' . $expansion . '</td></tr>'."\n";
 			}

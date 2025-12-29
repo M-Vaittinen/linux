@@ -16,6 +16,7 @@
  */
 define("LAND_ID_OFFSET", 1000000);
 define("EVENT_ID_OFFSET", 2000000);
+define("PRIZETYPE_ID_DEBT", 2);
 
 //$DBG=true;
 $DBG=false;
@@ -345,7 +346,7 @@ function show_eventland($conn, $event_exp_ids, $land_exp_ids, $keep_land_ids, $k
 		return;
 
 	if ($event_exp_ids || $keep_event_ids) {
-		$query_base = "SELECT events.id, events.name, events.prize, events.debt, events.curses, setup.text, expansion.name AS exp_name ";
+		$query_base = "SELECT events.id, events.name, events.prize, events.debt, events.curses, setup.text, setup.id AS stupid, expansion.name AS exp_name ";
 		$query_base .= "FROM events AS events ";
 		$query_base .= "LEFT JOIN setup_extras AS setup ON events.setup_id = setup.id ";
 		$query_base .= "LEFT JOIN expansion AS expansion ON events.expansion_id = expansion.id ";
@@ -428,9 +429,16 @@ function show_eventland($conn, $event_exp_ids, $land_exp_ids, $keep_land_ids, $k
 				$setup_tip .= '<div class="hover-text">Extra valmisteluja: '.$setup_tip_text.'</div>'."\n";
 				$setup_tip .= '</div>'."\n";
 			}
+			if ($row['debt']) {
+				$setup_tip .= '<div class="image-container">'."\n";
+				$setup_tip .= '<img src="img/debt.png" alt="Myyd&auml;&auml;n Rahoituksella" tabindex="0">'."\n";
+				$setup_tip .= '<div class="hover-text">Myyd&auml;&auml;n Rahoituksella</div>'."\n";
+				$setup_tip .= '</div>'."\n";
+			}
 			if (!$mobile) {
-				$prizetype = ($row['debt']) ? '(Velka)' : '(Raha)';
-				$out .= '<tr><td class="checkbox">'.add_landmark_kinput($row['id'], EVENT_ID_OFFSET, $checked).'</td><td>'.$cardname.'</td><td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td><td>'.$row['prize'].' '.$prizetype. '</td><td>'.$expansionname.'</td></tr>'."\n";
+				//$prizetype = ($row['debt']) ? '(Velka)' : '(Raha)';
+				$out .= '<tr><td class="checkbox">'.add_landmark_kinput($row['id'], EVENT_ID_OFFSET, $checked).'</td><td>'.$cardname.'</td><td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td><td>'.$row['prize'].'</td><td>'.$expansionname.'</td></tr>'."\n";
+				//$out .= '<tr><td class="checkbox">'.add_landmark_kinput($row['id'], EVENT_ID_OFFSET, $checked).'</td><td>'.$cardname.'</td><td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td><td>'.$row['prize'].' '.$prizetype. '</td><td>'.$expansionname.'</td></tr>'."\n";
 			} else {
 				$out .= '<tr><td class="checkbox">'.add_landmark_kinput($row['id'], EVENT_ID_OFFSET, $checked).'</td><td>'.$cardname.'</td><td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td><td>'.$expansionname.'</td></tr>'."\n";
 			}
