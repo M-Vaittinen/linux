@@ -68,6 +68,7 @@ class dom_card_set {
 	public function show_sets($keepids, $mobile = 0) {
 
 		$vals_on_sets = array(3,3,4);
+		$omena = false;
 
 		$out = "";
 		for ($i = 0; $i < 3; $i++) {
@@ -105,6 +106,14 @@ class dom_card_set {
 
 				$setup_tip = '';
 
+				if ($c->omen) {
+					$setup_tip .= '<div class="image-container">'."\n";
+					$setup_tip .= '<img src="img/omena.png" alt="Omen" tabindex="0">'."\n";
+					$setup_tip .= '<div class="hover-text">Olen Omena</div>'."\n";
+					$setup_tip .= '</div>'."\n";
+					/* We return the information that an omen was included so we can later add the prophecies */
+					$omena = true;
+				}
 				if ($c->prizetype_id == PRIZETYPE_ID_DEBT) {
 					$setup_tip .= '<div class="image-container">'."\n";
 					$setup_tip .= '<img src="img/debt.png" alt="Myyd&auml;&auml;n Rahoituksella" tabindex="0">'."\n";
@@ -143,6 +152,8 @@ class dom_card_set {
 			$out .= "Tuhina " . $tuhinasum."\n";
 		}
 		echo $out;
+
+		return $omena;
 	}
 
 	public static function prepare_set($conn) {

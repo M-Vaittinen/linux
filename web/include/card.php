@@ -65,6 +65,7 @@ class dom_card
 	public $tuhinakerroin	= null;
 	public $dropcards	= null;
 	public $actionmoney	= null;
+	public $omen		= null;
 
 	public $type_name	= null;
 	public $prizetype_name	= null;
@@ -103,6 +104,7 @@ class dom_card
 		$this->expansion_name = isset($row[$tableprefix.'expansion_name']) ? $row[$tableprefix.'expansion_name'] : null;
 		$this->below_name = isset($row[$tableprefix.'below_name']) ? $row[$tableprefix.'below_name'] : null;
 		$this->above_name = isset($row[$tableprefix.'above_name']) ? $row[$tableprefix.'above_name'] : null;
+		$this->omen = isset($row[$tableprefix.'omen']) ? $row[$tableprefix.'omen'] : null;
 	}
 
 	public function get_id()

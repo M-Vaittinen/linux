@@ -16,7 +16,9 @@
  */
 define("LAND_ID_OFFSET", 1000000);
 define("EVENT_ID_OFFSET", 2000000);
+define("OMENA_ID_OFFSET", 3000000);
 define("PRIZETYPE_ID_DEBT", 2);
+define("SETUP_ID_DEBT", 44);
 
 //$DBG=true;
 $DBG=false;
@@ -25,6 +27,7 @@ $TESTING=false;
 $preselected = null;
 $keep_land_ids = null;
 $keep_event_ids = null;
+$keep_omena_ids = null;
 if (isset($_POST['keepid'])) {
 	foreach ($_POST['keepid'] AS $keepid) {
 		if (!is_numeric($keepid))
@@ -48,8 +51,10 @@ if (isset($_POST['keepid'])) {
 			}
 		} else if ($keepid < EVENT_ID_OFFSET) { /* Landmark card */
 			$keep_land_ids[] = $keepid - LAND_ID_OFFSET;
-		} else { /* Event card */
+		} else if ($keepid < OMENA_ID_OFFSET) { /* Event card */
 			$keep_event_ids[] = $keepid - EVENT_ID_OFFSET;
+		} else { /* keep prophecy */
+			$keep_omena_ids[] = $keepid - OMENA_ID_OFFSET;
 		}
 	}
 }
@@ -338,12 +343,96 @@ function add_landmark_kinput($land_id, $offset, $checked) {
 	return $out;
 }
 
-function show_eventland($conn, $event_exp_ids, $land_exp_ids, $keep_land_ids, $keep_event_ids, $mobile = true)
+function show_eventland($conn, $event_exp_ids, $land_exp_ids, $keep_land_ids, $keep_event_ids, $omena, $keep_omena_ids, $all_exp_ids, $mobile = true)
 {
 	$out = "";
 
-	if (!($event_exp_ids || $land_exp_ids || $keep_land_ids || $keep_event_ids))
+	if (!($event_exp_ids || $land_exp_ids || $keep_land_ids || $keep_event_ids || $omena))
 		return;
+
+	if ($omena) {
+		$query = "SELECT prophecy.id, prophecy.name, prophecy.description, setup.text, setup.id AS stupid, expansion.name AS exp_name, etype.name AS typename ";
+		$query .= 'FROM prophecies AS prophecy ';
+		$query .= 'LEFT JOIN setup_extras AS setup ON prophecy.setup_id = setup.id ';
+		$query .= 'LEFT JOIN expansion AS expansion ON prophecy.expansion_id = expansion.id ';
+		$query .= 'LEFT JOIN event_type AS etype ON prophecy.type_id = etype.id ';
+
+		$where = "";
+		if (!$keep_omena_ids) {
+			if ($all_exp_ids) {
+				$query .= "WHERE ";
+				foreach($all_exp_ids as $expid) {
+					if ($where == "")
+						$where .= "expansion.id = $expid";
+					else
+						$where .= " OR expansion.id = $expid";
+				}
+				$query .= $where;
+			}
+			$query .= ' ORDER BY RAND()';
+		} else {
+			$query .= "WHERE ";
+			$query .= 'prophecy.id = '.$keep_omena_ids[0];
+		}
+		$query .= ' LIMIT 1';
+
+		$result = mysqli_query($conn, $query);
+		if (!$result)
+			die("no expansions".mysql_error($conn));
+
+		if (!$mobile) {
+			$out .= '<h3>OmenaProphecy</h3>'."\n";
+			$out .= '<table class="cardlist"><tr>'."\n";
+			$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th><th>Selitys</th><th class="squeeze">Specials</th><th>Hinta</th><th>Peliosa</th></tr>'."\n";
+		} else {
+			$out .= '<h3>OmenaProphecy</h3>'."\n";
+			$out .= '<table class="cardlist"><tr>'."\n";
+			$out .= '<th class="checkbox">[pid&auml;]</th><th>Kortti</th><th>Specials</th> <th>Peliosa</th></tr>'."\n";
+		}
+		while ($row = mysqli_fetch_assoc($result)) {
+			$checked = "";
+			$setup_tip = "";
+
+			$cardname = htmlspecialchars($row['name']);
+			$expansionname = htmlspecialchars($row['exp_name']);
+			$description = htmlspecialchars($row['description']);
+			$cardtype = htmlspecialchars($row['typename']);
+
+			if ($keep_omena_ids)
+				if ($keep_omena_ids[0] == $row['id'])
+					$checked = "checked";
+			if ($row['text'] && $row['stupid'] != SETUP_ID_DEBT) {
+				$setup_tip_text = htmlspecialchars($row['text']);
+				$setup_tip .= '<div class="image-container">'."\n";
+				$setup_tip .= '<img src="img/peasant.png" alt="Valmistelut" tabindex="0">'."\n";
+				$setup_tip .= '<div class="hover-text">Extra valmisteluja: '.$setup_tip_text.'</div>'."\n";
+				$setup_tip .= '</div>'."\n";
+			} else if($row['text'] && $row['stupid'] == SETUP_ID_DEBT) {
+				$setup_tip .= '<div class="image-container">'."\n";
+				$setup_tip .= '<img src="img/debt.png" alt="Myyd&auml;&auml;n Rahoituksella" tabindex="0">'."\n";
+				$setup_tip .= '<div class="hover-text">Myyd&auml;&auml;n Rahoituksella</div>'."\n";
+				$setup_tip .= '</div>'."\n";
+			}
+			if (!$mobile) {
+				$out .= '<tr>'."\n";
+				$out .= '<td class="checkbox">'.add_landmark_kinput($row['id'], OMENA_ID_OFFSET, $checked).'</td>'."\n";
+				$out .= '<td>'.$cardname.'</td>'."\n";
+				$out .= '<td>'.$description.'</td>'."\n";
+				$out .= '<td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td>'."\n";
+				$out .= '<td>'.$cardtype.'</td>'."\n";
+				$out .= '<td>'.$expansionname.'</td>'."\n";
+				$out .= '</tr>'."\n";
+			} else {
+				$out .= '<tr>'."\n";
+				$out .= '<td class="checkbox">'.add_landmark_kinput($row['id'], OMENA_ID_OFFSET, $checked).'</td>'."\n";
+				$out .= '<td>'.$cardname.' ('.$cardtype.')</td>'."\n";
+				$out .= '<td>'. (($setup_tip != '') ? $setup_tip : '--') .'</td>'."\n";
+				$out .= '<td>'.$expansionname.'</td>'."\n";
+				$out .= '</tr>'."\n";
+			}
+		} 
+		$out .= '</table>';
+	} // If omena ends.
 
 	if ($event_exp_ids || $keep_event_ids) {
 		$query_base = "SELECT events.id, events.name, events.prize, events.debt, events.curses, setup.text, setup.id AS stupid, expansion.name AS exp_name ";
@@ -564,10 +653,10 @@ function show_eventland($conn, $event_exp_ids, $land_exp_ids, $keep_land_ids, $k
 	}
 
 	$card_set->get_cards();
-	$card_set->show_sets($preselected, $mobile);
+	$omena = $card_set->show_sets($preselected, $mobile);
 
-	if ($land_exp || $event_exp || $keep_land_ids || $keep_event_ids) {
-		show_eventland($conn, $event_exp, $land_exp, $keep_land_ids, $keep_event_ids, $mobile);
+	if ($land_exp || $event_exp || $keep_land_ids || $keep_event_ids || $omena) {
+		show_eventland($conn, $event_exp, $land_exp, $keep_land_ids, $keep_event_ids, $omena, $keep_omena_ids, $exp, $mobile);
 	}
 //}
 
