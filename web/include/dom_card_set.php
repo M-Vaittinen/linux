@@ -39,10 +39,8 @@ class dom_card_set {
 		$query .= "WHERE e.id = c.expansion_id AND ";
 		$query .= "ct.id = c.type_id AND ";
 		$query .= "pt.id = c.prizetype_id AND ";
-	        $query .= "c.id IN ($this->all_ids)";
-		//$query .= "JOIN expansion AS e ";
-		$query .= "";
-		$query .= "";
+	        $query .= "c.id IN ($this->all_ids) ";
+		$query .= "ORDER BY c.prize";
 		$res = query_cards($this->conn, $query);
 		while ($row = mysqli_fetch_assoc($res))
 			$this->cards[] = dom_card::from_full_row($row);
