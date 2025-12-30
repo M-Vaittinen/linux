@@ -458,10 +458,11 @@ function show_eventland($conn, $event_exp_ids, $land_exp_ids, $keep_land_ids, $k
 			$where = "";
 			foreach($land_exp_ids as $expid) {
 				if ($where == "")
-					$query .= "expansion.id = $expid";
+					$where .= "expansion.id = $expid";
 				else
-					$query .= " OR expansion.id = $expid";
+					$where .= " OR expansion.id = $expid";
 			}
+			$query .= $where;
 			$query .= ' ORDER BY RAND()';
 		} else {
 			$query .= 'landmark.id = '.$keep_land_ids[0];
