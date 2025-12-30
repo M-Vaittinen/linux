@@ -36,11 +36,12 @@ function get_expansions($conn, $include_nocards = false, $plain = false)
 	if ($include_nocards)
 		$query = "SELECT DISTINCT e.id, e.name FROM expansion AS e JOIN parsed_cards as pc WHERE e.id = pc.exp_id";
 	else
-		$query = "SELECT DISTINCT e.id, e.ordernumber, e.name, events.expansion_id AS expansion_events, landmarks.expansion_id AS expansion_landmarks ";
+		$query = "SELECT DISTINCT e.id, e.ordernumber, e.name, events.expansion_id AS expansion_events, landmarks.expansion_id AS expansion_landmarks, types.name_plural AS landmark_type ";
 		$query .= "FROM expansion AS e ";
 		$query .= "JOIN cards as c ";
 		$query .= "LEFT JOIN events AS events ON events.expansion_id = e.id ";
 		$query .= "LEFT JOIN landmarks as landmarks ON landmarks.expansion_id = e.id ";
+		$query .= "LEFT JOIN event_type AS types ON landmarks.type_id = types.id ";
 		$query .= "WHERE e.disabled != 1 AND c.expansion_id = e.id ";
 		$query .= "ORDER BY e.ordernumber";
 
@@ -128,6 +129,12 @@ $output .= '<h3>Käytettävät lisäosat</h3>';
 		$hidden_onclick = '';
 		$hidden_onclick_landmark = '';
 
+		if ($row['expansion_landmarks'] != NULL) {
+			$landmark_type = htmlspecialchars($row['landmark_type']);
+			if (!$landmark_type)
+				$landmark_type = "Ei valtakuntakortit";
+		}
+
 		if ($row['expansion_events'] != NULL || $row['expansion_landmarks'] != NULL) {
 			$related_id = htmlspecialchars('exp_'.$row['id']).'Related';
 			$hidden_onclick = 'onclick="toggleCheckboxes(this, \''.$related_id.'\')"';
@@ -179,14 +186,10 @@ $output .= '<h3>Käytettävät lisäosat</h3>';
 			}
 
 			$output .= '<input type="checkbox" id="land_'. $related_id .'" name="landmark_expansions[]" value="' . $row['id'] . '" class="'.$related_id.' hidden"'."$landchecked>";
-			$output .= '<label for="land_' . $related_id . '" class="'.$related_id.' hidden">Maamerkit</label>'."\n";
+			$output .= '<label for="land_' . $related_id . '" class="'.$related_id.' hidden">'.$landmark_type.'</label>'."\n";
 		}
 		if ($row['expansion_events'] != NULL || $row['expansion_landmarks'] != NULL) {
 			$onloads[] = 'toggleCheckboxes(document.getElementById(\''. htmlspecialchars($row['name']) . '\'), \''.$related_id.'\');'."\n";
-/*			$output .= '<script>';
-			$output .= 'window.onload = function() {'."\n";
-			$output .= 'toggleCheckboxes(document.getElementById(\''. htmlspecialchars($row['name']) . '\'), \''.$related_id.'\');'."\n";
-			$output .= '}</script>'."\n"; */
 		}
 		$output .= '</div>'."\n";
 		$output .= '</td></tr>'."\n";
