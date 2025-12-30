@@ -7,6 +7,68 @@ echo '
 <head>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
+.slidecontainer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 25px 0;
+  font-family: sans-serif;
+}
+
+.label {
+  width: 30px;
+  text-align: center;
+}
+
+.slider-wrapper {
+  position: relative;
+  width: 300px;
+}
+
+/* Slider track */
+.slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+  background: linear-gradient(to right, red, blue, green);
+}
+
+/* Thumb */
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #333;
+  cursor: pointer;
+  position: relative;
+  z-index: 2;
+}
+
+.slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #333;
+  cursor: pointer;
+}
+
+/* Floating value bubble */
+.value-bubble {
+  position: absolute;
+  top: -35px;
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #333;
+  color: #fff;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 body {
   background-color: linen;
 }
@@ -184,6 +246,52 @@ table.aarvonta {
 }
 
 </style>
+<script>
+
+function updateSlider(slider) {
+  const min = Number(slider.min);
+  const max = Number(slider.max);
+  const value = Number(slider.value);
+
+  const wrapper = slider.closest(".slider-wrapper");
+  const bubble = wrapper.querySelector(".value-bubble");
+
+  // Update bubble text
+  bubble.textContent = value;
+
+  // Calculate percentage position
+  const percent = ((value - min) / (max - min)) * 100;
+
+  // Position bubble above thumb
+  bubble.style.left = `${percent}%`;
+
+  /*
+    Continuous gradient:
+    - Red at min
+    - Blue at zero
+    - Green at max
+  */
+  slider.style.background = `
+    linear-gradient(
+      to right,
+      red 0%,
+      blue 50%,
+      green 100%
+    )
+  `;
+}
+
+/* Initialize all sliders */
+document.addEventListener("DOMContentLoaded", function () {
+  document.querySelectorAll(".slider").forEach(slider => {
+    updateSlider(slider);
+    slider.addEventListener("input", () => updateSlider(slider));
+  });
+});
+
+</script>
+
+
 <title>' . $title . '</title>
 </head>
 <body>';

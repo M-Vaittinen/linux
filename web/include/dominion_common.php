@@ -22,12 +22,12 @@ function debug_print($str)
 	echo "$str.<br />";
 }
 
-function get_expansions($conn, $include_nocards = true)
+function get_expansions($conn, $include_nocards = true, $plain = false)
 {
 	if ($include_nocards)
 		$query = "SELECT DISTINCT e.id, e.name FROM expansion AS e JOIN parsed_cards as pc WHERE e.id = pc.exp_id";
 	else
-		$query = "SELECT DISTINCT e.id, e.name FROM expansion AS e JOIN parsed_cards as pc JOIN cards as c WHERE e.id = pc.exp_id AND c.expansion_id = e.id";
+		$query = "SELECT DISTINCT e.id, e.name FROM expansion AS e JOIN cards as c WHERE c.expansion_id = e.id";
 
 	$result = mysqli_query($conn, $query);
 	if (!$result)
@@ -81,7 +81,7 @@ function SQL_add_expansion_where($expansion_key, $expansion_id_array)
 
 function output_input_form($conn, $mobile, $exp)
 {
-	$result = get_expansions($conn, false);
+	$result = get_expansions($conn, false, true);
 
 	/* Output the form table */
 	if (!$mobile) {
@@ -115,8 +115,14 @@ function output_input_form($conn, $mobile, $exp)
 	if ($mobile)
 		$output .= '<b>Tuhina\'o-meter</b> <br />';
 	$output .= '<div class="slidecontainer">
-	  -10<input type="range" min="-10" max="10" value="0" class="slider" name="tuhinarange" id="tuhinarange">+10
-	</div>';
+  <span class="label">-10</span>
+  <div class="slider-wrapper">
+    <input type="range" min="-10" max="10" value="0" class="slider" name="tuhinarange">
+    <div class="value-bubble">0</div>
+  </div>
+  <span class="label">+10</span>
+</div> ';
+
 	$output .= '<div class="help-tip">
 	    <p>Tuhina\'o-meter&copy; :ll&auml; voit muuttaa korttiarvontaa v&auml;hent&auml;m&auml;&auml;n tai lis&auml;&auml;m&auml;&auml;n toimintoketjuja lis&auml;&auml;vi&auml; kortteja.</p>
 	</div>';
@@ -132,8 +138,15 @@ function output_input_form($conn, $mobile, $exp)
 	if ($mobile)
 		$output .= '<b>Tupina\'o-meter</b><br />';
 	$output .= '<div class="slidecontainer">
-	  -10<input type="range" min="-10" max="10" value="0" class="slider" name="tupinarange" id="tupinarange">+10
-	</div>';
+  <span class="label">-10</span>
+  <div class="slider-wrapper">
+    <input type="range" min="-10" max="10" value="0" class="slider" name="tupinarange">
+    <div class="value-bubble">0</div>
+  </div>
+  <span class="label">+10</span>
+</div>';
+
+
 	$output .= '<input type="checkbox" id="add_nihilism" name="add_nihilism" value="1">';
 	$output .= '<label for="add_nihilism">...ripauksella nihilismi&auml;</label><br>';
 	$output .= '<div class="help-tip">
@@ -151,8 +164,14 @@ function output_input_form($conn, $mobile, $exp)
 	if ($mobile)
 		$output .= '<b>Kapita\'o-meter</b><br />';
 	$output .= '<div class="slidecontainer">
-	  -10<input type="range" min="-10" max="10" value="0" class="slider" name="kapitarange" id="kapitarange">+10
-	</div>';
+  <span class="label">-10</span>
+  <div class="slider-wrapper">
+    <input type="range" min="-10" max="10" value="0" class="slider" name="kapitarange">
+    <div class="value-bubble">0</div>
+  </div>
+  <span class="label">+10</span>
+</div>';
+
 	$output .= '<div class="help-tip">
 	    <p>Kapita\'o-meter&copy; :ll&auml; voit muuttaa korttiarvontaa priorisoimaan raha- ja rahaa lis&auml;&auml;vi&auml; toimintakortteja.</p>
 	</div>';
