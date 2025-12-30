@@ -70,7 +70,6 @@ class dom_card_set {
 		$vals_on_sets = array(3,3,4);
 
 		$out = "";
-		$out .= '<form method="post" action="" id="changeform">';
 		for ($i = 0; $i < 3; $i++) {
 			$title = $this->set_name[$i];
 
