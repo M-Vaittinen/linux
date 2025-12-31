@@ -262,8 +262,9 @@ table.aarvonta {
     width: 300px;
     border-radius: 3px;
     box-shadow: 1px 1px 1px rgba(0, 0, 0, 0.2);
-    z-index: 0;
-    position:relative;
+    z-index: 10;
+   /* position:relative; */
+    position:absolute;
     color: #FFF;
     font-size: 13px;
     line-height: 1.4;
