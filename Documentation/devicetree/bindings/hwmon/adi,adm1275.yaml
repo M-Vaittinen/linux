@@ -4,7 +4,7 @@
 $id: http://devicetree.org/schemas/hwmon/adi,adm1275.yaml#
 $schema: http://devicetree.org/meta-schemas/core.yaml#
 
-title: Analog Devices ADM1075/ADM127x/ADM1281/ADM129x digital power monitors
+title: Analog Devices ADM1075/ADM127x/ADM1281/ADM129x and ROHM BD12780 digital power monitors
 
 maintainers:
   - Krzysztof Kozlowski <krzk@kernel.org>
@@ -25,6 +25,12 @@ description: |
     https://www.silergy.com/
     download/downloadFile?id=5669&type=product&ftype=note
 
+  The BD12780MUV is a ROHM hot-swap controller with PMBus interface,
+  functionally compatible with the ADM1278.
+
+  Datasheet:
+    https://www.rohm.com/products/power-management/hot-swap-controllers/bd12780muv-product
+
 properties:
   compatible:
     enum:
@@ -37,6 +43,7 @@ properties:
       - adi,adm1281
       - adi,adm1293
       - adi,adm1294
+      - rohm,bd12780
       - silergy,mc09c
 
   reg:
@@ -104,6 +111,7 @@ allOf:
               - adi,adm1281
               - adi,adm1293
               - adi,adm1294
+              - rohm,bd12780
               - silergy,mc09c
     then:
       properties:
