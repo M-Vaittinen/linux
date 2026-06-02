@@ -558,16 +558,20 @@ static int adm1275_probe(struct i2c_client *client)
 	u32 shunt;
 	u32 avg;
 
+/*
 	if (!i2c_check_functionality(client->adapter,
 				     I2C_FUNC_SMBUS_READ_BYTE_DATA
-				     | I2C_FUNC_SMBUS_BLOCK_DATA))
-		return -ENODEV;
-
+				     | I2C_FUNC_SMBUS_BLOCK_DATA)) {
+		return dev_err_probe(&client->dev, -ENODEV, "I2C func not supported\n");
+	}
 	ret = i2c_smbus_read_block_data(client, PMBUS_MFR_ID, block_buffer);
 	if (ret < 0) {
 		dev_err(&client->dev, "Failed to read Manufacturer ID\n");
 		return ret;
 	}
+
+	dev_info(&client->dev, "Manufacturere '%s'\n", block_buffer);
+
 	if ((ret != 3 || strncmp(block_buffer, "ADI", 3)) &&
 	    (ret != 2 || strncmp(block_buffer, "SY", 2)) &&
 	    (ret != 4 || strncmp(block_buffer, "ROHM", 4))) {
@@ -588,6 +592,9 @@ static int adm1275_probe(struct i2c_client *client)
 		dev_err(&client->dev, "Unsupported device\n");
 		return -ENODEV;
 	}
+	*/
+
+	mid = &adm1275_id[9];
 
 	if (strcmp(client->name, mid->name) != 0)
 		dev_notice(&client->dev,
@@ -602,6 +609,7 @@ static int adm1275_probe(struct i2c_client *client)
 		config_read_fn = i2c_smbus_read_word_data;
 	else
 		config_read_fn = i2c_smbus_read_byte_data;
+
 	config = config_read_fn(client, ADM1275_PMON_CONFIG);
 	if (config < 0)
 		return config;
@@ -957,6 +965,8 @@ static int adm1275_probe(struct i2c_client *client)
 		info->b[PSC_TEMPERATURE] = coefficients[tindex].b;
 		info->R[PSC_TEMPERATURE] = coefficients[tindex].R;
 	}
+
+	pr_info("Calling pmbus_do_probe()\n");
 
 	return pmbus_do_probe(client, info);
 }
