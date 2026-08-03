@@ -39,7 +39,7 @@
  * GPI or GPO in the device-tree.
  *
  * DT properties:
- * "rohm,pin-gpio1", "rohm,pin-clkout", "rohm,pin-fault-b", "rohm,pin-exten"
+ * "rohm,pin-gpio1", "rohm,pin-clkout", "rohm,pin-fault_b", "rohm,pin-exten"
  * can be set to one of the values "gpi" or "gpo" to enable them to be used as
  * GPIO.
  */
@@ -68,7 +68,7 @@ struct bd73800_gpio {
 static int bd73800_gpio_get_pins(struct bd73800_gpio *g)
 {
 	static const char * const properties[] = {"rohm,pin-gpio1",
-		"rohm,pin-clkout", "rohm,pin-fault-b", "rohm,pin-exten"};
+		"rohm,pin-clkout", "rohm,pin-fault_b", "rohm,pin-exten"};
 	const char *val;
 	int i, ret;
 
