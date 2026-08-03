@@ -19,6 +19,9 @@ description:
   There are also different variants called BD71851 and BD71885 which are
   almost identical from the software point of view.
 
+allOf:
+  - $ref: rohm,pmic-pins.yaml#
+
 properties:
   compatible:
     oneOf:
@@ -67,22 +70,12 @@ properties:
     enum: [gpi, gpo]
 
   rohm,pin-clkout:
-    $ref: /schemas/types.yaml#/definitions/string
-    description:
-      Indicate if the CLKOUT pin has been set to GPI or GPO at manufacturing.
     enum: [gpi, gpo]
 
-  rohm,pin-fault-b:
-    $ref: /schemas/types.yaml#/definitions/string
-    description:
-      Indicate if the FAULT_B pin has been set to GPI or GPO at manufacturing.
+  rohm,pin-fault_b:
     enum: [gpi, gpo]
 
   rohm,pin-exten:
-    $ref: /schemas/types.yaml#/definitions/string
-    description:
-      Indicate if the EXTEN_OUT pin has been set to GPI or GPO at
-      manufacturing.
     enum: [gpi, gpo]
 
   clocks:
@@ -98,11 +91,7 @@ properties:
   clock-output-names:
     maxItems: 1
 
-  rohm,clkout-open-drain:
-    description: clk32kout mode. Set to 1 for "open-drain" or 0 for "cmos".
-    $ref: /schemas/types.yaml#/definitions/uint32
-    minimum: 0
-    maximum: 1
+  rohm,clkout-open-drain: true
 
   regulators:
     $ref: /schemas/regulator/rohm,bd73800-regulator.yaml
