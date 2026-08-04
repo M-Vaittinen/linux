@@ -263,7 +263,7 @@ static const struct mfd_cell bd73800_mfd_cells[] = {
 	{
 		.name = "bd73800-rtc",
 		.num_resources = ARRAY_SIZE(bd73800_rtc_irqs),
-		.resources = &bd73800_rtc_irqs[0],
+		.resources = bd73800_rtc_irqs,
 	},
 };
 
@@ -413,7 +413,7 @@ static const struct regmap_access_table bd72720_volatile_regs_4c = {
 };
 
 static const struct regmap_access_table bd73800_volatile_regs = {
-	.yes_ranges = &bd73800_volatile_ranges[0],
+	.yes_ranges = bd73800_volatile_ranges,
 	.n_yes_ranges = ARRAY_SIZE(bd73800_volatile_ranges),
 };
 
@@ -426,7 +426,7 @@ static const struct regmap_range bd73800_read_only_ranges[] = {
 };
 
 static const struct regmap_access_table bd73800_ro_regs = {
-	.no_ranges = &bd73800_read_only_ranges[0],
+	.no_ranges = &bd73800_read_only_ranges,
 	.n_no_ranges = ARRAY_SIZE(bd73800_read_only_ranges),
 };
 
@@ -965,7 +965,7 @@ static const struct regmap_irq_chip bd72720_irq_chip = {
 static const struct regmap_irq_chip bd73800_irq_chip = {
 	.name = "bd73800_irq",
 	.main_status = BD73800_REG_INT_MAIN_STAT,
-	.irqs = &bd73800_irqs[0],
+	.irqs = bd73800_irqs,
 	.num_irqs = ARRAY_SIZE(bd73800_irqs),
 	.status_base = BD73800_REG_INT_1_STAT,
 	.unmask_base = BD73800_REG_INT_1_EN,

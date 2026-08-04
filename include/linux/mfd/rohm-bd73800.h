@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- * Copyright 2024 ROHM Semiconductors.
+ * Copyright 2026 ROHM Semiconductors.
  *
  * Author: Matti Vaittinen <matti.vaittinen@fi.rohmeurope.com>
  */
