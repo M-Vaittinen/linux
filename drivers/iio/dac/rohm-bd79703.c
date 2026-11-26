@@ -41,7 +41,9 @@ static const struct regmap_config bd79703_regmap_config = {
 /* Dynamic driver private data */
 struct bd79703_data {
 	struct regmap *regmap;
-	int vfs;
+	int vcc_mv;
+	int vfs_mv;
+	unsigned int num_vfs_chan;
 };
 
 /* Static, IC type specific data for different variants */
@@ -49,7 +51,11 @@ struct bd7970x_chip_data {
 	const char *name;
 	const struct iio_chan_spec *channels;
 	int num_channels;
-	bool has_vfs;
+	/*
+	 * Some ICs use VFS-pin for full-scale voltage for first N channels.
+	 * We need to know these channels to get correct scale
+	 */
+	unsigned int num_vfs_chan;
 };
 
 static int bd79703_read_raw(struct iio_dev *idev,
@@ -61,7 +67,11 @@ static int bd79703_read_raw(struct iio_dev *idev,
 	if (mask != IIO_CHAN_INFO_SCALE)
 		return -EINVAL;
 
-	*val = data->vfs / 1000;
+	if (data->num_vfs_chan > chan->channel)
+		*val = data->vfs_mv;
+	else
+		*val = data->vcc_mv;
+
 	*val2 = BD79703_DAC_BITS;
 
 	return IIO_VAL_FRACTIONAL_LOG2;
@@ -92,12 +102,22 @@ static const struct iio_info bd79703_info = {
 	.indexed = 1,						\
 	.output = 1,						\
 	.channel = (_chan),					\
-	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),		\
-	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW) |		\
+			      BIT(IIO_CHAN_INFO_SCALE),		\
 	.address = (_addr),					\
 }
 
-#define BD79703_CHAN(_chan) BD79703_CHAN_ADDR((_chan), (_chan) + 1)
+#define BD79703_CHAN(_chan) {					\
+	.type = IIO_VOLTAGE,					\
+	.indexed = 1,						\
+	.output = 1,						\
+	.channel = (_chan),					\
+	.info_mask_separate = BIT(IIO_CHAN_INFO_RAW),		\
+	.info_mask_shared_by_type = BIT(IIO_CHAN_INFO_SCALE),	\
+	.address = (_chan) + 1,					\
+}
+
+#define BD79703_CHAN_VFS(_chan) BD79703_CHAN_ADDR((_chan), (_chan) + 1)
 
 static const struct iio_chan_spec bd79700_channels[] = {
 	BD79703_CHAN(0),
@@ -115,6 +135,8 @@ static const struct iio_chan_spec bd79701_channels[] = {
  * and 3, but to the channels 0, 1, 4, 5. So the addressing used with SPI
  * accesses is 1, 2, 5 and 6 for them. Thus, they're not constant offset to
  * the channel number as with other IC variants.
+ *
+ * Furthermore, the BD79702 and BD79703 can have different scale for channels.
  */
 static const struct iio_chan_spec bd79702_channels[] = {
 	BD79703_CHAN_ADDR(0, 1),
@@ -124,40 +146,40 @@ static const struct iio_chan_spec bd79702_channels[] = {
 };
 
 static const struct iio_chan_spec bd79703_channels[] = {
-	BD79703_CHAN(0),
-	BD79703_CHAN(1),
-	BD79703_CHAN(2),
-	BD79703_CHAN(3),
-	BD79703_CHAN(4),
-	BD79703_CHAN(5),
+	BD79703_CHAN_VFS(0),
+	BD79703_CHAN_VFS(1),
+	BD79703_CHAN_VFS(2),
+	BD79703_CHAN_VFS(3),
+	BD79703_CHAN_VFS(4),
+	BD79703_CHAN_VFS(5),
 };
 
 static const struct bd7970x_chip_data bd79700_chip_data = {
 	.name = "bd79700",
 	.channels = bd79700_channels,
 	.num_channels = ARRAY_SIZE(bd79700_channels),
-	.has_vfs = false,
+	.num_vfs_chan = 0,
 };
 
 static const struct bd7970x_chip_data bd79701_chip_data = {
 	.name = "bd79701",
 	.channels = bd79701_channels,
 	.num_channels = ARRAY_SIZE(bd79701_channels),
-	.has_vfs = false,
+	.num_vfs_chan = 0,
 };
 
 static const struct bd7970x_chip_data bd79702_chip_data = {
 	.name = "bd79702",
 	.channels = bd79702_channels,
 	.num_channels = ARRAY_SIZE(bd79702_channels),
-	.has_vfs = true,
+	.num_vfs_chan = 2,
 };
 
 static const struct bd7970x_chip_data bd79703_chip_data = {
 	.name = "bd79703",
 	.channels = bd79703_channels,
 	.num_channels = ARRAY_SIZE(bd79703_channels),
-	.has_vfs = true,
+	.num_vfs_chan = 3,
 };
 
 static int bd79703_probe(struct spi_device *spi)
@@ -184,23 +206,26 @@ static int bd79703_probe(struct spi_device *spi)
 				     "Failed to initialize Regmap\n");
 
 	/*
-	 * BD79703 has a separate VFS pin, whereas the BD79700 and BD79701 use
-	 * VCC for their full-scale output voltage.
+	 * BD79702 and BD79703 have a separate VFS pin. On these ICs, the VFS
+	 * pin provides the full-scale output voltage for half of the channels,
+	 * and use VCC for the rest.
+	 * The BD79700 and BD79701 use VCC for their full-scale output voltage
+	 * for all of the channels.
 	 */
-	if (cd->has_vfs) {
-		ret = devm_regulator_get_enable(dev, "vcc");
-		if (ret)
-			return dev_err_probe(dev, ret, "Failed to enable VCC\n");
+	ret = devm_regulator_get_enable_read_voltage(dev, "vcc");
+	if (ret < 0)
+		return dev_err_probe(dev, ret, "Failed to enable VCC\n");
 
+	data->vcc_mv = ret / 1000;
+
+	if (cd->num_vfs_chan > 0) {
 		ret = devm_regulator_get_enable_read_voltage(dev, "vfs");
 		if (ret < 0)
 			return dev_err_probe(dev, ret, "Failed to get Vfs\n");
-	} else {
-		ret = devm_regulator_get_enable_read_voltage(dev, "vcc");
-		if (ret < 0)
-			return dev_err_probe(dev, ret, "Failed to get VCC\n");
+
+		data->vfs_mv = ret / 1000;
+		data->num_vfs_chan = cd->num_vfs_chan;
 	}
-	data->vfs = ret;
 
 	idev->channels = cd->channels;
 	idev->num_channels = cd->num_channels;
